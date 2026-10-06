@@ -1,0 +1,545 @@
+<title>Little Sprouts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sniglet:wght@400;800&family=Nunito:wght@500;700;800&display=swap">
+<style>
+/* Layout: one phone-width column; a crayon-box palette on a sky-tinted page; lessons take over the whole screen. */
+:root {
+  --bg: #EEF4F9;
+  --surface: #FFFFFF;
+  --ink: #1D2B3A;
+  --muted: #5B6B7C;
+  --line: #D3DEE8;
+  --tomato: #E2553E;
+  --sun: #F4B41A;
+  --leaf: #2F9E57;
+  --sky: #2B7FD4;
+  --plum: #8655C4;
+  --good: #2F9E57;
+  --good-soft: #DDF3E5;
+  --warn-soft: #FDF0D2;
+  --display: "Sniglet", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
+  --body: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --r: 22px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111C27; --surface: #1A2836; --ink: #EAF1F8; --muted: #9DB0C3; --line: #2D3F51;
+    --tomato: #F06C55; --sun: #F7C445; --leaf: #4CC07A; --sky: #5AA2EC; --plum: #A57FE0;
+    --good: #4CC07A; --good-soft: #1D3A2A; --warn-soft: #3A3120; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111C27; --surface: #1A2836; --ink: #EAF1F8; --muted: #9DB0C3; --line: #2D3F51;
+  --tomato: #F06C55; --sun: #F7C445; --leaf: #4CC07A; --sky: #5AA2EC; --plum: #A57FE0;
+  --good: #4CC07A; --good-soft: #1D3A2A; --warn-soft: #3A3120; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.45; }
+.app { max-width: 560px; margin: 0 auto; padding-inline: 16px; padding-block: 18px 48px; display: flex; flex-direction: column; gap: 26px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 800; margin: 0; text-wrap: balance; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
+
+.top { display: flex; align-items: center; gap: 12px; }
+.logo { width: 48px; height: 48px; flex: none; }
+.top h1 { font-size: 1.6rem; line-height: 1; white-space: nowrap; }
+.top > div { min-width: 0; }
+.top p { margin: 2px 0 0; color: var(--muted); font-size: .9rem; }
+.status { margin-left: auto; font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 6px 10px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.status.live i { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
+.notice { background: var(--warn-soft); border-radius: 14px; padding: 10px 14px; font-size: .9rem; }
+
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.sec-head h2 { font-size: 1.3rem; }
+.sec-head span { color: var(--muted); font-size: .85rem; }
+
+.kids { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.kid { background: var(--surface); border: 2px solid var(--line); border-radius: var(--r); padding: 16px 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; transition: transform .15s; }
+.kid:hover { transform: translateY(-2px); border-color: var(--sky); }
+.kid .ava { font-size: 3rem; line-height: 1.1; }
+.kid .nm { font-family: var(--display); font-size: 1.25rem; font-weight: 800; overflow-wrap: anywhere; }
+.kid .meta { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.pill { font-size: .72rem; font-weight: 800; padding: 3px 8px; border-radius: 99px; background: var(--good-soft); color: var(--good); }
+.kid.add { border-style: dashed; color: var(--muted); justify-content: center; min-height: 150px; }
+.kid.add .ava { font-family: var(--display); font-size: 2.6rem; color: var(--sky); }
+
+.feed { display: flex; flex-direction: column; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.feed li { background: var(--surface); border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; }
+.feed .fi { font-size: 1.6rem; flex: none; width: 36px; text-align: center; }
+.feed .ft { flex: 1; min-width: 0; }
+.feed .ft b { font-weight: 800; }
+.feed .ft small { display: block; color: var(--muted); font-size: .8rem; }
+.cheer { flex: none; border: 1px solid var(--line); background: transparent; border-radius: 99px; padding: 6px 10px; font-size: .85rem; font-weight: 800; }
+.cheer:hover { background: var(--bg); }
+.empty { color: var(--muted); background: var(--surface); border-radius: 16px; padding: 16px; font-size: .95rem; }
+
+/* kid page */
+.bar { display: flex; align-items: center; gap: 10px; }
+.back { border: 0; background: var(--surface); border-radius: 99px; padding: 8px 14px; font-weight: 800; }
+.kidhead { display: flex; align-items: center; gap: 14px; }
+.kidhead .ava { font-size: 3.6rem; }
+.kidhead h2 { font-size: 2rem; overflow-wrap: anywhere; }
+.kidhead p { margin: 0; color: var(--muted); }
+.courses { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.course { border: 0; border-radius: var(--r); padding: 16px 14px 14px; text-align: left; color: #fff; display: flex; flex-direction: column; gap: 6px; min-height: 140px; position: relative; overflow: hidden; transition: transform .15s; }
+.course:hover { transform: scale(1.02); }
+.course .ci { font-size: 2.4rem; line-height: 1; }
+.course .cn { font-family: var(--display); font-size: 1.3rem; font-weight: 800; line-height: 1.1; }
+.course .cs { font-size: .85rem; font-weight: 800; opacity: .92; margin-top: auto; font-variant-numeric: tabular-nums; }
+.c-tomato { background: var(--tomato); } .c-sun { background: var(--sun); color: #3A2A00; } .c-leaf { background: var(--leaf); }
+.c-sky { background: var(--sky); } .c-plum { background: var(--plum); }
+.more { border: 1px solid var(--line); background: transparent; border-radius: 99px; padding: 8px 16px; font-weight: 800; color: var(--muted); align-self: flex-start; }
+.grownup { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: .9rem; color: var(--muted); }
+.link { border: 0; background: none; color: var(--tomato); font-weight: 800; padding: 4px 0; }
+.danger { border: 0; background: var(--tomato); color: #fff; border-radius: 99px; padding: 6px 14px; font-weight: 800; }
+
+/* sheet */
+.sheet { position: fixed; inset: 0; background: rgba(10, 20, 30, .45); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
+.sheet form { background: var(--surface); width: 100%; max-width: 560px; border-radius: 26px 26px 0 0; padding: 22px 16px calc(22px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 16px; }
+.sheet h2 { font-size: 1.5rem; }
+.field { display: flex; flex-direction: column; gap: 6px; font-weight: 800; font-size: .9rem; }
+.field input { font: inherit; font-size: 1.1rem; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--bg); color: var(--ink); }
+.seg, .avas { display: flex; flex-wrap: wrap; gap: 8px; }
+.seg button, .avas button { border: 2px solid var(--line); background: var(--bg); border-radius: 14px; padding: 8px 14px; font-weight: 800; }
+.avas button { font-size: 1.7rem; padding: 4px 8px; }
+.seg button[aria-pressed="true"], .avas button[aria-pressed="true"] { border-color: var(--sky); background: var(--surface); box-shadow: 0 0 0 2px var(--sky); }
+.actions { display: flex; gap: 10px; justify-content: flex-end; }
+.btn { border: 0; border-radius: 99px; padding: 12px 22px; font-weight: 800; font-size: 1rem; background: var(--sky); color: #fff; }
+.btn.ghost { background: transparent; color: var(--muted); }
+
+/* lesson */
+.lesson { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px)); gap: 14px; overflow-y: auto; }
+.lbar { display: flex; align-items: center; gap: 12px; max-width: 640px; width: 100%; margin: 0 auto; }
+.x { border: 0; background: var(--surface); width: 44px; height: 44px; border-radius: 50%; font-size: 1.2rem; font-weight: 800; flex: none; }
+.dots { display: flex; gap: 6px; flex: 1; justify-content: center; }
+.dots span { width: 14px; height: 14px; border-radius: 50%; background: var(--line); }
+.dots span.on { background: var(--sun); }
+.say { border: 0; background: var(--surface); width: 44px; height: 44px; border-radius: 50%; font-size: 1.3rem; flex: none; }
+.stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; max-width: 640px; width: 100%; margin: 0 auto; }
+.prompt { font-family: var(--display); font-size: clamp(1.6rem, 6vw, 2.4rem); font-weight: 800; text-align: center; }
+.show { font-size: clamp(2.2rem, 10vw, 3.6rem); text-align: center; line-height: 1.2; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; max-width: 100%; }
+.show .plus { font-family: var(--display); color: var(--muted); }
+.show .bigletter { font-family: var(--display); font-size: 1.6em; color: var(--sky); }
+.choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; width: 100%; }
+.choices.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.choice { border: 3px solid var(--line); background: var(--surface); border-radius: 28px; aspect-ratio: 1; max-width: 100%; display: flex; align-items: center; justify-content: center; font-size: clamp(2.6rem, 14vw, 4.4rem); font-family: var(--display); font-weight: 800; padding: 10px; transition: transform .12s; }
+.choice:active { transform: scale(.95); }
+.choice svg { width: 78%; height: 78%; }
+.choice .blob { width: 72%; height: 72%; border-radius: 50%; border: 3px solid rgba(0,0,0,.12); }
+.choice.right { border-color: var(--good); background: var(--good-soft); }
+.choice.wrong { animation: shake .4s; }
+@keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+.done { text-align: center; display: flex; flex-direction: column; gap: 16px; align-items: center; }
+.done .bigstar { font-size: 6rem; animation: pop .6s ease-out; }
+@keyframes pop { 0% { transform: scale(.2) rotate(-30deg); } 70% { transform: scale(1.15) rotate(8deg); } 100% { transform: scale(1); } }
+.burst { position: fixed; pointer-events: none; font-size: 2rem; z-index: 40; animation: fly 1.1s ease-out forwards; }
+@keyframes fly { to { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .burst { display: none; } .done .bigstar, .choice.wrong { animation: none; } .kid, .course { transition: none; }
+}
+</style>
+
+<main class="app" id="app">
+  <header class="top">
+    <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="24" cy="24" r="23" fill="var(--leaf)"/>
+      <path d="M24 38V22" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+      <path d="M24 24c-1-6-6-9-12-8 0 6 5 10 12 8z" fill="#fff"/>
+      <path d="M24 21c1-7 6-10 13-9 0 7-6 11-13 9z" fill="var(--sun)"/>
+    </svg>
+    <div>
+      <h1>Little Sprouts</h1>
+      <p>Family learning room</p>
+    </div>
+    <span class="status" id="status"><i></i><span>Connecting</span></span>
+  </header>
+  <div id="view"></div>
+</main>
+<div id="layer"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- tiny DOM helper (all user text goes through textContent) ---------- */
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'html') el.innerHTML = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return el;
+}
+const rand = n => Math.floor(Math.random() * n);
+const pick = a => a[rand(a.length)];
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const others = (pool, not, n, key = x => x) => shuffle(pool.filter(x => key(x) !== key(not))).slice(0, n);
+
+/* ---------- speech ---------- */
+function speak(text) {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.88; u.pitch = 1.15;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+/* ---------- course content ---------- */
+const COLORS = [
+  { n: 'red', hex: '#E53935' }, { n: 'blue', hex: '#1E88E5' }, { n: 'yellow', hex: '#FDD835' },
+  { n: 'green', hex: '#43A047' }, { n: 'orange', hex: '#FB8C00' }, { n: 'purple', hex: '#8E24AA' },
+  { n: 'pink', hex: '#EC407A' }, { n: 'brown', hex: '#8D6E63' }
+];
+const ANIMALS = [
+  { n: 'cow', e: '🐮', s: 'moo' }, { n: 'dog', e: '🐶', s: 'woof woof' }, { n: 'cat', e: '🐱', s: 'meow' },
+  { n: 'duck', e: '🦆', s: 'quack quack' }, { n: 'pig', e: '🐷', s: 'oink oink' }, { n: 'sheep', e: '🐑', s: 'baa' },
+  { n: 'lion', e: '🦁', s: 'roar' }, { n: 'frog', e: '🐸', s: 'ribbit' }, { n: 'horse', e: '🐴', s: 'neigh' },
+  { n: 'chicken', e: '🐔', s: 'cluck cluck' }, { n: 'bee', e: '🐝', s: 'buzz' }, { n: 'owl', e: '🦉', s: 'hoo hoo' }
+];
+function star(n, ro, ri) {
+  const p = [];
+  for (let i = 0; i < n * 2; i++) { const r = i % 2 ? ri : ro, a = Math.PI / n * i - Math.PI / 2; p.push((50 + r * Math.cos(a)).toFixed(1) + ',' + (52 + r * Math.sin(a)).toFixed(1)); }
+  return p.join(' ');
+}
+function hexagon() { const p = []; for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i; p.push((50 + 42 * Math.cos(a)).toFixed(1) + ',' + (50 + 42 * Math.sin(a)).toFixed(1)); } return p.join(' '); }
+const SHAPES = {
+  circle: '<circle cx="50" cy="50" r="40"/>',
+  square: '<rect x="12" y="12" width="76" height="76" rx="4"/>',
+  triangle: '<polygon points="50,10 92,88 8,88"/>',
+  star: '<polygon points="' + star(5, 44, 19) + '"/>',
+  heart: '<path d="M50 88C20 65 6 48 6 32 6 18 17 8 30 8c10 0 17 6 20 14 3-8 10-14 20-14 13 0 24 10 24 24 0 16-14 33-44 56z"/>',
+  rectangle: '<rect x="4" y="26" width="92" height="48" rx="3"/>',
+  oval: '<ellipse cx="50" cy="50" rx="45" ry="28"/>',
+  diamond: '<polygon points="50,5 88,50 50,95 12,50"/>',
+  hexagon: '<polygon points="' + hexagon() + '"/>'
+};
+const shapeSvg = (name, hex) => `<svg viewBox="0 0 100 100" aria-hidden="true" fill="${hex}">${SHAPES[name]}</svg>`;
+const THINGS = [
+  { e: '🍎', one: 'apple', many: 'apples' }, { e: '🍌', one: 'banana', many: 'bananas' }, { e: '⭐', one: 'star', many: 'stars' },
+  { e: '🐟', one: 'fish', many: 'fish' }, { e: '🎈', one: 'balloon', many: 'balloons' }, { e: '🚗', one: 'car', many: 'cars' },
+  { e: '🌸', one: 'flower', many: 'flowers' }, { e: '🍪', one: 'cookie', many: 'cookies' }, { e: '🦆', one: 'duck', many: 'ducks' }
+];
+const WORDS = [
+  ['A', 'apple', '🍎'], ['B', 'ball', '⚽'], ['C', 'cat', '🐱'], ['D', 'dog', '🐶'], ['E', 'egg', '🥚'], ['F', 'fish', '🐟'],
+  ['G', 'goat', '🐐'], ['H', 'hat', '🎩'], ['I', 'ice cream', '🍦'], ['J', 'juice', '🧃'], ['K', 'kite', '🪁'], ['L', 'lion', '🦁'],
+  ['M', 'moon', '🌙'], ['N', 'nose', '👃'], ['O', 'octopus', '🐙'], ['P', 'pig', '🐷'], ['Q', 'queen', '👸'], ['R', 'rabbit', '🐰'],
+  ['S', 'sun', '☀️'], ['T', 'tree', '🌳'], ['U', 'umbrella', '☂️'], ['V', 'van', '🚐'], ['W', 'whale', '🐳'], ['Y', 'yo-yo', '🪀'], ['Z', 'zebra', '🦓']
+];
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const numberChoices = (target, lo, hi, n) => {
+  const pool = []; for (let i = lo; i <= hi; i++) pool.push(i);
+  return shuffle([target, ...others(pool, target, n - 1)]).map(v => ({ html: String(v), label: String(v), correct: v === target }));
+};
+
+const COURSES = [
+  { id: 'colors', name: 'Colors', icon: '🎨', tone: 'tomato', ages: [2, 3, 4, 5], q(age, n) {
+      const t = pick(COLORS);
+      return { say: `Find ${t.n}!`, choices: shuffle([t, ...others(COLORS, t, n - 1)]).map(c => ({ html: `<span class="blob" style="background:${c.hex}"></span>`, label: c.n, correct: c === t })), praise: `Yes! That is ${t.n}!` };
+    } },
+  { id: 'animals', name: 'Animal Sounds', icon: '🐮', tone: 'leaf', ages: [2, 3, 4, 5], q(age, n) {
+      const t = pick(ANIMALS);
+      const say = age <= 2 ? `Find the ${t.n}!` : `Who says ${t.s}?`;
+      return { say, choices: shuffle([t, ...others(ANIMALS, t, n - 1)]).map(a => ({ html: a.e, label: a.n, correct: a === t })), praise: `The ${t.n} says ${t.s}!` };
+    } },
+  { id: 'shapes', name: 'Shapes', icon: '🔺', tone: 'sky', ages: [2, 3, 4, 5], q(age, n) {
+      const pool = age <= 2 ? ['circle', 'square', 'triangle', 'star', 'heart'] : Object.keys(SHAPES);
+      const t = pick(pool);
+      return { say: `Find the ${t}!`, choices: shuffle([t, ...others(pool, t, n - 1)]).map(s => ({ html: shapeSvg(s, pick(COLORS).hex), label: s, correct: s === t })), praise: `Great! That is a ${t}!` };
+    } },
+  { id: 'bigsmall', name: 'Big & Little', icon: '🐘', tone: 'plum', ages: [2, 3], q(age, n) {
+      const a = pick(ANIMALS), big = Math.random() < .5;
+      const sizes = n >= 3 ? [1.1, .75, .4] : [1.1, .45];
+      const target = big ? sizes[0] : sizes[sizes.length - 1];
+      return { say: big ? `Find the big ${a.n}!` : `Find the little ${a.n}!`, choices: shuffle(sizes.slice(0, Math.min(n, sizes.length))).map(s => ({ html: `<span style="font-size:${s}em">${a.e}</span>`, label: s === target ? (big ? 'big' : 'little') : 'other', correct: s === target })), praise: big ? 'Yes, that one is big!' : 'Yes, that one is little!' };
+    } },
+  { id: 'counting', name: 'Counting', icon: '🍎', tone: 'sun', ages: [2, 3, 4, 5], q(age, n) {
+      const max = age <= 2 ? 3 : age === 3 ? 5 : 10, k = 1 + rand(max), t = pick(THINGS);
+      return { say: `How many ${k === 1 ? t.one : t.many}?`, show: Array(k).fill(t.e).join(' '), choices: numberChoices(k, 1, Math.max(max, n), n), praise: `${k}! ${k === 1 ? 'One ' + t.one : k + ' ' + t.many}!` };
+    } },
+  { id: 'letters', name: 'Letters', icon: '🔤', tone: 'sky', ages: [3, 4, 5], q(age, n) {
+      const t = pick(LETTERS);
+      return { say: `Find the letter ${t}!`, choices: shuffle([t, ...others(LETTERS, t, n - 1)]).map(l => ({ html: l, label: l, correct: l === t })), praise: `Yes! That is ${t}!` };
+    } },
+  { id: 'sounds', name: 'First Sounds', icon: '🐝', tone: 'leaf', ages: [4, 5], q(age, n) {
+      const t = pick(WORDS);
+      return { say: `Which one starts with ${t[0]}?`, show: `<span class="bigletter">${t[0]}</span>`, choices: shuffle([t, ...others(WORDS, t, n - 1, w => w[0])]).map(w => ({ html: w[2], label: w[1], correct: w === t })), praise: `${t[1]} starts with ${t[0]}!` };
+    } },
+  { id: 'adding', name: 'Adding Up', icon: '➕', tone: 'tomato', ages: [4, 5], q(age, n) {
+      const a = 1 + rand(4), b = 1 + rand(3), t = pick(THINGS), sum = a + b;
+      return { say: `${a} plus ${b}. How many in all?`, show: `<span>${Array(a).fill(t.e).join('')}</span><span class="plus">+</span><span>${Array(b).fill(t.e).join('')}</span>`, choices: numberChoices(sum, 1, 9, n), praise: `${a} plus ${b} makes ${sum}!` };
+    } }
+];
+const COURSE = Object.fromEntries(COURSES.map(c => [c.id, c]));
+const choicesFor = age => (age <= 2 ? 2 : age === 3 ? 3 : 4);
+const ROUND = 5;
+const AVATARS = ['🦊', '🐻', '🐼', '🐸', '🦁', '🐯', '🐨', '🐵', '🐰', '🐙', '🦄', '🐢'];
+
+/* ---------- state + storage ---------- */
+const S = { kids: [], feed: [], live: false, loading: true, readOnly: false, view: 'home', kidId: null, showAll: false, sheet: null, confirmRemove: false };
+let db = null, user = null, myId = null;
+let local = { kids: {}, feed: [] };
+const LS = 'little-sprouts-local';
+
+function loadLocal() {
+  try { const v = JSON.parse(localStorage.getItem(LS) || 'null'); if (v && v.kids) local = v; } catch (e) {}
+  S.kids = Object.entries(local.kids).map(([id, d]) => ({ id, ...d }));
+  S.feed = local.feed.slice(0, 40);
+}
+function saveLocal() { try { localStorage.setItem(LS, JSON.stringify(local)); } catch (e) {} loadLocal(); render(); }
+const newId = () => 'k' + Date.now().toString(36) + rand(1e6).toString(36);
+
+function onWriteError(e) {
+  if (e && e.code === 'invalid_argument') { S.readOnly = true; render(); }
+  else if (e && e.code === 'quota_exceeded') { flash('The family log is full. Remove a learner to make room.'); }
+}
+const store = {
+  async addKid(d) {
+    if (!S.live) { local.kids[newId()] = d; return saveLocal(); }
+    try { await db.collection('kids').add(d); } catch (e) { onWriteError(e); throw e; }
+  },
+  async updateKid(id, patch) {
+    if (!S.live) { const k = local.kids[id]; if (!k) return; for (const [f, v] of Object.entries(patch)) k[f] = (v && typeof v === 'object' && !Array.isArray(v)) ? { ...(k[f] || {}), ...v } : v; return saveLocal(); }
+    try { await db.doc('kids/' + id).update(patch); } catch (e) { onWriteError(e); }
+  },
+  async removeKid(id) {
+    if (!S.live) { delete local.kids[id]; local.feed = local.feed.filter(f => f.kidId !== id); return saveLocal(); }
+    try { await db.doc('kids/' + id).delete(); } catch (e) { onWriteError(e); }
+  },
+  async addFeed(d) {
+    d = { ...d, ts: Date.now(), by: myId || null };
+    if (!S.live) { local.feed.unshift(d); local.feed = local.feed.slice(0, 60); return saveLocal(); }
+    try { await db.collection('feed').add(d); } catch (e) { onWriteError(e); }
+  }
+};
+
+let flashMsg = '';
+function flash(m) { flashMsg = m; render(); setTimeout(() => { flashMsg = ''; render(); }, 4000); }
+
+/* ---------- rendering ---------- */
+const kidById = id => S.kids.find(k => k.id === id);
+const totalStars = k => Object.values(k.stars || {}).reduce((a, b) => a + (+b || 0), 0);
+const isPlaying = k => k.playing && k.playing.course && Date.now() - (k.playing.ts || 0) < 15 * 60 * 1000;
+function ago(ts) {
+  const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.round(s / 60); if (m < 60) return m + ' min ago';
+  const hr = Math.round(m / 60); if (hr < 24) return hr + ' hr ago';
+  return Math.round(hr / 24) + ' days ago';
+}
+
+function render() {
+  const st = document.getElementById('status');
+  st.className = 'status' + (S.live ? ' live' : '');
+  st.lastElementChild.textContent = S.loading ? 'Connecting' : S.live ? 'Shared live' : 'This phone only';
+  const view = document.getElementById('view');
+  view.replaceChildren(S.view === 'kid' && kidById(S.kidId) ? kidView(kidById(S.kidId)) : homeView());
+  renderSheet();
+}
+
+function homeView() {
+  const wrap = h('div', { style: 'display:flex;flex-direction:column;gap:26px' });
+  if (flashMsg) wrap.append(h('div', { class: 'notice', role: 'status' }, flashMsg));
+  if (S.readOnly) wrap.append(h('div', { class: 'notice' }, 'You can watch the family feed. Ask the owner to share this page with you as an editor so you can add learners and save stars.'));
+  else if (!S.loading && !S.live) wrap.append(h('div', { class: 'notice' }, 'Playing on this phone only. Open the shared link from Claude to see the whole family live.'));
+
+  const kids = h('div', { class: 'kids' });
+  for (const k of S.kids.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))) {
+    kids.append(h('button', { class: 'kid', onclick: () => { S.view = 'kid'; S.kidId = k.id; S.showAll = false; S.confirmRemove = false; render(); scrollTo(0, 0); } },
+      h('span', { class: 'ava', 'aria-hidden': 'true' }, k.avatar || '🌱'),
+      h('span', { class: 'nm' }, k.name || 'Learner'),
+      h('span', { class: 'meta' }, `Age ${k.age} · ⭐ ${totalStars(k)}`),
+      isPlaying(k) ? h('span', { class: 'pill' }, 'Playing ' + (COURSE[k.playing.course]?.name || '')) : null));
+  }
+  if (!S.readOnly) kids.append(h('button', { class: 'kid add', onclick: () => { S.sheet = { name: '', age: 2, avatar: pick(AVATARS) }; render(); } },
+    h('span', { class: 'ava', 'aria-hidden': 'true' }, '+'), h('span', { class: 'nm' }, 'Add a learner')));
+  wrap.append(h('section', {}, h('div', { class: 'sec-head' }, h('h2', {}, "Who's learning?"), h('span', {}, S.kids.length ? 'Tap a learner to play' : '')), kids,
+    !S.kids.length && !S.loading ? h('p', { class: 'empty', style: 'margin-top:12px' }, 'Add each child with their age. Two-year-olds get two big choices per question; four-year-olds get four, plus letters and adding.') : null));
+
+  const feed = h('ul', { class: 'feed', id: 'feed' });
+  wrap.append(h('section', {}, h('div', { class: 'sec-head' }, h('h2', {}, 'Family feed'), h('span', {}, S.live ? 'Updates live on every phone' : '')), feed));
+  fillFeed(feed);
+  return wrap;
+}
+
+async function fillFeed(ul) {
+  const items = S.feed.filter(f => kidById(f.kidId));
+  if (!items.length) { ul.replaceChildren(h('li', { class: 'empty' }, 'Stars and cheers show up here as the kids play.')); return; }
+  let names = {};
+  const ids = [...new Set(items.map(f => f.by).filter(Boolean))];
+  if (user && ids.length) { try { names = await user.profiles(ids); } catch (e) {} }
+  ul.replaceChildren(...items.slice(0, 25).map(f => {
+    const k = kidById(f.kidId), c = COURSE[f.course];
+    const who = f.by && names[f.by] ? (names[f.by].isMe ? 'you' : names[f.by].name || 'a grown-up') : null;
+    let icon, text;
+    if (f.kind === 'cheer') { icon = f.emoji || '👏'; text = [who ? (who === 'you' ? 'You' : who) : 'Someone', ' cheered for ', h('b', {}, k.name)]; }
+    else if (f.kind === 'joined') { icon = k.avatar || '🌱'; text = [h('b', {}, k.name), ' joined the family room']; }
+    else { icon = '⭐'; text = [h('b', {}, k.name), ' earned a star in ', h('b', {}, c ? c.name : 'a lesson'), f.score != null ? ` (${f.score}/${ROUND} first try)` : '']; }
+    return h('li', {}, h('span', { class: 'fi', 'aria-hidden': 'true' }, icon),
+      h('span', { class: 'ft' }, ...text, h('small', {}, ago(f.ts) + (who && f.kind !== 'cheer' ? ' · on ' + (who === 'you' ? 'your' : who + "'s") + ' phone' : ''))),
+      f.kind === 'star' && !S.readOnly ? h('button', { class: 'cheer', onclick: () => store.addFeed({ kind: 'cheer', kidId: f.kidId, emoji: pick(['👏', '🎉', '💖', '🙌']) }) }, '👏 Cheer') : null);
+  }));
+}
+
+function kidView(k) {
+  const recommended = COURSES.filter(c => c.ages.includes(k.age));
+  const rest = COURSES.filter(c => !c.ages.includes(k.age));
+  const tile = c => h('button', { class: 'course c-' + c.tone, onclick: () => startLesson(k.id, c.id) },
+    h('span', { class: 'ci', 'aria-hidden': 'true' }, c.icon), h('span', { class: 'cn' }, c.name),
+    h('span', { class: 'cs' }, '⭐ ' + ((k.stars || {})[c.id] || 0)));
+  const wrap = h('div', { style: 'display:flex;flex-direction:column;gap:20px' },
+    h('div', { class: 'bar' }, h('button', { class: 'back', onclick: () => { S.view = 'home'; render(); } }, '← Family')),
+    h('div', { class: 'kidhead' }, h('span', { class: 'ava', 'aria-hidden': 'true' }, k.avatar || '🌱'),
+      h('div', {}, h('h2', {}, k.name), h('p', {}, `Age ${k.age} · ${totalStars(k)} stars so far`))),
+    h('section', {}, h('div', { class: 'sec-head' }, h('h2', {}, `Courses for age ${k.age}`), h('span', {}, `${ROUND} questions each`)),
+      h('div', { class: 'courses' }, recommended.map(tile))));
+  if (rest.length) {
+    if (S.showAll) wrap.append(h('section', {}, h('div', { class: 'sec-head' }, h('h2', {}, 'More courses')), h('div', { class: 'courses' }, rest.map(tile))));
+    else wrap.append(h('button', { class: 'more', onclick: () => { S.showAll = true; render(); } }, `Show ${rest.length} more courses`));
+  }
+  if (!S.readOnly) {
+    const g = h('div', { class: 'grownup' }, h('span', {}, 'Grown-ups:'),
+      h('button', { class: 'link', style: 'color:var(--sky)', onclick: () => { S.sheet = { id: k.id, name: k.name, age: k.age, avatar: k.avatar }; render(); } }, 'Edit'));
+    if (S.confirmRemove) g.append(h('span', {}, `Remove ${k.name} and their stars?`),
+      h('button', { class: 'danger', onclick: async () => { await store.removeKid(k.id); S.view = 'home'; S.confirmRemove = false; render(); } }, 'Remove'),
+      h('button', { class: 'link', style: 'color:var(--muted)', onclick: () => { S.confirmRemove = false; render(); } }, 'Keep'));
+    else g.append(h('button', { class: 'link', onclick: () => { S.confirmRemove = true; render(); } }, 'Remove'));
+    wrap.append(g);
+  }
+  return wrap;
+}
+
+function renderSheet() {
+  const layer = document.getElementById('layer');
+  if (!S.sheet) { if (layer.querySelector('.sheet')) layer.querySelector('.sheet').remove(); return; }
+  const sh = S.sheet, existing = layer.querySelector('.sheet');
+  const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Age' }, [2, 3, 4, 5].map(a =>
+    h('button', { type: 'button', 'aria-pressed': String(sh.age === a), onclick: () => { sh.age = a; renderSheet(); } }, 'Age ' + a)));
+  const avas = h('div', { class: 'avas', role: 'group', 'aria-label': 'Picture' }, AVATARS.map(a =>
+    h('button', { type: 'button', 'aria-pressed': String(sh.avatar === a), 'aria-label': 'Picture ' + a, onclick: () => { sh.avatar = a; renderSheet(); } }, a)));
+  const input = h('input', { id: 'kid-name', maxlength: '24', autocomplete: 'off', placeholder: 'First name', value: sh.name, oninput: e => { sh.name = e.target.value; } });
+  const form = h('form', { onsubmit: async e => {
+      e.preventDefault();
+      const name = sh.name.trim(); if (!name) { input.focus(); return; }
+      const sheet = S.sheet; S.sheet = null; render();
+      try {
+        if (sheet.id) await store.updateKid(sheet.id, { name, age: sheet.age, avatar: sheet.avatar });
+        else { await store.addKid({ name, age: sheet.age, avatar: sheet.avatar, stars: {}, createdAt: Date.now(), playing: null }); }
+      } catch (err) {}
+    } },
+    h('h2', {}, sh.id ? 'Edit learner' : 'Add a learner'),
+    h('label', { class: 'field', for: 'kid-name' }, 'Name', input),
+    h('div', { class: 'field' }, 'Age', seg),
+    h('div', { class: 'field' }, 'Picture', avas),
+    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => { S.sheet = null; render(); } }, 'Cancel'), h('button', { class: 'btn', type: 'submit' }, sh.id ? 'Save' : 'Add')));
+  const wrap = h('div', { class: 'sheet', onclick: e => { if (e.target === wrap) { S.sheet = null; render(); } } }, form);
+  if (existing) existing.replaceWith(wrap); else { layer.append(wrap); setTimeout(() => input.focus(), 50); }
+}
+
+/* ---------- lessons ---------- */
+let L = null;
+function startLesson(kidId, courseId) {
+  const k = kidById(kidId); if (!k) return;
+  L = { kidId, courseId, age: k.age, i: 0, firstTry: 0, missed: false, q: null, locked: false, done: false };
+  if (!S.readOnly) store.updateKid(kidId, { playing: { course: courseId, ts: Date.now() } });
+  nextQuestion();
+}
+function endLesson() {
+  if (L && !S.readOnly) store.updateKid(L.kidId, { playing: null });
+  L = null; try { speechSynthesis.cancel(); } catch (e) {}
+  document.querySelector('.lesson')?.remove(); render();
+}
+function nextQuestion() {
+  const c = COURSE[L.courseId];
+  L.q = c.q(L.age, choicesFor(L.age)); L.missed = false; L.locked = false;
+  drawLesson(); speak(L.q.say);
+}
+function drawLesson() {
+  const c = COURSE[L.courseId], k = kidById(L.kidId);
+  const dots = h('div', { class: 'dots', 'aria-label': `Question ${Math.min(L.i + 1, ROUND)} of ${ROUND}` }, Array.from({ length: ROUND }, (_, i) => h('span', { class: i < L.i ? 'on' : '' })));
+  const bar = h('div', { class: 'lbar' }, h('button', { class: 'x', 'aria-label': 'Stop lesson', onclick: endLesson }, '✕'), dots,
+    L.done ? h('span', { style: 'width:44px' }) : h('button', { class: 'say', 'aria-label': 'Hear it again', onclick: () => speak(L.q.say) }, '🔊'));
+  let stage;
+  if (L.done) {
+    stage = h('div', { class: 'stage' }, h('div', { class: 'done' },
+      h('div', { class: 'bigstar', 'aria-hidden': 'true' }, '⭐'),
+      h('h2', { class: 'prompt' }, `Great job, ${k ? k.name : 'friend'}!`),
+      h('p', { style: 'margin:0;color:var(--muted);font-size:1.1rem' }, `You earned a star in ${c.name}.`),
+      h('div', { class: 'actions', style: 'justify-content:center' },
+        h('button', { class: 'btn ghost', onclick: endLesson }, 'All done'),
+        h('button', { class: 'btn', onclick: () => { L.i = 0; L.firstTry = 0; L.done = false; nextQuestion(); } }, 'Play again'))));
+  } else {
+    const n = L.q.choices.length;
+    stage = h('div', { class: 'stage' }, h('div', { class: 'prompt' }, L.q.say), L.q.show ? h('div', { class: 'show', html: L.q.show, 'aria-hidden': 'true' }) : null,
+      h('div', { class: 'choices' + (n === 3 ? ' three' : '') }, L.q.choices.map(ch =>
+        h('button', { class: 'choice', 'aria-label': ch.label, html: ch.html, onclick: e => answer(ch, e.currentTarget) }))));
+  }
+  const el = h('div', { class: 'lesson', role: 'dialog', 'aria-label': c.name }, bar, stage);
+  const old = document.querySelector('.lesson'); if (old) old.replaceWith(el); else document.body.append(el);
+}
+function answer(ch, btn) {
+  if (L.locked) return;
+  if (!ch.correct) {
+    L.missed = true; btn.classList.remove('wrong'); void btn.offsetWidth; btn.classList.add('wrong');
+    speak('Try again!'); return;
+  }
+  L.locked = true; btn.classList.add('right'); burst(btn, 6);
+  if (!L.missed) L.firstTry++;
+  speak(L.q.praise);
+  setTimeout(() => {
+    if (!L) return;
+    L.i++;
+    if (L.i >= ROUND) finishRound(); else nextQuestion();
+  }, 1600);
+}
+async function finishRound() {
+  L.done = true; drawLesson(); burst(document.querySelector('.bigstar'), 14);
+  const k = kidById(L.kidId); speak(`Great job${k ? ', ' + k.name : ''}! You earned a star!`);
+  if (S.readOnly || !k) return;
+  const n = ((k.stars || {})[L.courseId] || 0) + 1;
+  await store.updateKid(L.kidId, { stars: { [L.courseId]: n } });
+  await store.addFeed({ kind: 'star', kidId: L.kidId, course: L.courseId, score: L.firstTry });
+}
+function burst(el, count) {
+  if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2, d = 80 + Math.random() * 120;
+    const s = h('span', { class: 'burst', 'aria-hidden': 'true', style: `left:${cx - 16}px;top:${cy - 16}px;--dx:${Math.cos(a) * d}px;--dy:${Math.sin(a) * d}px;--rot:${rand(360)}deg` }, pick(['⭐', '✨', '🎉', '💛']));
+    document.body.append(s); setTimeout(() => s.remove(), 1200);
+  }
+}
+
+/* ---------- boot ---------- */
+loadLocal();
+render();
+setInterval(() => { if (S.view === 'home' && !S.sheet) { const f = document.getElementById('feed'); if (f) fillFeed(f); } }, 60000);
+
+async function connect() {
+  const use = window.claude && window.claude.use;
+  if (!use) { S.loading = false; render(); return; }
+  try {
+    const [d, u] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+    user = u;
+    if (u) { try { myId = await u.id(); } catch (e) {} }
+    if (!d) { S.loading = false; render(); return; }
+    db = d; S.live = true;
+    S.kids = []; S.feed = [];
+    if (u) { try { if ((await u.can('data.write')) === false) S.readOnly = true; } catch (e) {} }
+    let first = 0;
+    const ready = () => { if (++first === 2) { S.loading = false; } render(); };
+    db.collection('kids').onSnapshot(s => { S.kids = s.docs.map(x => ({ id: x.id, ...x.data() })); ready(); }, () => { S.loading = false; render(); });
+    db.collection('feed').orderBy('ts', 'desc').limit(40).onSnapshot(s => { S.feed = s.docs.map(x => ({ id: x.id, ...x.data() })); ready(); }, () => {});
+  } catch (e) { S.loading = false; render(); }
+}
+connect();
+})();
+</script>
