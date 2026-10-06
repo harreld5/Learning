@@ -42,7 +42,7 @@ h1, h2, h3 { font-family: var(--display); font-weight: 800; margin: 0; text-wrap
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
 
-.top { display: flex; align-items: center; gap: 12px; }
+.top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
 .logo { width: 48px; height: 48px; flex: none; }
 .top h1 { font-size: 1.6rem; line-height: 1; white-space: nowrap; }
 .top > div { min-width: 0; }
@@ -93,6 +93,23 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--sky); outli
 .c-sky { background: var(--sky); } .c-plum { background: var(--plum); }
 .more { border: 1px solid var(--line); background: transparent; border-radius: 99px; padding: 8px 16px; font-weight: 800; color: var(--muted); align-self: flex-start; }
 .grownup { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: .9rem; color: var(--muted); }
+.today { background: var(--surface); border-radius: var(--r); padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; }
+.today .sec-head { margin: 0; }
+.tchips { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 10px; }
+.tchip { background: var(--bg); border-radius: 16px; padding: 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.tl { font-size: .68rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.tw { font-weight: 800; font-size: .9rem; }
+.tsw { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--line); }
+.tsh { width: 42px; height: 42px; color: var(--ink); display: block; }
+.tsh svg { width: 100%; height: 100%; }
+.tbig { font-family: var(--display); font-weight: 800; font-size: 1.9rem; line-height: 42px; }
+.temo { font-size: 2rem; line-height: 42px; }
+.thint { margin: 0; color: var(--muted); font-size: .88rem; }
+.wsprev { width: 100%; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+.voice .vrow { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border-radius: var(--r); padding: 16px; }
+.voice .btn { align-self: flex-start; }
+.voice .thint { margin-top: 10px; }
+.field select { font: inherit; font-size: 1rem; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--bg); color: var(--ink); max-width: 100%; }
 .link { border: 0; background: none; color: var(--tomato); font-weight: 800; padding: 4px 0; }
 .danger { border: 0; background: var(--tomato); color: #fff; border-radius: 99px; padding: 6px 14px; font-weight: 800; }
 
@@ -160,6 +177,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--sky); outli
 </main>
 <div id="layer"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -182,16 +200,61 @@ const pick = a => a[rand(a.length)];
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const others = (pool, not, n, key = x => x) => shuffle(pool.filter(x => key(x) !== key(not))).slice(0, n);
 
-/* ---------- speech ---------- */
+/* ---------- voice (per phone: each device has its own voices) ---------- */
+const VOICE_KEY = 'little-sprouts-voice';
+const SPEEDS = { slower: 0.85, normal: 1.0, faster: 1.12 };
+let voices = [];
+let voicePref = { uri: '', speed: 'normal' };
+try { voicePref = { ...voicePref, ...JSON.parse(localStorage.getItem(VOICE_KEY) || '{}') }; } catch (e) {}
+const saveVoicePref = () => { try { localStorage.setItem(VOICE_KEY, JSON.stringify(voicePref)); } catch (e) {} };
+// Clear, friendly voices that ship on common phones and computers, best first.
+const GOOD_VOICES = [/samantha/i, /\bava\b/i, /allison/i, /\baria\b/i, /jenny/i, /google us english/i, /\bzoe\b/i, /susan/i, /karen/i, /serena/i, /moira/i, /zira/i];
+const NOVELTY = /(bells|bubbles|boing|cellos|zarvox|whisper|bad news|good news|organ|trinoids|albert|hysterical|jester|superstar|wobble|grandma|grandpa|rocko|junior|ralph|fred|bahh|deranged|pipe)/i;
+function voiceScore(v) {
+  let s = 0;
+  if (NOVELTY.test(v.name)) s -= 100;
+  if (/(natural|neural|enhanced|premium|online)/i.test(v.name)) s += 50;
+  const i = GOOD_VOICES.findIndex(r => r.test(v.name)); if (i >= 0) s += 40 - i * 2;
+  if (/en[-_]US/i.test(v.lang)) s += 6; else if (/en[-_](GB|AU|CA|IE)/i.test(v.lang)) s += 3;
+  return s;
+}
+function loadVoices() {
+  try { voices = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang)).sort((a, b) => voiceScore(b) - voiceScore(a)); } catch (e) { voices = []; }
+}
+const currentVoice = () => voices.find(v => v.voiceURI === voicePref.uri) || voices[0] || null;
+if ('speechSynthesis' in window) {
+  loadVoices();
+  speechSynthesis.addEventListener?.('voiceschanged', () => { const had = voices.length; loadVoices(); if (!had && voices.length && S.view === 'home' && !S.sheet) render(); });
+}
 function speak(text) {
   try {
     if (!('speechSynthesis' in window)) return;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.88; u.pitch = 1.15;
+    const v = currentVoice(); if (v) { u.voice = v; u.lang = v.lang; }
+    u.rate = SPEEDS[voicePref.speed] || 1; u.pitch = 1.2; u.volume = 1;
     speechSynthesis.speak(u);
   } catch (e) {}
 }
+const CHEERS = ['Yay!', 'Woo-hoo!', 'Awesome!', 'Hooray!', 'You got it!', 'Super!'];
+
+/* ---------- happy sounds ---------- */
+let actx = null;
+function chime(notes) {
+  try {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches && notes.length > 3) notes = notes.slice(0, 3);
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = actx.currentTime + 0.02;
+    notes.forEach((f, i) => {
+      const o = actx.createOscillator(), g = actx.createGain(), t = t0 + i * 0.11;
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.4);
+    });
+  } catch (e) {}
+}
+const CHIME_RIGHT = [523, 659, 784];
+const CHIME_DONE = [523, 659, 784, 1047, 784, 1047];
 
 /* ---------- course content ---------- */
 const COLORS = [
@@ -367,6 +430,7 @@ function homeView() {
   const feed = h('ul', { class: 'feed', id: 'feed' });
   wrap.append(h('section', {}, h('div', { class: 'sec-head' }, h('h2', {}, 'Family feed'), h('span', {}, S.live ? 'Updates live on every phone' : '')), feed));
   fillFeed(feed);
+  wrap.append(voicePanel());
   return wrap;
 }
 
@@ -389,6 +453,23 @@ async function fillFeed(ul) {
   }));
 }
 
+function voicePanel() {
+  const sec = h('section', { class: 'voice' }, h('div', { class: 'sec-head' }, h('h2', {}, 'Voice'), h('span', {}, 'Saved on this phone')));
+  if (!('speechSynthesis' in window)) { sec.append(h('p', { class: 'empty' }, 'This browser cannot read lessons aloud. Try Safari on iPhone or Chrome on Android.')); return sec; }
+  const cur = currentVoice();
+  const sel = h('select', { id: 'voice-pick', onchange: e => { voicePref.uri = e.target.value; saveVoicePref(); speak("Hi friend! Let's learn together!"); } },
+    voices.length ? voices.slice(0, 30).map((v, i) => h('option', { value: v.voiceURI, selected: cur && v.voiceURI === cur.voiceURI }, v.name.replace(/\s*\(.*\)\s*$/, '') + (i === 0 ? ' (best match)' : '') + ' · ' + v.lang))
+      : [h('option', { value: '' }, 'Phone default voice')]);
+  const speed = h('div', { class: 'seg', role: 'group', 'aria-label': 'Speaking speed' }, Object.keys(SPEEDS).map(k =>
+    h('button', { type: 'button', 'aria-pressed': String(voicePref.speed === k), onclick: () => { voicePref.speed = k; saveVoicePref(); render(); speak('Yay! This is how fast I talk.'); } }, k[0].toUpperCase() + k.slice(1))));
+  sec.append(h('div', { class: 'vrow' },
+    h('label', { class: 'field', for: 'voice-pick' }, 'Who reads the lessons', sel),
+    h('div', { class: 'field' }, 'Speed', speed),
+    h('button', { class: 'btn', type: 'button', onclick: () => { chime(CHIME_RIGHT); speak("Hooray! Let's find the color red!"); } }, '▶ Test voice')),
+    h('p', { class: 'thint' }, 'For the clearest voice on iPhone, go to Settings › Accessibility › Spoken Content › Voices › English and download an Enhanced or Premium voice such as Ava or Samantha. Then pick it here.'));
+  return sec;
+}
+
 function kidView(k) {
   const recommended = COURSES.filter(c => c.ages.includes(k.age));
   const rest = COURSES.filter(c => !c.ages.includes(k.age));
@@ -399,6 +480,7 @@ function kidView(k) {
     h('div', { class: 'bar' }, h('button', { class: 'back', onclick: () => { S.view = 'home'; render(); } }, '← Family')),
     h('div', { class: 'kidhead' }, h('span', { class: 'ava', 'aria-hidden': 'true' }, k.avatar || '🌱'),
       h('div', {}, h('h2', {}, k.name), h('p', {}, `Age ${k.age} · ${totalStars(k)} stars so far`))),
+    todayCard(k),
     h('section', {}, h('div', { class: 'sec-head' }, h('h2', {}, `Courses for age ${k.age}`), h('span', {}, `${ROUND} questions each`)),
       h('div', { class: 'courses' }, recommended.map(tile))));
   if (rest.length) {
@@ -489,11 +571,12 @@ function answer(ch, btn) {
   if (L.locked) return;
   if (!ch.correct) {
     L.missed = true; btn.classList.remove('wrong'); void btn.offsetWidth; btn.classList.add('wrong');
-    speak('Try again!'); return;
+    speak(pick(['Oops! Try again!', 'Almost! Try again!', 'Keep going, try again!'])); return;
   }
   L.locked = true; btn.classList.add('right'); burst(btn, 6);
   if (!L.missed) L.firstTry++;
-  speak(L.q.praise);
+  chime(CHIME_RIGHT);
+  speak(pick(CHEERS) + ' ' + L.q.praise);
   setTimeout(() => {
     if (!L) return;
     L.i++;
@@ -502,7 +585,8 @@ function answer(ch, btn) {
 }
 async function finishRound() {
   L.done = true; drawLesson(); burst(document.querySelector('.bigstar'), 14);
-  const k = kidById(L.kidId); speak(`Great job${k ? ', ' + k.name : ''}! You earned a star!`);
+  const k = kidById(L.kidId); chime(CHIME_DONE);
+  setTimeout(() => speak(`Hooray${k ? ', ' + k.name : ''}! You earned a star! Great job!`), 600);
   if (S.readOnly || !k) return;
   const n = ((k.stars || {})[L.courseId] || 0) + 1;
   await store.updateKid(L.kidId, { stars: { [L.courseId]: n } });
@@ -518,6 +602,223 @@ function burst(el, count) {
   }
 }
 
+/* ---------- today's printable lesson ---------- */
+const SHAPE_PATHS = {
+  circle: 'M10 50a40 40 0 1 0 80 0a40 40 0 1 0 -80 0Z',
+  square: 'M12 12H88V88H12Z',
+  triangle: 'M50 10L92 88H8Z',
+  star: 'M' + star(5, 44, 19).split(' ').join('L') + 'Z',
+  heart: 'M50 88C20 65 6 48 6 32 6 18 17 8 30 8c10 0 17 6 20 14 3-8 10-14 20-14 13 0 24 10 24 24 0 16-14 33-44 56z',
+  rectangle: 'M4 26H96V74H4Z',
+  oval: 'M5 50a45 28 0 1 0 90 0a45 28 0 1 0 -90 0Z',
+  diamond: 'M50 5L88 50L50 95L12 50Z',
+  hexagon: 'M' + hexagon().split(' ').join('L') + 'Z'
+};
+function seeded(str) {
+  let x = 2166136261; for (let i = 0; i < str.length; i++) x = Math.imul(x ^ str.charCodeAt(i), 16777619);
+  return () => { x = Math.imul(x ^ (x >>> 15), x | 1); x ^= x + Math.imul(x ^ (x >>> 7), x | 61); return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+}
+const todayKey = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+function dayPlan(k, key) {
+  const r = seeded(key + '|' + k.id + '|' + k.age), rp = a => a[Math.floor(r() * a.length)];
+  const rs = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const age = k.age, color = rp(COLORS);
+  const shape = rp(age <= 2 ? ['circle', 'square', 'triangle', 'star', 'heart'] : Object.keys(SHAPE_PATHS));
+  const animal = rp(ANIMALS), max = age <= 2 ? 3 : age === 3 ? 5 : 10;
+  const number = 2 + Math.floor(r() * (max - 1)), thing = rp(THINGS), word = rp(WORDS);
+  const decoys = rs(ANIMALS.filter(a => a !== animal)).slice(0, 2);
+  const startOthers = rs(WORDS.filter(w => w[0] !== word[0])).slice(0, 3);
+  const a = 1 + Math.floor(r() * 4), b = 1 + Math.floor(r() * 3);
+  return { key, age, color, shape, animal, number, thing, word, letter: word[0],
+    animalRow: rs([animal, ...decoys]), startRow: rs([word, ...startOthers]), add: { a, b, thing: rp(THINGS) },
+    big: rp(ANIMALS), bigFirst: r() < .5 };
+}
+const prettyDate = key => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }); };
+
+const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+const DISP = '"Sniglet","Arial Rounded MT Bold",sans-serif', BODYF = '"Nunito","Segoe UI",sans-serif';
+async function drawWorksheet(k, plan) {
+  try { await Promise.all(['800 40px Sniglet', '800 40px Nunito', '700 20px Nunito'].map(f => document.fonts.load(f))); } catch (e) {}
+  const W = 1275, H = 1650, M = 75, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d'), INK = '#1D2B3A', MUTED = '#5B6B7C', LINE = '#C9D5E0';
+  c.fillStyle = '#fff'; c.fillRect(0, 0, W, H); c.textBaseline = 'alphabetic';
+  const txt = (s, x, y, size, opt = {}) => { c.font = `${opt.weight || 800} ${size}px ${opt.font || BODYF}`; c.fillStyle = opt.color || INK; c.textAlign = opt.align || 'left'; c.fillText(s, x, y); };
+  const emo = (e, x, y, size) => { c.font = `${size}px ${EMOJI_FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = INK; c.fillText(e, x, y); c.textBaseline = 'alphabetic'; };
+  const rr = (x, y, w, h, r) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); };
+  const shp = (name, cx, cy, size, o = {}) => {
+    c.save(); c.translate(cx - size / 2, cy - size / 2); c.scale(size / 100, size / 100);
+    const p = new Path2D(SHAPE_PATHS[name]);
+    if (o.fill) { c.fillStyle = o.fill; c.fill(p); }
+    if (o.stroke) { c.lineWidth = (o.lw || 4) * 100 / size; c.strokeStyle = o.stroke; c.lineJoin = 'round'; c.lineCap = 'round'; if (o.dash) c.setLineDash(o.dash.map(d => d * 100 / size)); c.stroke(p); }
+    c.restore();
+  };
+  const box = (n, title, y, h) => {
+    rr(M, y, W - 2 * M, h, 28); c.lineWidth = 3; c.strokeStyle = LINE; c.setLineDash([]); c.stroke();
+    c.beginPath(); c.arc(M + 44, y + 48, 24, 0, Math.PI * 2); c.fillStyle = '#2B7FD4'; c.fill();
+    txt(String(n), M + 44, y + 58, 28, { font: DISP, color: '#fff', align: 'center' });
+    txt(title, M + 84, y + 60, 34, { font: DISP });
+  };
+
+  // header
+  c.beginPath(); c.arc(M + 34, 112, 34, 0, Math.PI * 2); c.fillStyle = '#2F9E57'; c.fill();
+  emo('🌱', M + 34, 114, 38);
+  txt("Today's Lesson", M + 86, 128, 58, { font: DISP });
+  txt(prettyDate(plan.key), W - M, 100, 26, { align: 'right', color: MUTED, weight: 700 });
+  txt(`${k.name} · Age ${k.age}`, W - M, 140, 32, { align: 'right' });
+  c.fillStyle = LINE; c.fillRect(M, 180, W - 2 * M, 3);
+
+  // today's words
+  const tiles = [['Color', 'color'], ['Shape', 'shape'], ['Number', 'number'], ['Animal', 'animal']];
+  if (plan.age >= 3) tiles.splice(2, 0, ['Letter', 'letter']);
+  const tw = (W - 2 * M - (tiles.length - 1) * 20) / tiles.length, ty = 205;
+  tiles.forEach(([label, kind], i) => {
+    const x = M + i * (tw + 20), cx = x + tw / 2;
+    rr(x, ty, tw, 180, 24); c.fillStyle = '#EEF4F9'; c.fill();
+    txt(label.toUpperCase(), cx, ty + 36, 20, { align: 'center', color: MUTED });
+    if (kind === 'color') { c.beginPath(); c.arc(cx, ty + 95, 36, 0, Math.PI * 2); c.fillStyle = plan.color.hex; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke(); txt(plan.color.n, cx, ty + 162, 28, { align: 'center' }); }
+    if (kind === 'shape') { shp(plan.shape, cx, ty + 95, 76, { stroke: INK, lw: 5 }); txt(plan.shape, cx, ty + 162, 28, { align: 'center' }); }
+    if (kind === 'letter') { txt(plan.letter + plan.letter.toLowerCase(), cx, ty + 125, 72, { font: DISP, align: 'center' }); txt(plan.word[1], cx, ty + 162, 24, { align: 'center', color: MUTED, weight: 700 }); }
+    if (kind === 'number') { txt(String(plan.number), cx, ty + 128, 80, { font: DISP, align: 'center' }); txt(plan.number === 1 ? 'one' : ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'][plan.number], cx, ty + 162, 26, { align: 'center' }); }
+    if (kind === 'animal') { emo(plan.animal.e, cx, ty + 92, 70); txt(plan.animal.n, cx, ty + 162, 28, { align: 'center' }); }
+  });
+
+  // activities: each draws inside its content area (below the title row)
+  const acts = [];
+  const area = (y, h) => ({ top: y + 92, bot: y + h - 18, mid: (y + 92 + y + h - 18) / 2, hh: h - 110 });
+  const countAct = (y, h) => {
+    const n = plan.number, A = area(y, h), write = plan.age >= 3;
+    box(acts.indexOf(countAct) + 1, write ? `Count the ${plan.thing.many}. Write the number.` : `Count the ${plan.thing.many}. Color a circle for each!`, y, h);
+    const perRow = n > 5 ? Math.ceil(n / 2) : n, rows = Math.ceil(n / perRow);
+    const usableW = W - 2 * M - (write ? 260 : 80), cellH = (A.hh - (write ? 0 : 50)) / rows;
+    const size = Math.min(84, cellH - 8, usableW / perRow - 10), gap = size + 14;
+    const x0 = M + 40 + (usableW - perRow * gap) / 2 + gap / 2;
+    for (let i = 0; i < n; i++) {
+      const row = Math.floor(i / perRow), col = i % perRow, cx = x0 + col * gap, cy = A.top + cellH * (row + .5);
+      emo(plan.thing.e, cx, cy, size);
+      if (!write) { c.beginPath(); c.arc(cx, A.bot - 22, 20, 0, Math.PI * 2); c.lineWidth = 3; c.strokeStyle = INK; c.stroke(); }
+    }
+    if (write) { const s = Math.min(130, A.hh); rr(W - M - 60 - s, A.mid - s / 2, s, s, 18); c.lineWidth = 4; c.strokeStyle = INK; c.stroke(); }
+  };
+  const colorAct = (y, h) => {
+    const A = area(y, h);
+    box(acts.indexOf(colorAct) + 1, `Color the ${plan.shape} ${plan.color.n}.`, y, h);
+    const s = Math.min(A.hh + 10, 320);
+    shp(plan.shape, W / 2 - 80, A.mid, s, plan.age >= 4 ? { stroke: INK, lw: 7, dash: [3, 14] } : { stroke: INK, lw: 8 });
+    txt('Your crayon:', W - M - 150, A.mid - 56, 22, { align: 'center', color: MUTED, weight: 700 });
+    c.beginPath(); c.arc(W - M - 150, A.mid + 4, 40, 0, Math.PI * 2); c.fillStyle = plan.color.hex; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+  };
+  const findAct = (y, h) => {
+    const A = area(y, h);
+    box(acts.indexOf(findAct) + 1, `Find the ${plan.animal.n}. Circle it!`, y, h);
+    plan.animalRow.forEach((a, i) => emo(a.e, M + (W - 2 * M) * (i + .5) / 3, A.mid, Math.min(140, A.hh)));
+  };
+  const bigAct = (y, h) => {
+    const A = area(y, h), big = Math.min(150, A.hh);
+    box(acts.indexOf(bigAct) + 1, `Circle the BIG ${plan.big.n}.`, y, h);
+    (plan.bigFirst ? [big, big * .45] : [big * .45, big]).forEach((s, i) => emo(plan.big.e, M + (W - 2 * M) * (i + .5) / 2, A.mid, s));
+  };
+  const traceAct = (y, h) => {
+    const A = area(y, h);
+    box(acts.indexOf(traceAct) + 1, `Trace the letter ${plan.letter}.`, y, h);
+    const top = A.top + 6, base = A.bot - 6, mid = (top + base) / 2;
+    c.setLineDash([]); c.lineWidth = 2; c.strokeStyle = LINE;
+    [top, base].forEach(yy => { c.beginPath(); c.moveTo(M + 30, yy); c.lineTo(W - M - 30, yy); c.stroke(); });
+    c.setLineDash([12, 12]); c.beginPath(); c.moveTo(M + 30, mid); c.lineTo(W - M - 30, mid); c.stroke();
+    const U = plan.letter, l = U.toLowerCase(), chars = [U, l, U, l, U, l];
+    c.font = `800 ${(base - top) * 1.38}px ${BODYF}`; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+    c.lineWidth = 5; c.strokeStyle = '#7D8C9B'; c.setLineDash([3, 11]); c.lineCap = 'round'; c.lineJoin = 'round';
+    chars.forEach((ch, i) => c.strokeText(ch, M + 30 + (W - 2 * M - 60) * (i + .5) / chars.length, base));
+    c.setLineDash([]);
+  };
+  const soundAct = (y, h) => {
+    const A = area(y, h), s = Math.min(110, A.hh - 34);
+    box(acts.indexOf(soundAct) + 1, `Circle the pictures that start with ${plan.letter}.`, y, h);
+    plan.startRow.forEach((w, i) => { const cx = M + (W - 2 * M) * (i + .5) / 4; emo(w[2], cx, A.top + s / 2, s); txt(w[1], cx, A.bot, 24, { align: 'center', color: MUTED, weight: 700 }); });
+  };
+  const addAct = (y, h) => {
+    const { a, b, thing } = plan.add, A = area(y, h), s = Math.min(70, A.hh - 10);
+    box(acts.indexOf(addAct) + 1, `Add them up! ${a} + ${b} = ?`, y, h);
+    let x = M + 50;
+    const put = () => { emo(thing.e, x + s / 2, A.mid, s); x += s + 6; };
+    for (let i = 0; i < a; i++) put();
+    txt('+', x + 34, A.mid + 24, 72, { font: DISP, align: 'center' }); x += 74;
+    for (let i = 0; i < b; i++) put();
+    txt('=', x + 36, A.mid + 24, 72, { font: DISP, align: 'center' }); x += 84;
+    const bs = Math.min(120, A.hh); rr(x, A.mid - bs / 2, bs, bs, 18); c.lineWidth = 4; c.strokeStyle = INK; c.stroke();
+  };
+  if (plan.age <= 2) acts.push([colorAct, 1], [findAct, 1], [countAct, 1], [bigAct, 1]);
+  else if (plan.age === 3) acts.push([traceAct, 1.25], [colorAct, 1], [countAct, 1], [findAct, 1]);
+  else acts.push([traceAct, 1.3], [soundAct, 1], [countAct, 1.1], [addAct, 1]);
+  const fns = acts.map(a => a[0]); acts.length = 0; acts.push(...fns);
+  const wts = plan.age <= 2 ? [1, 1, 1, 1] : plan.age === 3 ? [1.25, 1, 1, 1] : [1.3, 1, 1.1, 1];
+  const top = 415, notesH = 150, gap = 22, avail = H - M - notesH - top - gap - gap * (fns.length - 1);
+  const tot = wts.reduce((p, q) => p + q, 0);
+  let yy = top;
+  fns.forEach((fn, i) => { const bh = avail * wts[i] / tot; fn(yy, bh); yy += bh + gap; });
+
+  // grown-up notes
+  const ny = H - M - notesH + 10;
+  rr(M, ny, W - 2 * M, notesH - 10, 24); c.fillStyle = '#FDF0D2'; c.fill();
+  txt('FOR GROWN-UPS', M + 30, ny + 40, 20, { color: '#8A6A12' });
+  const talk = plan.age <= 2
+    ? `Find 3 things at home that are ${plan.color.n}. Make the ${plan.animal.n} sound together: "${plan.animal.s}!"`
+    : `Say words that start with ${plan.letter} (like ${plan.word[1]}). Find ${plan.number} ${plan.color.n} things at home.`;
+  const answers = plan.age >= 4 ? `Answers: count ${plan.number} · ${plan.add.a} + ${plan.add.b} = ${plan.add.a + plan.add.b} · starts with ${plan.letter}: ${plan.word[1]}`
+    : `Answers: count ${plan.number} · the ${plan.animal.n} is ${plan.animal.e}`;
+  txt(talk, M + 30, ny + 80, 24, { weight: 700 });
+  txt(answers, M + 30, ny + 118, 22, { color: MUTED, weight: 700 });
+  return cv;
+}
+
+let downloads = null;
+const wsCache = new Map();
+async function worksheetCanvas(k) {
+  const plan = dayPlan(k, todayKey()), key = plan.key + k.id + k.age + k.name;
+  if (!wsCache.has(key)) wsCache.set(key, drawWorksheet(k, plan));
+  return wsCache.get(key);
+}
+async function saveWorksheet(k, btn) {
+  const label = btn.textContent; btn.disabled = true; btn.textContent = 'Making your PDF…';
+  try {
+    const cv = await worksheetCanvas(k);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'in', format: 'letter' });
+    pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 8.5, 11);
+    const safe = (k.name || 'Lesson').replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'Lesson';
+    await downloads.save({ filename: `${safe} lesson ${todayKey()}.pdf`, data: pdf.output('blob') });
+    btn.textContent = 'Saved. Open it and tap Print.';
+  } catch (e) {
+    btn.textContent = e && e.code === 'declined' ? label : 'Could not save. Press and hold the picture instead.';
+  }
+  btn.disabled = false;
+  setTimeout(() => { if (btn.isConnected) btn.textContent = label; }, 5000);
+}
+function todayCard(k) {
+  const plan = dayPlan(k, todayKey());
+  const chip = (label, visual, word) => h('div', { class: 'tchip' }, h('span', { class: 'tl' }, label), visual, h('span', { class: 'tw' }, word));
+  const chips = [
+    chip('Color', h('span', { class: 'tsw', style: `background:${plan.color.hex}` }), plan.color.n),
+    chip('Shape', h('span', { class: 'tsh', html: shapeSvg(plan.shape, 'currentColor') }), plan.shape),
+    plan.age >= 3 ? chip('Letter', h('span', { class: 'tbig' }, plan.letter + plan.letter.toLowerCase()), plan.word[1]) : null,
+    chip('Number', h('span', { class: 'tbig' }, String(plan.number)), plan.thing.many),
+    chip('Animal', h('span', { class: 'temo' }, plan.animal.e), plan.animal.n)
+  ];
+  const img = h('img', { class: 'wsprev', alt: `Printable worksheet for ${k.name}`, hidden: true });
+  const prevBtn = h('button', { class: 'btn ghost', type: 'button', onclick: async () => {
+      if (img.hidden) { prevBtn.textContent = 'Loading…'; const cv = await worksheetCanvas(k); img.src = cv.toDataURL('image/png'); img.hidden = false; prevBtn.textContent = 'Hide worksheet'; }
+      else { img.hidden = true; prevBtn.textContent = 'See worksheet'; }
+    } }, 'See worksheet');
+  const actions = h('div', { class: 'actions', style: 'justify-content:flex-start;flex-wrap:wrap' }, prevBtn);
+  if (downloads && window.jspdf) actions.prepend(h('button', { class: 'btn', type: 'button', onclick: e => saveWorksheet(k, e.currentTarget) }, 'Save PDF to print'));
+  return h('section', { class: 'today' },
+    h('div', { class: 'sec-head' }, h('h2', {}, "Today's lesson"), h('span', {}, prettyDate(plan.key))),
+    h('div', { class: 'tchips' }, chips),
+    h('p', { class: 'thint' }, downloads && window.jspdf
+      ? `A one-page worksheet built for age ${k.age}. Save the PDF, open it, and tap Share then Print. It changes every day.`
+      : `A one-page worksheet built for age ${k.age}. Tap See worksheet, then press and hold the picture to save or print it.`),
+    actions, img);
+}
+
 /* ---------- boot ---------- */
 loadLocal();
 render();
@@ -527,7 +828,8 @@ async function connect() {
   const use = window.claude && window.claude.use;
   if (!use) { S.loading = false; render(); return; }
   try {
-    const [d, u] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+    const [d, u, dl] = await Promise.all([window.claude.use('db'), window.claude.use('user'), window.claude.use('downloads')]);
+    downloads = dl;
     user = u;
     if (u) { try { myId = await u.id(); } catch (e) {} }
     if (!d) { S.loading = false; render(); return; }
