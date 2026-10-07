@@ -909,6 +909,7 @@ const COURSES = [
 ];
 const COURSE = Object.fromEntries(COURSES.map(c => [c.id, c]));
 const ROUND = 5;
+const APP_VERSION = '12 · recorder fix';
 const AVATARS = ['🦊', '🐻', '🐼', '🐸', '🦁', '🐯', '🐨', '🐵', '🐰', '🐙', '🦄', '🐢'];
 
 /* ---------- levels: per child, per course ---------- */
@@ -1039,6 +1040,7 @@ function homeView() {
   fillFeed(feed);
   if (S.live) wrap.append(familyPanel());
   wrap.append(voicePanel());
+  wrap.append(h('p', { class: 'thint', style: 'text-align:center;margin:0' }, 'App version ' + APP_VERSION));
   return wrap;
 }
 
