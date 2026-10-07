@@ -197,7 +197,6 @@ const CATALOG_RAW = [
   ['c7','Sweet Potatoes','carb','1 medium (130 g)',110,2,26,0,5,4],
   ['c8','Russet Potatoes','carb','1 medium (170 g)',160,4,37,0,1,4],
   ['c9','Garofalo Pasta','carb','2 oz dry',200,7,42,1,1,2],
-  ['c10','Banza Chickpea Pasta','carb','2 oz dry',190,11,35,3.5,5,5],
   ['c11','Kirkland Organic Black Beans (canned)','carb','1/2 cup',110,7,20,0.5,0,7],
   ['c12','Kirkland Bagels','carb','1 bagel',300,11,58,2,6,2,{meals:'b',whole:1}],
   ['v1','Broccoli Florets','veg','1 cup',30,2.5,6,0,1.5,2.4],
@@ -217,7 +216,6 @@ const CATALOG_RAW = [
   ['a3','Kirkland Organic Creamy Peanut Butter','fat','2 tbsp',190,7,7,16,2,3,{meals:'bs'}],
   ['a4','Kirkland Extra Virgin Olive Oil','fat','1 tbsp',120,0,0,14,0,0],
   ['a5','Kirkland Shredded Mexican-Style Cheese','fat','1/4 cup (28 g)',110,6,1,9,0,0],
-  ['a6','Sabra Classic Hummus','fat','2 tbsp',70,2,4,5,0,1,{meals:'lds'}],
   ['s1','Kirkland Unsweetened Vanilla Almond Milk','other','1 cup',40,1,1,3,0,1],
   ['s2','Kirkland Trail Mix','snack','1/4 cup (40 g)',210,6,18,14,12,2],
   ['s3','SkinnyPop Popcorn','snack','3.75 cups',150,2,15,10,0,3],
@@ -233,7 +231,7 @@ const CATALOG_RAW = [
 // Saturated fat per serving (g), approximate.
 const SAT_FAT = { k1: 0.5, k2: 2, k3: 5, k4: 2.5, k5: 3, k6: 1, k7: 0.5, k8: 0.5, k9: 0, k10: 0.5, k11: 3, k12: 1.5, k13: 0.5, k14: 0,
   k15: 1, k16: 2.5, b1: 3, b2: 0, b3: 0, b4: 1.5, b5: 3, b6: 1, b7: 3.5, b8: 3.5, b9: 0.5, b10: 1, c1: 0, c2: 0, c3: 0.5, c4: 0.5,
-  c5: 0, c6: 0.5, c7: 0, c8: 0, c9: 0, c10: 0, c11: 0, c12: 0.5, v8: 0.5, a1: 1, a2: 1, a3: 3, a4: 2, a5: 5, a6: 0.5, a7: 1.5,
+  c5: 0, c6: 0.5, c7: 0, c8: 0, c9: 0, c11: 0, c12: 0.5, v8: 0.5, a1: 1, a2: 1, a3: 3, a4: 2, a5: 5, a7: 1.5,
   a8: 1, a9: 0.5, s1: 0, s2: 4, s3: 1, s4: 1.5, s5: 0 };
 const CATALOG = CATALOG_RAW.map(([id, name, cat, serving, cal, p, c, f, s, fb, o = {}]) =>
   ({ id, name, cat, serving, cal, p, c, f, s, fb, sf: SAT_FAT[id] ?? 0, src: 'costco', meals: o.meals, whole: !!o.whole }));
@@ -241,6 +239,7 @@ const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
+const APP_VERSION = '1.5 (protein-forward)';
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -249,6 +248,7 @@ function defaults() {
     rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, sf: { on: true, v: 4.5 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
     foods: {}, list: {}, log: {}, plan: null,
     planOpts: { days: 1, onlyList: false, snacks: 1, pf: true },
+    avoid: ['chickpea', 'garbanzo', 'hummus', 'falafel'], excluded: {},
     calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose', tg: false, pf: true },
   };
 }
@@ -263,6 +263,8 @@ function load() {
   return defaults();
 }
 let S = load();
+// Drop plan items whose food no longer exists (e.g. removed from the catalog).
+if (S.plan) for (const d of S.plan.days) for (const m of d.meals) m.items = m.items.filter(x => getFoodSafe(x.id));
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('Could not save — phone storage may be full'); }
@@ -280,6 +282,11 @@ const todayKey = () => dayKey(new Date());
 const proteinRatio = f => f.cal ? (f.p || 0) * 4 / f.cal : 0;
 const isHighProtein = f => proteinRatio(f) >= 0.3 && (f.p || 0) >= 8;
 function sfTarget() { return S.targets.sf || Math.round(S.targets.cal * 0.1 / 9); }
+function getFoodSafe(id) { return (S && S.foods[id]) || CATALOG_BY_ID[id] || null; }
+function avoidedWord(f) {
+  const name = ((f.name || '') + ' ' + (f.brand || '')).toLowerCase();
+  return (S.avoid || []).find(w => w && name.includes(w.toLowerCase()));
+}
 function getFood(id) { return S.foods[id] || CATALOG_BY_ID[id] || null; }
 function allFoods() {
   const out = CATALOG.map(f => S.foods[f.id] || f);
@@ -303,6 +310,9 @@ function verdict(f) {
     if (val == null || isNaN(val)) { fails.push(`${label} not listed — tap Edit to enter it`); return; }
     if (isMin ? val < rule.v : val > rule.v) fails.push(`${label} ${fmt(val)}${unit} ${isMin ? 'is under' : 'is over'} your ${rule.v}${unit} ${isMin ? 'minimum' : 'limit'}`);
   };
+  const w = avoidedWord(f);
+  if (w) fails.push(`Contains “${w}” — on your foods-to-avoid list`);
+  if (S.excluded[f.id]) fails.push('You marked this “Never use”');
   check(r.cal, f.cal, 'Calories', '', false);
   check(r.c, f.c == null ? null : carbsOf(f), carbLabel, ' g', false);
   check(r.f, f.f, 'Fat', ' g', false);
@@ -553,6 +563,7 @@ function openFood(id, opts = {}) {
     <button class="btn block" data-act="log">Log it</button>
     <div class="row" style="margin-top:8px"><button class="btn alt grow sm" data-act="togglelist">${onList ? '✓ On Costco list' : '+ Costco list'}</button>
       <button class="btn alt grow sm" data-act="edit">Edit</button>
+      <button class="btn ${S.excluded[f.id] ? 'danger' : 'alt'} sm" data-act="exclude">${S.excluded[f.id] ? '🚫 Never use' : '🚫'}</button>
       ${f.src !== 'costco' ? `<button class="btn danger sm" data-act="delfood">Delete</button>` : ''}</div>`);
 }
 function foodForm(f, code) {
@@ -706,12 +717,13 @@ function optimize(meals, pf) {
     let e = 0;
     for (const k in W) {
       const d = (sum(items, k) - T[k]) / (T[k] || 1);
-      // Protein-forward: falling short on protein costs far more than going a little over.
-      const w = pf && k === 'p' ? (d < 0 ? 8 : 1) : W[k];
+      // Protein-forward: falling short on protein costs far more than going over.
+      // Carbs and fat are ceilings: going over costs far more than coming in under.
+      const w = k === 'p' ? (pf ? (d < 0 ? 8 : 1) : W.p) : k === 'c' ? (d > 0 ? 12 : 1) : k === 'f' ? (d > 0 ? 5 : 1) : W[k];
       e += w * d * d;
     }
     const sfOver = sum(items, 'sf') - sfTarget();
-    if (sfOver > 0) e += 4 * (sfOver / sfTarget()) ** 2;
+    if (sfOver > 0) e += 10 * (sfOver / sfTarget()) ** 2;
     if (pf) for (const m of meals) {
       const want = T.p * (shares[m.meal] || 0) * 0.9, got = sum(m.items, 'p');
       if (want && got < want) e += 3 * ((want - got) / want) ** 2;
@@ -734,7 +746,7 @@ function generatePlan() {
   const used = {};
   const days = [];
   for (let i = 0; i < S.planOpts.days; i++) days.push(makeDay(pool, used));
-  S.plan = { made: Date.now(), days }; planDay = 0; save();
+  S.plan = { made: Date.now(), days, pf: S.planOpts.pf, ver: APP_VERSION }; planDay = 0; save();
 }
 function planTotals(day) {
   const list = day.meals.flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
@@ -749,12 +761,15 @@ function renderPlan() {
       ${[0, 1, 2].map(n => `<button class="chip ${o.snacks === n ? 'on' : ''}" data-act="psnacks" data-v="${n}">${n} snack${n === 1 ? '' : 's'}</button>`).join('')}</div>
     <label class="switch"><input type="checkbox" id="onlylist" ${o.onlyList ? 'checked' : ''}><span class="grow">Only use items on my shopping list <span class="muted small">(${listCount})</span></span></label>
     <div class="small muted" style="margin:4px 0 10px">${pool.length} approved items available.</div>
+    ${o.pf && T.p * 4 < T.cal * 0.3 ? `<div class="small" style="color:var(--warn);margin:0 0 8px">Your protein goal is only ${T.p} g. For a protein-forward goal, open Goals → Calculate them, tick <b>Protein-forward</b>, and tap <b>Use calculated goals</b>.</div>` : ''}
     <button class="btn block" data-act="genplan" ${pool.length < 3 ? 'disabled' : ''}>${S.plan ? 'Make a new plan' : 'Make my meal plan'}</button>
     ${pool.length < 3 ? `<div class="small" style="color:var(--warn);margin-top:6px">Not enough approved items. Add more items to your list or loosen your rules in Goals.</div>` : ''}</div>`;
   if (S.plan && S.plan.days.length) {
     const days = S.plan.days; if (planDay >= days.length) planDay = 0;
     if (days.length > 1) h += `<div class="chips" style="margin-bottom:10px">${days.map((d, i) => `<button class="chip ${i === planDay ? 'on' : ''}" data-act="pday" data-v="${i}">Day ${i + 1}</button>`).join('')}</div>`;
     const day = days[planDay], t = planTotals(day);
+    if (!S.plan.ver) h += `<div class="card" style="background:var(--soft)"><b>This plan was made with an older version.</b><div class="small muted">Tap <b>Make a new plan</b> above to get a protein-forward plan with the carb limits.</div></div>`;
+    else if (S.plan.pf) h += `<div class="small" style="color:var(--p);margin:0 0 8px"><b>💪 Protein-forward plan</b> — every meal is built around a protein.</div>`;
     h += `<div class="card"><h2>Day ${planDay + 1} totals</h2>
       ${macroBar('Calories', t.cal, T.cal, 'var(--cal)', '')}${macroBar('Protein', t.p, T.p, 'var(--p)', ' g')}
       ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}</div>`;
@@ -802,16 +817,21 @@ function renderSettings() {
       <div class="row" style="margin-top:8px"><span class="small grow">Set limits from my daily goals ÷</span>
         <input type="number" inputmode="numeric" id="spd" value="${S.servingsPerDay}" style="width:64px"><span class="small muted">servings</span>
         <button class="btn alt sm" data-act="autorules">Apply</button></div></div>
+    <div class="card"><h2>Foods I avoid</h2>
+      <div class="small muted" style="margin-bottom:6px">Any food whose name contains one of these words is <b>Not approved</b> and never used in meal plans. Separate words with commas.</div>
+      <input type="text" id="avoid" value="${esc((S.avoid || []).join(', '))}" placeholder="e.g. chickpea, hummus">
+      ${Object.keys(S.excluded).length ? `<div class="small" style="margin-top:8px">Marked “Never use”: ${Object.keys(S.excluded).map(id => getFoodSafe(id)).filter(Boolean).map(f => `<button class="chip" data-act="open" data-id="${esc(f.id)}">${esc(f.name)}</button>`).join(' ')}</div>` : ''}</div>
     <div class="card"><h2>Your data</h2><div class="small muted" style="margin-bottom:10px">Everything is saved only on this phone. Nothing is uploaded or shared. Save a backup now and then in case you change phones.</div>
       <div class="row wrap"><button class="btn alt grow sm" data-act="export">Save backup</button>
       <label class="btn alt grow sm" style="text-align:center">Restore backup<input type="file" id="importfile" accept="application/json,.json" hidden></label>
       <button class="btn danger grow sm" data-act="reset">Erase all</button></div></div>
-    <div class="small muted" style="text-align:center;margin:8px 0 20px">Barcode data: Open Food Facts (openfoodfacts.org). Costco values are approximate.</div>`;
+    <div class="small muted" style="text-align:center;margin:8px 0 20px">Barcode data: Open Food Facts (openfoodfacts.org). Costco values are approximate.<br>App version ${APP_VERSION}</div>`;
   const v = $('#view');
   v.querySelectorAll('[data-t]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (n > 0) { S.targets[i.dataset.t] = Math.round(n); S.targetsSet = true; save(); } }));
   v.querySelectorAll('[data-c]').forEach(i => i.addEventListener('change', () => { S.calc[i.dataset.c] = i.type === 'checkbox' ? i.checked : i.tagName === 'SELECT' && i.dataset.c !== 'act' ? i.value : +i.value; save(); }));
   v.querySelectorAll('[data-rule]').forEach(i => i.addEventListener('change', () => { S.rules[i.dataset.rule].on = i.checked; save(); }));
   v.querySelectorAll('[data-rulev]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (n >= 0) { S.rules[i.dataset.rulev].v = n; save(); } }));
+  $('#avoid').addEventListener('change', e => { S.avoid = e.target.value.split(',').map(x => x.trim()).filter(Boolean); save(); toast('Foods-to-avoid list saved'); });
   $('#netcarbs').addEventListener('change', e => { S.rules.net = e.target.checked; save(); renderSettings(); });
   $('#importfile').addEventListener('change', importBackup);
 }
@@ -883,6 +903,11 @@ document.addEventListener('click', e => {
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
     case 'edit': foodForm(sheetFood); break;
+    case 'exclude': {
+      const f = sheetFood;
+      if (S.excluded[f.id]) { delete S.excluded[f.id]; toast('Allowed again'); } else { S.excluded[f.id] = true; toast('Won’t be used in plans'); }
+      save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
+    }
     case 'resetfood': { const fid = sheetFood.id; delete S.foods[fid]; save(); openFood(fid); break; }
     case 'delfood': if (confirm('Delete this saved food?')) { delete S.foods[sheetFood.id]; delete S.list[sheetFood.id]; save(); closeSheet(); } break;
     case 'cview': costcoView = el.dataset.v; renderCostco(); break;
@@ -920,7 +945,13 @@ document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id
 document.addEventListener('visibilitychange', () => { if (document.hidden && scan.active) stopScan(); });
 
 render();
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // When a new version installs, reload once so it shows right away.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => {});
+}
 </script>
 </body>
 </html>
