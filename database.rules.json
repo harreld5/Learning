@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "families": {
+      "$family": {
+        ".read": "auth != null && $family.length >= 20",
+        ".write": "auth != null && $family.length >= 20"
+      }
+    }
+  }
+}

@@ -41,7 +41,7 @@ rep('</style>\n\n<main class="app" id="app">', '</style>\n</head>\n<body>\n<main
 s = s.rstrip() + '\n</body>\n</html>\n'
 rep('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/', '''<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/''')
 
@@ -107,7 +107,7 @@ rep("    const who = f.by && names[f.by] ? (names[f.by].isMe ? 'you' : names[f.b
     "    const who = f.by && f.by === myId ? 'you' : (f.byName || null);")
 rep("    d = { ...d, ts: Date.now(), by: myId || null };", "    d = { ...d, ts: Date.now(), by: myId || null, byName: phoneName() || null };")
 rep("  if (e && e.code === 'invalid_argument') { S.readOnly = true; render(); }",
-    "  if (e && (e.code === 'invalid_argument' || e.code === 'permission-denied')) { S.readOnly = true; render(); }")
+    "  if (e && (e.code === 'invalid_argument' || e.code === 'permission-denied' || /PERMISSION_DENIED/i.test(String(e.code || e.message || '')))) { S.readOnly = true; render(); }")
 
 # ---------- saving the PDF: the phone's share sheet (has Print), else a normal download ----------
 rep("let downloads = null;", r"""async function saveFile(blob, filename) {
@@ -159,7 +159,7 @@ rep("  if (canSave) actions.prepend(h('button', { class: 'btn', type: 'button', 
 rep("Print all ${n} pages to do today's lessons without the phone: the plan, one page per lesson, and a practice sheet. Save the PDF, open it, then tap Share and Print.",
     "Print all ${n} pages to do today's lessons without the phone: the plan, one page per lesson, and a practice sheet. Tap Print today's lessons, then choose Print.")
 
-# ---------- connection: Firebase with a private family link ----------
+# ---------- connection: Firebase Realtime Database with a private family link ----------
 start = s.index("async function connect() {"); end = s.index("connect();\n})();", start)
 s = s[:start] + r"""async function connect() {
   const cfg = window.SPROUT_FIREBASE;
@@ -168,34 +168,56 @@ s = s[:start] + r"""async function connect() {
   if (!FAMILY) { S.loading = false; S.needFamily = true; render(); return; }
   try {
     firebase.initializeApp(cfg);
-    const fs = firebase.firestore();
-    try { await fs.enablePersistence({ synchronizeTabs: true }); } catch (e) {}
     const cred = await firebase.auth().signInAnonymously();
     myId = cred.user.uid;
-    const root = fs.collection('families').doc(FAMILY);
-    // Same small interface the lessons already use; updates merge into nested fields like the original store.
-    const wrapDoc = ref => ({
-      id: ref.id,
-      get: () => ref.get(),
-      set: d => ref.set(d),
-      update: d => ref.set(d, { merge: true }),
-      delete: () => ref.delete(),
-      onSnapshot: (next, err) => ref.onSnapshot(next, err)
-    });
-    db = {
-      collection: p => root.collection(p),
-      doc: p => { const [c, d] = p.split('/'); return wrapDoc(root.collection(c).doc(d)); }
+    const rootRef = firebase.database().ref('families/' + FAMILY);
+    // The same small interface the lessons already use (collections of documents, live snapshots, merging updates).
+    const snapDoc = (id, val) => ({ id, exists: val != null, data: () => (val == null ? undefined : val) });
+    const flatten = (obj, prefix, out) => {
+      for (const [k, v] of Object.entries(obj)) {
+        const path = prefix ? prefix + '/' + k : k;
+        if (v && typeof v === 'object' && !Array.isArray(v)) { if (Object.keys(v).length) flatten(v, path, out); }
+        else out[path] = v === undefined ? null : v;
+      }
+      return out;
     };
+    const wrapDoc = ref => ({
+      id: ref.key,
+      get: async () => snapDoc(ref.key, (await ref.get()).val()),
+      set: d => ref.set(d),
+      update: d => ref.update(flatten(d, '', {})),
+      delete: () => ref.remove(),
+      onSnapshot: (next, err) => { const cb = sn => next(snapDoc(ref.key, sn.val())); ref.on('value', cb, err); return () => ref.off('value', cb); }
+    });
+    const wrapColl = (ref, q = {}) => ({
+      doc: id => wrapDoc(id ? ref.child(id) : ref.push()),
+      add: async d => { const r = ref.push(); await r.set(d); return wrapDoc(r); },
+      orderBy: (field, dir) => wrapColl(ref, { ...q, field, dir }),
+      limit: n => wrapColl(ref, { ...q, n }),
+      onSnapshot: (next, err) => {
+        let query = ref;
+        if (q.field) query = query.orderByChild(q.field);
+        if (q.n) query = q.dir === 'desc' ? query.limitToLast(q.n) : query.limitToFirst(q.n);
+        const cb = sn => {
+          const docs = []; sn.forEach(c => { docs.push(snapDoc(c.key, c.val())); });
+          if (q.dir === 'desc') docs.reverse();
+          next({ docs, size: docs.length, empty: !docs.length });
+        };
+        query.on('value', cb, err);
+        return () => query.off('value', cb);
+      }
+    });
+    db = { collection: p => wrapColl(rootRef.child(p)), doc: p => wrapDoc(rootRef.child(p)) };
     S.live = true; S.kids = []; S.feed = [];
     let first = 0;
     const ready = () => { if (++first === 2) { S.loading = false; } render(); };
-    root.collection('kids').onSnapshot(s => { S.kids = s.docs.map(x => ({ id: x.id, ...x.data() })); ready(); }, () => { S.loading = false; render(); });
+    db.collection('kids').onSnapshot(sn => { S.kids = sn.docs.map(x => ({ id: x.id, ...x.data() })); ready(); }, () => { S.loading = false; render(); });
     db.doc('settings/voice').onSnapshot(snap => {
       const v = snap.exists ? snap.data() : null;
       wordReview = { approve: (v && v.approve) || {}, reject: (v && v.reject) || {} };
       if (S.view === 'home' && !S.sheet) render();
     }, () => {});
-    root.collection('feed').orderBy('ts', 'desc').limit(40).onSnapshot(s => { S.feed = s.docs.map(x => ({ id: x.id, ...x.data() })); ready(); }, () => { S.loading = false; render(); });
+    db.collection('feed').orderBy('ts', 'desc').limit(40).onSnapshot(sn => { S.feed = sn.docs.map(x => ({ id: x.id, ...x.data() })); ready(); }, () => { S.loading = false; render(); });
   } catch (e) { S.live = false; S.loading = false; render(); }
 }
 """ + s[end:]
