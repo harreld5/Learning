@@ -311,7 +311,7 @@ const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '1.8 (Lodi seafood)';
+const APP_VERSION = '1.9 (setup code)';
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -875,7 +875,10 @@ function renderSettings() {
   const T = S.targets, r = S.rules, c = S.calc;
   const ruleRow = (k, label, unit, word) => `<label class="switch"><input type="checkbox" data-rule="${k}" ${r[k].on ? 'checked' : ''}>
     <span class="grow">${label} <span class="muted small">${word}</span></span><input type="number" inputmode="decimal" step="any" data-rulev="${k}" value="${r[k].v}"><span class="small muted" style="width:20px">${unit}</span></label>`;
-  $('#view').innerHTML = `<div class="card"><h2>Daily goals</h2>
+  $('#view').innerHTML = `<div class="card"><h2>Setup code</h2>
+      <div class="small muted" style="margin-bottom:6px">Got a setup code? Paste it here to fill in all your goals and rules at once.</div>
+      <div class="row"><input type="text" id="setupcode" placeholder="MC1-…" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" data-act="setupcode">Apply</button></div></div>
+    <div class="card"><h2>Daily goals</h2>
       <div class="grid2"><label class="field">Calories<input type="number" inputmode="numeric" data-t="cal" value="${T.cal}"></label>
       <label class="field">Protein g<input type="number" inputmode="numeric" data-t="p" value="${T.p}"></label>
       <label class="field">Carbs g<input type="number" inputmode="numeric" data-t="c" value="${T.c}"></label>
@@ -917,6 +920,20 @@ function renderSettings() {
   $('#avoid').addEventListener('change', e => { S.avoid = e.target.value.split(',').map(x => x.trim()).filter(Boolean); save(); toast('Foods-to-avoid list saved'); });
   $('#netcarbs').addEventListener('change', e => { S.rules.net = e.target.checked; save(); renderSettings(); });
   $('#importfile').addEventListener('change', importBackup);
+}
+/* Setup code: MC1-sex-age-lb-ft-in-activity-goal-flags  e.g. MC1-m-39-256-5-5.75-1.375-lose-ptn
+   flags: p = protein-forward, t = high triglycerides, n = count net carbs */
+function applySetupCode(raw) {
+  const parts = String(raw || '').trim().replace(/\s+/g, '').split('-');
+  const [tag, sex, age, lb, ft, inch, act, goal, flags = ''] = parts;
+  const ok = /^mc1$/i.test(tag) && /^[mf]$/i.test(sex) && +age > 0 && +lb > 0 && ft !== '' && +act > 1 && ['lose', 'keep', 'gain'].includes((goal || '').toLowerCase());
+  if (!ok) { toast('That setup code doesn’t look right — check it and try again'); return; }
+  Object.assign(S.calc, { sex: sex.toLowerCase(), age: +age, lb: +lb, ft: +ft, inch: +inch || 0, act: +act, goal: goal.toLowerCase(),
+    pf: flags.includes('p'), tg: flags.includes('t') });
+  S.rules.net = flags.includes('n');
+  calcGoals();
+  const T = S.targets;
+  toast(`All set: ${T.cal} cal · P${T.p} C${T.c} F${T.f}`);
 }
 function calcGoals() {
   const c = S.calc, kg = c.lb * 0.4536, cm = (c.ft * 12 + +c.inch) * 2.54;
@@ -1015,6 +1032,7 @@ document.addEventListener('click', e => {
       save(); toast(`${Object.keys(need).length} items on your shopping list`); costcoView = 'list'; go('costco'); break;
     }
     case 'calc': calcGoals(); break;
+    case 'setupcode': applySetupCode($('#setupcode').value); break;
     case 'autorules': { S.servingsPerDay = Math.max(1, Math.round(+$('#spd').value || 5)); autoRules(); save(); renderSettings(); toast('Per-serving limits updated'); break; }
     case 'export': exportBackup(); break;
     case 'reset': if (confirm('Erase all goals, logs, saved foods and lists from this phone?')) { localStorage.removeItem(KEY); S = load(); render(); } break;
