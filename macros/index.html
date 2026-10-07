@@ -728,7 +728,7 @@ const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '2.6 (scans join inventory)';
+const APP_VERSION = '2.7 (reasons & swaps)';
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -818,26 +818,83 @@ function toast(msg) {
 function carbsOf(f) { return S.rules.net ? Math.max(0, (f.c || 0) - (f.fb || 0)) : f.c; }
 
 /* ================= approved / not approved ================= */
-function verdict(f) {
-  const r = S.rules, fails = [];
+function verdict(f, scale = 1) {
+  const r = S.rules, fails = [], why = [], T = S.targets, n = Math.max(1, S.servingsPerDay);
   const carbLabel = r.net ? 'Net carbs' : 'Carbs';
-  const check = (rule, val, label, unit, isMin) => {
+  const check = (rule, raw, label, unit, isMin, short, long) => {
     if (!rule.on) return;
-    if (val == null || isNaN(val)) { fails.push(`${label} not listed — tap Edit to enter it`); return; }
-    if (isMin ? val < rule.v : val > rule.v) fails.push(`${label} ${fmt(val)}${unit} ${isMin ? 'is under' : 'is over'} your ${rule.v}${unit} ${isMin ? 'minimum' : 'limit'}`);
+    if (raw == null || isNaN(raw)) {
+      fails.push(`${label} not listed — tap Edit to enter it`);
+      why.push({ short: `${label} not listed`, long: `The nutrition data is missing ${label.toLowerCase()}. Tap Edit and copy it from the package label.`, missing: true });
+      return;
+    }
+    const val = raw * scale;
+    if (isMin ? val < rule.v : val > rule.v) {
+      fails.push(`${label} ${fmt(val)}${unit} ${isMin ? 'is under' : 'is over'} your ${rule.v}${unit} ${isMin ? 'minimum' : 'limit'}`);
+      why.push({ short: `${short} (${fmt(val)}${unit}, ${isMin ? 'need' : 'limit'} ${rule.v}${unit})`, long });
+    }
   };
   const w = avoidedWord(f);
-  if (w) fails.push(`Contains “${w}” — on your foods-to-avoid list`);
-  if (S.excluded[f.id]) fails.push('You marked this “Never use”');
-  check(r.cal, f.cal, 'Calories', '', false);
-  check(r.c, f.c == null ? null : carbsOf(f), carbLabel, ' g', false);
-  check(r.f, f.f, 'Fat', ' g', false);
+  if (w) { fails.push(`Contains “${w}” — on your foods-to-avoid list`); why.push({ short: `Contains “${w}”`, long: 'It matches a word on your foods-to-avoid list (Goals → Foods I avoid).', hard: true }); }
+  if (S.excluded[f.id]) { fails.push('You marked this “Never use”'); why.push({ short: 'Marked “Never use”', long: 'You blocked this food. Tap 🚫 below to allow it again.', hard: true }); }
+  check(r.cal, f.cal, 'Calories', '', false, 'Too many calories',
+    `One serving uses more than 1/${n} of your ${T.cal} daily calories, so it's too big to count as a single serving.`);
+  check(r.c, f.c == null ? null : carbsOf(f), carbLabel, ' g', false, `Too many ${carbLabel.toLowerCase()}`,
+    `That's more than one serving's share of your ${T.c} g daily carbs. Large servings of refined carbs push triglycerides up.`);
+  check(r.f, f.f, 'Fat', ' g', false, 'Too much fat', `More than one serving's share of your ${T.f} g daily fat.`);
   // Older saved foods may not have saturated fat; judge them on the other rules.
-  if (f.sf != null) check(r.sf, f.sf, 'Saturated fat', ' g', false);
+  if (f.sf != null) check(r.sf, f.sf, 'Saturated fat', ' g', false, 'Too much saturated fat',
+    'Saturated fat raises LDL cholesterol and triglycerides. Your limit is set low because of your cholesterol and triglyceride labs.');
   // Whole fruit's natural sugar comes with fiber; only count it if the person switches that on.
-  if (f.cat !== 'fruit' || r.fruitSugar) check(r.s, f.s, 'Sugar', ' g', false);
-  check(r.p, f.p, 'Protein', ' g', true);
-  return { ok: fails.length === 0, fails };
+  if (f.cat !== 'fruit' || r.fruitSugar) check(r.s, f.s, 'Sugar', ' g', false, 'Too much sugar',
+    'Sugar — especially added sugar and sugary drinks — raises triglycerides more than almost anything else you eat.');
+  check(r.p, f.p, 'Protein', ' g', true, 'Not enough protein', 'Below the protein minimum you set for one serving.');
+  return { ok: fails.length === 0, fails, why };
+}
+// Largest smaller portion that passes every rule, or 0 if none (or the problem isn't portion size).
+function portionThatFits(f) {
+  const v = verdict(f); if (v.ok || v.why.some(x => x.hard || x.missing)) return 0;
+  return [0.75, 0.5, 0.25].find(sc => verdict(f, sc).ok) || 0;
+}
+// Food families, so swaps stay close to what was scanned (steak for steak, drink for drink).
+const FAMILIES = [
+  /beef|steak|ribeye|sirloin|filet|tri-tip|brisket|flank|eye round|chuck|short rib|picanha|bison/,
+  /pork|\bham\b|bacon|carnitas/, /chicken|turkey/,
+  /salmon|tuna|fish|shrimp|tilapia|halibut|crab|sea bass|rockfish|steelhead/,
+  /\bbread\b|bagel|\brolls?\b|baguette|sourdough|\bpita\b|naan|tortilla|\bbuns?\b/,
+  /pasta|spaghetti|ravioli|tortelloni|noodle|lasagna|macaroni|ramen|udon|pho/,
+  /cheese|mozzarella|cheddar|brie|gouda|feta|burrata|parmigiano|babybel/,
+  /spread|nut butter|peanut butter|almond butter|nutella/,
+  /\bnuts?\b|almond|cashew|pistachio|peanut|pecan|walnut|macadamia|trail mix/,
+  /soda|juice|(?<!in )\bwater\b|\btea\b|coffee|gatorade|bodyarmor|cola|coke|sprite|pepsi|lemonade|energy drink|energy|kombucha|electrolyte|hydration|drink/,
+  /\bbars?\b/, /yogurt/, /cereal|granola|oatmeal|\boats\b|flakes|crunch|charms|cheerios/,
+  /sausage|hot dog|meatball/, /chips|crisps|popcorn|pretzel|cracker/, /pizza|burrito|taquito|tamale/,
+  /ice cream|cookie|brownie|danish|cinnamon roll|pop-tart|dessert/, /milk|creamer|half & half/,
+];
+const familiesOf = f => { const n = (f.name || '').toLowerCase(); return FAMILIES.map((re, i) => re.test(n) ? i : -1).filter(i => i >= 0); };
+// A couple of approved foods from the same family (or sharing a key word), best protein first.
+function approvedSwaps(f) {
+  const skip = /^(kirkland|signature|organic|the|and|with|original|premium|variety|pack|fresh|style|whole|boneless|choice|prime|frozen|raw|classic|thin|cut|sliced)$/;
+  const words = (f.name || '').toLowerCase().split(/[^a-z]+/).filter(x => x.length >= 4 && !skip.test(x));
+  const fam = familiesOf(f);
+  const score = g => {
+    const n = g.name.toLowerCase();
+    return familiesOf(g).filter(i => fam.includes(i)).length * 5 + words.filter(x => new RegExp('\\b' + x + '\\b').test(n)).length * 3;
+  };
+  // Same type of food first (a carb for a carb), closest match first; then the most filling of that type.
+  const ok = allFoods().filter(g => g.id !== f.id && g.cal != null && verdict(g).ok);
+  const sameType = ok.filter(g => g.cat === f.cat);
+  // Close matches: same type, or another type in the same food family (chicken sausage for pork sausage).
+  const rank = g => score(g) + (g.cat === f.cat ? 4 : 0);
+  const close = ok.filter(g => g.cat === f.cat ? score(g) > 0 : familiesOf(g).some(i => fam.includes(i)) && g.cat !== 'other')
+    .sort((a, b) => rank(b) - rank(a) || proteinRatio(b) - proteinRatio(a));
+  const filling = f.cat === 'other' ? [] : sameType.filter(g => !close.includes(g)).sort((a, b) => ((b.fb || 0) + proteinRatio(b) * 10) - ((a.fb || 0) + proteinRatio(a) * 10));
+  return [...close, ...filling].slice(0, 2);
+}
+const FRACTION = { 0.75: '¾', 0.5: '½', 0.25: '¼' };
+function whyLine(f) {
+  const v = verdict(f); if (v.ok) return '';
+  return `<div class="small" style="color:var(--bad);margin-top:2px">✕ ${esc(v.why.map(x => x.short).join(' · '))}</div>`;
 }
 function badge(f) { const v = verdict(f); return `<span class="badge ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ Approved' : '✕ Not approved'}</span>`; }
 
@@ -1069,7 +1126,14 @@ function openFood(id, opts = {}) {
       <div class="grow"><h2>${esc(f.name)}</h2><div class="small muted">${esc(f.brand || (f.src === 'costco' ? 'Costco catalog' : ''))}${f.barcode ? ' · ' + esc(f.barcode) : ''}</div></div>
       <button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">per serving</span></div>
-    ${v.fails.length ? `<ul class="reasons">${v.fails.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : `<div class="small muted" style="margin-top:6px">Within all your per-serving limits.</div>`}
+    ${v.ok ? `<div class="small muted" style="margin-top:6px">Within all your per-serving limits.</div>` : (() => {
+      const part = portionThatFits(f), swaps = approvedSwaps(f);
+      return `<div style="margin-top:8px"><b class="small">Why it's not approved</b>
+        <ul class="reasons">${v.why.map(x => `<li><b>${esc(x.short)}</b><br><span class="muted">${esc(x.long)}</span></li>`).join('')}</ul>
+        ${part ? `<div class="small" style="margin-top:6px;color:var(--ok)">✓ A ${FRACTION[part]} serving fits your rules — set Servings to ${part} below.</div>`
+          : (v.why.some(x => x.hard || x.missing) ? '' : `<div class="small muted" style="margin-top:6px">Even a ¼ serving is over the limit — best to skip it.</div>`)}
+        ${swaps.length ? `<div class="small" style="margin-top:6px">Approved swaps: ${swaps.map(g => `<button class="chip" data-act="open" data-id="${esc(g.id)}">${esc(g.name)}</button>`).join(' ')}</div>` : ''}</div>`;
+    })()}
     ${f.ppl ? `<div class="small muted" style="margin-top:8px">💲 ${priceText(f)} <span class="small">(Lodi Costco estimate)</span></div>` : ''}
     ${f.src !== 'costco' ? `<div class="small muted" style="margin-top:8px">${f.src === 'scan' ? '📷 In your Costco inventory · ' : ''}Type: <b>${esc((CATS[f.cat] || CATS.other).label)}</b>${f.catAuto ? ' (guessed — tap Edit to change)' : ''}</div>` : ''}
     <div class="small" style="margin-top:12px"><b>Serving:</b> ${esc(f.serving)}${f.noServing ? ' <span class="muted">(no serving size listed — values are per 100 g; tap Edit to fix)</span>' : ''}</div>
@@ -1132,7 +1196,7 @@ function findSheet(q = '') {
 }
 function foodRow(f) {
   return `<div class="item tap" data-act="open" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div>
-    <div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}</div></div>${badge(f)}</div>`;
+    <div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}</div>${whyLine(f)}</div>${badge(f)}</div>`;
 }
 let onlineResults = {};
 async function searchOnline(q) {
@@ -1143,7 +1207,7 @@ async function searchOnline(q) {
     onlineResults = {};
     const foods = prods.map(p => { const f = fromOFF(p.code, p); onlineResults[f.id] = f; return f; });
     $('#findres').innerHTML = foods.length ? foods.map(f => `<div class="item tap" data-act="pickonline" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div>
-      <div class="meta">${esc(f.brand)} · ${esc(f.serving)} · ${fmt(f.cal)} cal</div></div>${badge(f)}</div>`).join('')
+      <div class="meta">${esc(f.brand)} · ${esc(f.serving)} · ${fmt(f.cal)} cal</div>${whyLine(f)}</div>${badge(f)}</div>`).join('')
       : `<div class="empty">No matches online.</div>`;
   } catch (e) { $('#findres').innerHTML = `<div class="empty">Couldn't reach the food database. Check your connection.</div>`; }
 }
@@ -1159,7 +1223,7 @@ function renderCostco() {
       const L = S.list[f.id];
       return `<div class="item"><input type="checkbox" data-act="got" data-id="${esc(f.id)}" ${L.got ? 'checked' : ''} aria-label="Got it">
         <div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name" style="${L.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(f.name)}</div>
-        <div class="meta">${L.need ? `≈ ${r1(L.need)} servings for your plan · ` : ''}${esc(f.serving)}</div></div>${badge(f)}</div>`;
+        <div class="meta">${L.need ? `≈ ${r1(L.need)} servings for your plan · ` : ''}${esc(f.serving)}</div>${whyLine(f)}</div>${badge(f)}</div>`;
     }).join('') : `<div class="empty">Your list is empty. Add items from “All items”, or make a meal plan and add it here.</div>`}</div>
     ${items.length ? `<div class="row"><button class="btn ghost grow sm" data-act="cleargot">Remove checked</button><button class="btn danger grow sm" data-act="clearlist">Clear list</button></div>` : ''}`;
   } else {
@@ -1176,7 +1240,7 @@ function renderCostco() {
         <select id="ccat" style="width:auto;border-radius:999px;padding:5px 10px;font-size:14px"><option value="">All types</option>${Object.entries(CATS).map(([k, c]) => `<option value="${k}" ${costcoCat === k ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
       <div class="card">${items.length ? items.map(f => `<div class="item"><input type="checkbox" data-act="listtoggle" data-id="${esc(f.id)}" ${S.list[f.id] && S.list[f.id].on ? 'checked' : ''} aria-label="On my list">
         <div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
-        <div class="meta">${f.src === 'scan' ? '📷 Scanned · ' : ''}${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}${f.ppl ? ' · ' + money(f.ppl) + '/lb' : ''}</div></div>${badge(f)}</div>`).join('') : `<div class="empty">No items match.</div>`}</div>
+        <div class="meta">${f.src === 'scan' ? '📷 Scanned · ' : ''}${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}${f.ppl ? ' · ' + money(f.ppl) + '/lb' : ''}</div>${whyLine(f)}</div>${badge(f)}</div>`).join('') : `<div class="empty">No items match.</div>`}</div>
       <button class="btn alt block" data-act="newfood">+ Add your own Costco item</button>
       <div class="small muted" style="margin-top:8px">Tick the box to put an item on your shopping list. Meal plans can use only ticked items (switch that on in Plan).</div>`;
   }
