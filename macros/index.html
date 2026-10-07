@@ -728,7 +728,8 @@ const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '3.0 (real meal plans)';
+const APP_VERSION = '3.1 (real meal plans)';
+const PLANNER_VERSION = 3; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -1454,13 +1455,18 @@ function generatePlan() {
   // Fatty fish twice a week helps triglycerides: days 2 and 5 of a week, or a coin flip for a single day.
   const fishDays = n >= 7 ? [1, 4] : (Math.random() < 0.5 ? [0] : []);
   for (let i = 0; i < n; i++) days.push(makeDay(pool, used, { prev, fishDinner: fishDays.includes(i) }));
-  S.plan = { made: Date.now(), days, pf: S.planOpts.pf, ver: APP_VERSION }; planDay = 0; save();
+  S.plan = { made: Date.now(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION }; planDay = 0; save();
 }
 function planTotals(day) {
   const list = day.meals.flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
   return totals(list);
 }
 function renderPlan() {
+  // A plan saved by an older planner gets rebuilt with the current one, keeping the same number of days.
+  if (S.plan && S.plan.planner !== PLANNER_VERSION && planPool().length >= 3) {
+    S.planOpts.days = S.plan.days.length > 1 ? 7 : 1;
+    generatePlan(); toast('Made you a new plan with the improved planner');
+  }
   const pool = planPool(), T = S.targets, o = S.planOpts;
   const listCount = Object.values(S.list).filter(l => l.on).length;
   let h = `<div class="card"><div class="small muted" style="margin-bottom:8px">Builds meals only from <b>approved</b> Costco items, sized to hit ${T.cal} cal · P${T.p} C${T.c} F${T.f}.</div>
@@ -1476,8 +1482,7 @@ function renderPlan() {
     const days = S.plan.days; if (planDay >= days.length) planDay = 0;
     if (days.length > 1) h += `<div class="chips" style="margin-bottom:10px">${days.map((d, i) => `<button class="chip ${i === planDay ? 'on' : ''}" data-act="pday" data-v="${i}">Day ${i + 1}</button>`).join('')}</div>`;
     const day = days[planDay], t = planTotals(day);
-    if (!S.plan.ver) h += `<div class="card" style="background:var(--soft)"><b>This plan was made with an older version.</b><div class="small muted">Tap <b>Make a new plan</b> above to get a protein-forward plan with the carb limits.</div></div>`;
-    else if (S.plan.pf) h += `<div class="small" style="color:var(--p);margin:0 0 8px"><b>💪 Protein-forward plan</b> — every meal is built around a protein.</div>`;
+    if (S.plan.pf) h += `<div class="small" style="color:var(--p);margin:0 0 8px"><b>💪 Protein-forward plan</b> — every meal is built around a protein.</div>`;
     h += `<div class="card"><h2>Day ${planDay + 1} totals</h2>
       ${macroBar('Calories', t.cal, T.cal, 'var(--cal)', '')}${macroBar('Protein', t.p, T.p, 'var(--p)', ' g')}
       ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}
