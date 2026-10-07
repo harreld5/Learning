@@ -1660,7 +1660,7 @@ function recipeFor(m, mult = 1) {
   const USE = { vinegar: 'for the dressing — drizzle over the salad', oil: m.key === 'salad' ? 'for the dressing' : 'to roast the vegetables or drizzle on top',
     salsa: 'on top', stirSauce: 'stir-fry sauce', marinara: 'sauce', nuts: m.key === 'salad' || m.key === 'yogurt' ? 'sprinkled on top' : '', seeds: 'sprinkled on top', avocado: 'on top' };
   const ingredients = items.map(i => `${i.amt} — ${shortName(i.f)}${USE[i.x.role] ? ` (${USE[i.x.role]})` : ''}`);
-  const steps = items.slice().sort((a, b) => (COOK_ORDER[a.x.role] ?? 5) - (COOK_ORDER[b.x.role] ?? 5)).map(i => cookStep(i.f, i.amt)).filter(Boolean);
+  const steps = items.slice().sort((a, b) => (COOK_ORDER[a.x.role] ?? 5) - (COOK_ORDER[b.x.role] ?? 5)).map(i => /^(rawVeg|greens|tacoVeg|hashVeg)$/.test(i.x.role) ? null : cookStep(i.f, i.amt)).filter(Boolean); // raw veggies and hash veggies are covered in the assembly step
   if (ASSEMBLY[m.key]) steps.push(ASSEMBLY[m.key]);
   const slow = items.some(i => /brown rice|eye round/.test(nm(i.f))), oven = steps.some(s => /425°F|400°F|325°F/.test(s));
   const time = m.meal === 'Snacks' ? '2 min' : slow ? '45–60 min' : oven ? '30–35 min' : steps.length > 1 ? '15–20 min' : '5–10 min';
