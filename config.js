@@ -1,3 +1,9 @@
-/* Firebase settings for family sharing (these values are safe to publish; access is limited by the Firestore rules).
-   Leave as null to run without sharing: lessons work, but progress stays on each phone. */
-window.SPROUT_FIREBASE = null;
+/* Firebase settings for family sharing. These values are meant to be public;
+   access is limited by the database rules (database.rules.json). */
+window.SPROUT_FIREBASE = {
+  apiKey: "AIzaSyD9n3EJDN199mCm4C4IWPeN29lTuNIOiRk",
+  authDomain: "little-sprouts-e8094.firebaseapp.com",
+  databaseURL: "https://little-sprouts-e8094-default-rtdb.firebaseio.com",
+  projectId: "little-sprouts-e8094",
+  storageBucket: "little-sprouts-e8094.firebasestorage.app"
+};
