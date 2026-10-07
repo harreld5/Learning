@@ -732,7 +732,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '3.7 (meat in oz, rest in g)';
+const APP_VERSION = '3.8 (swap foods, plan follows the calendar)';
 const PLANNER_VERSION = 5; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -921,7 +921,7 @@ function logFood(f, sv, meal, k = viewDay) {
 function defaultMeal() { const h = new Date().getHours(); return h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 20 ? 'Dinner' : 'Snacks'; }
 
 /* ================= tabs ================= */
-let tab = 'today', viewDay = todayKey(), costcoView = 'catalog', costcoFilter = 'all', costcoCat = '', costcoQ = '', planDay = 0;
+let tab = 'today', viewDay = todayKey(), costcoView = 'catalog', costcoFilter = 'all', costcoCat = '', costcoQ = '', planDay = 0, planDayPicked = false;
 const TITLES = { today: 'Today', scan: 'Scan food', costco: 'Costco', plan: 'Meal plan', list: 'Shopping list', settings: 'Goals & rules' };
 function go(t) {
   if (tab === 'scan' && t !== 'scan') stopScan();
@@ -1568,7 +1568,7 @@ function generatePlan() {
   // A fish night about once a week (chicken and beef are the staples).
   const fishDays = n >= 7 ? [3] : (Math.random() < 0.15 ? [0] : []);
   for (let i = 0; i < n; i++) days.push(makeDay(pool, used, { prev, fishDinner: fishDays.includes(i) }));
-  S.plan = { made: Date.now(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION }; planDay = 0; save();
+  S.plan = { made: Date.now(), start: todayKey(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION }; planDay = 0; planDayPicked = false; save();
 }
 
 /* ---------- Meal prep: the same lunch and dinner for 4-5 days ---------- */
@@ -1588,7 +1588,7 @@ function generatePrepPlan() {
   optimize(meals, S.planOpts.pf);
   for (const m of meals) m.items = m.items.filter(x => x.sv > 0);
   const days = Array.from({ length: n }, () => ({ meals: JSON.parse(JSON.stringify(meals)) }));
-  S.plan = { made: Date.now(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION, prep: n }; planDay = 0; save();
+  S.plan = { made: Date.now(), start: todayKey(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION, prep: n }; planDay = 0; planDayPicked = false; save();
 }
 
 
@@ -1786,15 +1786,58 @@ function prepGuide() {
     <h3 style="margin:14px 0 4px;font-size:15px">Steps</h3><ol class="reasons" style="font-size:15px">${steps.map(x => `<li style="margin-bottom:8px">${esc(x)}</li>`).join('')}</ol>
     <button class="btn block" style="margin-top:12px" data-act="plan2list">Add all of it to my shopping list</button>`);
 }
+
+/* ---------- Swapping a food in a planned meal ---------- */
+const planTodayIdx = () => S.plan && S.plan.start ? Math.round((new Date(todayKey() + 'T12:00:00') - new Date(S.plan.start + 'T12:00:00')) / 864e5) : -1;
+function swapOptions(m, x) {
+  const cur = getFood(x.id), others = m.items.filter(y => y !== x).map(y => y.id);
+  const fits = f => x.role && ROLES[x.role] ? ROLES[x.role](f) : f.cat === cur.cat;
+  const pool = planPool().filter(f => f.id !== cur.id && !others.includes(f.id) && fits(f));
+  const fam = familiesOf(cur);
+  return pool.sort((a, b) => (familiesOf(b).some(i => fam.includes(i)) - familiesOf(a).some(i => fam.includes(i))) || (proteinRatio(b) - proteinRatio(a))).slice(0, 25);
+}
+function swapSheet(mi, ii) {
+  const m = S.plan.days[planDay].meals[mi], x = m.items[ii], cur = getFood(x.id), opts = swapOptions(m, x);
+  sheet(`<div class="sheet-head"><div class="grow"><h2>Swap ${esc(shortName(cur))}</h2><div class="small muted">${m.meal}${m.title ? ' · ' + esc(m.title) : ''}. Pick a replacement — portions adjust to keep your day on target${S.plan.prep ? ', on every prep day' : ''}.</div></div><button class="icon-btn" data-act="close">✕</button></div>
+    ${opts.length ? opts.map(f => `<div class="item tap" data-act="doswap" data-m="${mi}" data-i="${ii}" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div>
+      <div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}</div></div><span class="badge ok">Swap in</span></div>`).join('')
+      : `<div class="empty">No other approved foods fit here. Add more to your Costco inventory or loosen your rules in Goals.</div>`}`);
+}
+function doSwap(mi, ii, id) {
+  const f = getFood(id); if (!f) return;
+  const days = S.plan.prep ? S.plan.days : [S.plan.days[planDay]];
+  for (const day of days) {
+    const m = day.meals[mi], x = m.items[ii]; if (!m || !x) continue;
+    const old = getFood(x.id), kcal = (old.cal || 0) * x.sv;
+    const whole = isUnit(f), step = whole ? 1 : 0.5;
+    const lo = whole ? Math.max(1, Math.round(x.min || 1)) : (x.min ?? 0.5), hi = whole ? Math.max(lo, Math.round(x.max || 2)) : (x.max || 2);
+    let sv = f.cal ? kcal / f.cal : 1; sv = Math.min(hi, Math.max(lo, Math.round(sv / step) * step));
+    Object.assign(x, { id, sv, step, min: lo, max: hi });
+    if (/^(poultry|red|fish|oilyFish|ground|deli|canned|tofu|eggs|rawEggs|dairyP|pSnack|cheeseSnack|bonein)$/.test(x.role || '') || old.cat === 'protein') {
+      const t = (MEAL_TEMPLATES[m.meal] || []).find(t => t.key === m.key);
+      if (t) { m.label = proteinLabel(f); m.title = t.name(m.label, f); }
+    }
+    optimize(day.meals, S.plan.pf);
+    for (const mm of day.meals) mm.items = mm.items.filter(y => y.sv > 0);
+  }
+  save(); $('#sheet').hidden = true; sheetFood = null; toast(`Swapped in ${shortName(f)}`); renderPlan();
+}
 function planTotals(day) {
   const list = day.meals.flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
   return totals(list);
 }
 function renderPlan() {
   // A plan saved by an older planner gets rebuilt with the current one, keeping the same number of days.
+  const keepShape = () => { if (S.plan.prep) { S.planOpts.mode = 'prep'; S.planOpts.prepDays = S.plan.prep; } else { S.planOpts.mode = 'daily'; S.planOpts.days = S.plan.days.length > 1 ? 7 : 1; } };
   if (S.plan && S.plan.planner !== PLANNER_VERSION && planPool().length >= 3) {
-    if (S.plan.prep) { S.planOpts.mode = 'prep'; S.planOpts.prepDays = S.plan.prep; } else S.planOpts.days = S.plan.days.length > 1 ? 7 : 1;
-    generatePlan(); toast('Made you a new plan with the improved planner');
+    keepShape(); generatePlan(); toast('Made you a new plan with the improved planner');
+  }
+  // The plan follows the calendar: open on today's day, and start the next plan once this one has run out.
+  if (S.plan) {
+    if (!S.plan.start) { S.plan.start = todayKey(); save(); }
+    const idx = Math.round((new Date(todayKey() + 'T12:00:00') - new Date(S.plan.start + 'T12:00:00')) / 864e5);
+    if (idx >= S.plan.days.length && planPool().length >= 3) { keepShape(); generatePlan(); toast(S.plan.prep ? 'Time to prep again — here is your next meal prep plan' : 'Your plan ran out — here is a fresh one'); }
+    else if (!planDayPicked) planDay = Math.max(0, Math.min(S.plan.days.length - 1, idx));
   }
   const pool = planPool(), T = S.targets, o = S.planOpts;
   const listCount = Object.values(S.list).filter(l => l.on).length;
@@ -1813,7 +1856,7 @@ function renderPlan() {
     const days = S.plan.days; if (planDay >= days.length) planDay = 0;
     if (S.plan.prep) h += `<div class="card" style="background:var(--soft)"><div class="row"><div class="grow"><b>🍱 Meal prep for ${S.plan.prep} days</b><div class="small muted">Same meals every day — cook once with the prep-day guide.</div></div>
       <button class="btn sm" data-act="prepguide">Prep guide</button></div></div>`;
-    else if (days.length > 1) h += `<div class="chips" style="margin-bottom:10px">${days.map((d, i) => `<button class="chip ${i === planDay ? 'on' : ''}" data-act="pday" data-v="${i}">Day ${i + 1}</button>`).join('')}</div>`;
+    else if (days.length > 1) h += `<div class="chips" style="margin-bottom:10px">${days.map((d, i) => `<button class="chip ${i === planDay ? 'on' : ''}" data-act="pday" data-v="${i}">${i === planTodayIdx() ? 'Today' : (() => { const dt = new Date(S.plan.start + 'T12:00:00'); dt.setDate(dt.getDate() + i); return dt.toLocaleDateString(undefined, { weekday: 'short' }); })()}</button>`).join('')}</div>`;
     const day = days[planDay], t = planTotals(day);
     if (S.plan.pf) h += `<div class="small" style="color:var(--p);margin:0 0 8px"><b>💪 Protein-forward plan</b> — every meal is built around a protein.</div>`;
     h += `<div class="card"><h2>${S.plan.prep ? 'Each day' : `Day ${planDay + 1}`} totals</h2>
@@ -1823,8 +1866,8 @@ function renderPlan() {
     day.meals.forEach((m, mi) => {
       const mt = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
       h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal}${m.title ? ` · ${esc(m.title)}` : ''} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
-        ${m.items.map(x => { const f = getFood(x.id); return `<div class="item tap" data-act="open" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div>
-          <div class="meta">${esc(amountText(f, x.sv))} · ${Math.round(f.cal * x.sv)} cal</div></div></div>`; }).join('')}
+        ${m.items.map((x, ii) => { const f = getFood(x.id); return `<div class="item"><div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
+          <div class="meta">${esc(amountText(f, x.sv))} · ${Math.round(f.cal * x.sv)} cal</div></div><button class="btn alt sm" data-act="swap" data-m="${mi}" data-i="${ii}" aria-label="Swap ${esc(f.name)}">🔁 Swap</button></div>`; }).join('')}
         <div class="row" style="margin-top:6px"><button class="btn sm" data-act="recipe" data-m="${mi}">📖 Recipe</button><button class="btn alt sm" data-act="logmeal" data-m="${mi}">Log this meal today</button>${S.plan.prep && m.meal !== 'Snacks' ? `<span class="small muted grow" style="text-align:right">× ${S.plan.prep} ${m.meal === 'Breakfast' ? 'days' : 'containers'}</span>` : ''}</div></div>`;
     });
     h += `<button class="btn block" data-act="plan2list">Add ${days.length > 1 ? 'all ' + days.length + ' days' : 'this plan'} to my shopping list</button>`;
@@ -2008,7 +2051,9 @@ document.addEventListener('click', e => {
     case 'prepguide': prepGuide(); break;
     case 'psnacks': S.planOpts.snacks = +el.dataset.v; save(); renderPlan(); break;
     case 'genplan': generatePlan(); renderPlan(); break;
-    case 'pday': planDay = +el.dataset.v; renderPlan(); break;
+    case 'pday': planDay = +el.dataset.v; planDayPicked = true; renderPlan(); break;
+    case 'swap': swapSheet(+el.dataset.m, +el.dataset.i); break;
+    case 'doswap': doSwap(+el.dataset.m, +el.dataset.i, el.dataset.id); break;
     case 'logmeal': {
       const m = S.plan.days[planDay].meals[+el.dataset.m];
       for (const x of m.items) logFood(getFood(x.id), x.sv, m.meal, todayKey());
