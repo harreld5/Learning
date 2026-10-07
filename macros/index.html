@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '4.2 (meal pictures)';
+const APP_VERSION = '4.3 (protein: how much you need)';
 const PLANNER_VERSION = 5; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -918,6 +918,14 @@ function portionThatFits(f) {
   const v = verdict(f); if (v.ok || v.why.some(x => x.hard || x.missing)) return 0;
   return [0.75, 0.5, 0.25].find(sc => verdict(f, sc).ok) || 0;
 }
+// When protein is short: how much you'd need to eat to reach your protein minimum (in ¼ servings), and whether that amount passes everything else.
+function proteinPortion(f) {
+  const r = S.rules.p;
+  if (!r.on || !['protein', 'bprotein', 'snack'].includes(f.cat) || !(f.p > 0) || f.p >= r.v) return null;
+  const sc = Math.ceil(r.v / f.p * 4 - 1e-9) / 4, v = verdict(f, sc);
+  return { sc, ok: v.ok, over: v.why.filter(x => !/protein/i.test(x.short)).map(x => x.short.replace(/ \(.*/, '').toLowerCase()) };
+}
+const svText = sc => { const w = Math.floor(sc), fr = { 0.25: '¼', 0.5: '½', 0.75: '¾' }[sc - w] || ''; return (w ? w : '') + fr || '0'; };
 // Food families, so swaps stay close to what was scanned (steak for steak, drink for drink).
 const FAMILIES = [
   /beef|steak|ribeye|sirloin|filet|tri-tip|brisket|flank|eye round|chuck|short rib|picanha|bison/,
@@ -1197,11 +1205,14 @@ function openFood(id, opts = {}) {
       <button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">per serving</span></div>
     ${v.ok ? `<div class="small muted" style="margin-top:6px">Within all your per-serving limits.</div>` : (() => {
-      const part = portionThatFits(f), swaps = approvedSwaps(f);
+      const part = portionThatFits(f), swaps = approvedSwaps(f), pp = proteinPortion(f);
+      const g = servingGrams(f), amt = pp ? `${svText(pp.sc)} serving${pp.sc > 1 ? 's' : ''}${g && S.units !== 'servings' ? ` (${fmtWeight(f, g * pp.sc)})` : ''}` : '';
       return `<div style="margin-top:8px"><b class="small">Why it's not approved</b>
         <ul class="reasons">${v.why.map(x => `<li><b>${esc(x.short)}</b><br><span class="muted">${esc(x.long)}</span></li>`).join('')}</ul>
+        ${pp ? (pp.ok ? `<div class="small" style="margin-top:6px;color:var(--ok)">✓ Eat <b>${amt}</b> to get ${fmt(f.p * pp.sc)} g protein — that amount passes all your rules. <button class="chip" data-act="setsv" data-v="${pp.sc}">Use ${svText(pp.sc)}</button></div>`
+          : `<div class="small" style="margin-top:6px;color:var(--warn)">${amt} would give you ${fmt(f.p * pp.sc)} g protein, but that's ${pp.over.length ? pp.over.slice(0, -1).join(', ') + (pp.over.length > 1 ? ' and ' : '') + pp.over.slice(-1) : 'still not approved'}${pp.sc > 3 ? ' — not a good protein source' : ''}. Pair it with a protein food instead.</div>`) : ''}
         ${part ? `<div class="small" style="margin-top:6px;color:var(--ok)">✓ A ${FRACTION[part]} serving fits your rules — set Servings to ${part} below.</div>`
-          : (v.why.some(x => x.hard || x.missing) ? '' : `<div class="small muted" style="margin-top:6px">Even a ¼ serving is over the limit — best to skip it.</div>`)}
+          : (pp || v.why.some(x => x.hard || x.missing) ? '' : `<div class="small muted" style="margin-top:6px">Even a ¼ serving is over the limit — best to skip it.</div>`)}
         ${swaps.length ? `<div class="small" style="margin-top:6px">Approved swaps: ${swaps.map(g => `<button class="chip" data-act="open" data-id="${esc(g.id)}">${esc(g.name)}</button>`).join(' ')}</div>` : ''}</div>`;
     })()}
     ${f.ppl || priceOf(f.id) != null ? `<div class="small muted" style="margin-top:8px">💲 ${priceOf(f.id) != null ? `${money(priceOf(f.id))}${PRICES[f.id] ? ' · ' + esc(PRICES[f.id][1]) : ''}` : ''}${f.ppl ? `${priceOf(f.id) != null ? ' · ' : ''}${priceText(f)}` : ''} <span class="small">(Lodi Costco estimate)</span></div>` : ''}
@@ -2281,6 +2292,7 @@ document.addEventListener('click', e => {
     case 'pmode': S.planOpts.mode = el.dataset.v; save(); renderPlan(); break;
     case 'pprepdays': S.planOpts.prepDays = +el.dataset.v; save(); renderPlan(); break;
     case 'recipe': showRecipe(+el.dataset.m); break;
+    case 'setsv': { const i = $('#sv'); if (i) { i.value = el.dataset.v; i.dispatchEvent(new Event('input', { bubbles: true })); i.scrollIntoView({ block: 'center', behavior: 'smooth' }); toast(`Servings set to ${svText(+el.dataset.v)}`); } break; }
     case 'rmphoto': { const m = S.plan.days[planDay].meals[+el.dataset.m]; try { localStorage.removeItem(photoKey(m)); } catch (e) {} showRecipe(+el.dataset.m); break; }
     case 'prepguide': prepGuide(); break;
     case 'psnacks': S.planOpts.snacks = +el.dataset.v; save(); renderPlan(); break;
