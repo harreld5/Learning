@@ -728,7 +728,7 @@ const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '2.8 (protein minimum skips sides)';
+const APP_VERSION = '3.0 (real meal plans)';
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -1260,7 +1260,7 @@ function weightedPick(arr, used) {
   let best = 0; for (let i = 1; i < w.length; i++) if (w[i] > w[best]) best = i;
   return arr[best];
 }
-function makeDay(pool, used) {
+function makeDayBasic(pool, used) {
   const by = (cats, meal) => pool.filter(f => cats.includes(f.cat) && mealsFor(f).includes(meal));
   const pf = S.planOpts.pf;
   // Protein-forward: breakfast can stack a second protein, and snacks are protein snacks.
@@ -1293,8 +1293,8 @@ function makeDay(pool, used) {
 }
 // Share of daily protein each meal should carry in protein-forward plans.
 function proteinShares(meals) {
-  const hasSnack = meals.some(m => m.meal === 'Snacks');
-  return hasSnack ? { Breakfast: 0.25, Lunch: 0.3, Dinner: 0.3, Snacks: 0.15 } : { Breakfast: 0.3, Lunch: 0.35, Dinner: 0.35 };
+  const snacks = meals.filter(m => m.meal === 'Snacks').length;
+  return snacks ? { Breakfast: 0.25, Lunch: 0.3, Dinner: 0.3, Snacks: 0.15 / snacks } : { Breakfast: 0.3, Lunch: 0.35, Dinner: 0.35 };
 }
 function optimize(meals, pf) {
   const T = S.targets, W = { cal: 3, p: 3, c: 1, f: 1 };
@@ -1309,6 +1309,11 @@ function optimize(meals, pf) {
       const w = k === 'p' ? (pf ? (d < 0 ? 8 : 1) : W.p) : k === 'c' ? (d > 0 ? 12 : 1) : k === 'f' ? (d > 0 ? 5 : 1) : W[k];
       e += w * d * d;
     }
+    // Aim for about 14 g fiber per 1,000 calories and at least 4 servings of vegetables a day.
+    const fiberShort = T.cal * 0.014 - sum(items, 'fb');
+    if (fiberShort > 0) e += 2 * (fiberShort / (T.cal * 0.014)) ** 2;
+    const vegShort = 4 - items.reduce((a, x) => a + (getFood(x.id).cat === 'veg' ? x.sv : 0), 0);
+    if (vegShort > 0) e += 1.5 * (vegShort / 4) ** 2;
     const sfOver = sum(items, 'sf') - sfTarget();
     if (sfOver > 0) e += 10 * (sfOver / sfTarget()) ** 2;
     if (pf) for (const m of meals) {
@@ -1328,11 +1333,127 @@ function optimize(meals, pf) {
     if (!best) break; best[0].sv = r1(best[0].sv + best[1]); e = be;
   }
 }
+
+/* ---------- Meal-based planner: real meals with sensible portions ---------- */
+const nm = f => (f.name || '').toLowerCase();
+const ROLES = {
+  eggs: f => /\beggs?\b|egg whites/.test(nm(f)) && !/bites|burrito|scramble/.test(nm(f)),
+  dairyP: f => f.cat === 'bprotein' && /yogurt|cottage/.test(nm(f)),
+  bfMeat: f => /breakfast sausage/.test(nm(f)),
+  toast: f => f.cat === 'carb' && /\bbread\b|sourdough/.test(nm(f)) && !/cinnamon|cherry|white|bimbo|flatbread|pita|naan|roll/.test(nm(f)),
+  tortilla: f => f.cat === 'carb' && /tortilla/.test(nm(f)) && !/corn/.test(nm(f)),
+  cornTort: f => /corn tortilla/.test(nm(f)),
+  oats: f => f.cat === 'carb' && /\boats?\b|oatmeal/.test(nm(f)) && !/instant|honey bunches|flavored/.test(nm(f)),
+  cakes: f => /power cakes/.test(nm(f)),
+  grain: f => f.cat === 'carb' && /rice|quinoa/.test(nm(f)) && !/bowl/.test(nm(f)),
+  starch: f => f.cat === 'carb' && /potato|squash|corn on the cob/.test(nm(f)) && !/hashbrown|fries|scalloped|flatbread/.test(nm(f)),
+  greens: f => f.cat === 'veg' && /romaine|spinach|spring mix|power greens/.test(nm(f)),
+  rawVeg: f => f.cat === 'veg' && /tomato|cucumber|bell pepper|mini sweet pepper|carrot|celery/.test(nm(f)) && !/canned/.test(nm(f)),
+  cookVeg: f => f.cat === 'veg' && /broccoli|green beans|asparagus|brussels|zucchini|vegetable blend|mushroom|edamame|bell pepper/.test(nm(f)),
+  fruit: f => f.cat === 'fruit',
+  berries: f => f.cat === 'fruit' && /berr/.test(nm(f)),
+  avocado: f => f.cat === 'fat' && /avocado|guacamole/.test(nm(f)),
+  oil: f => f.cat === 'fat' && /olive oil/.test(nm(f)),
+  nuts: f => f.cat === 'fat' && /almond|walnut|pistachio|cashew|pecan|mixed nuts|peanuts/.test(nm(f)) && !/butter|milk/.test(nm(f)),
+  seeds: f => /chia|flax/.test(nm(f)),
+  nutButter: f => /peanut butter|almond butter/.test(nm(f)),
+  salsa: f => f.cat === 'other' && /salsa|picante/.test(nm(f)),
+  stirSauce: f => f.cat === 'other' && /teriyaki|bachan|yoshida/.test(nm(f)),
+  marinara: f => f.cat === 'other' && /marinara|pasta sauce/.test(nm(f)),
+  vinegar: f => /balsamic/.test(nm(f)),
+  poultry: f => f.cat === 'protein' && /chicken|turkey/.test(nm(f)) && !/ground|turkey breast|sausage|burger|meatball|canned|breaded|skewer|kevin|sabatino|wings|whole young|of the sea|tuna|albacore/.test(nm(f)),
+  fish: f => f.cat === 'protein' && /salmon|steelhead|sardine|tilapia|rockfish|halibut|sea bass|ahi tuna|shrimp|sockeye/.test(nm(f)) && !/canned/.test(nm(f)),
+  oilyFish: f => f.cat === 'protein' && /salmon|steelhead|sardine|sockeye/.test(nm(f)),
+  ground: f => f.cat === 'protein' && /ground (turkey|beef)|bison/.test(nm(f)),
+  red: f => f.cat === 'protein' && /sirloin|eye round|flank|pork tenderloin|pork loin|top loin chops/.test(nm(f)),
+  deli: f => f.cat === 'protein' && /turkey breast|\bham\b/.test(nm(f)) && !/chicken/.test(nm(f)),
+  canned: f => f.cat === 'protein' && /canned|chunk light|albacore/.test(nm(f)),
+  tofu: f => /tofu/.test(nm(f)),
+  pSnack: f => (f.cat === 'snack' || f.cat === 'bprotein') && isHighProtein(f) && !/bites|burrito|liquid egg|egg whites|large eggs|sausage/.test(nm(f)),
+  cheeseSnack: f => /babybel|string cheese|snacking cheese/.test(nm(f)),
+};
+// [roles, min servings, max servings, flags]  P = the meal's main protein, opt = may be left out
+const MEAL_TEMPLATES = {
+  Breakfast: [
+    { name: () => 'Eggs & toast', slots: [['eggs', 1, 2, 'P'], ['toast', 1, 2], ['fruit', 0.5, 1.5]] },
+    { name: () => 'Greek yogurt bowl', slots: [['dairyP', 1, 2, 'P'], ['berries', 0.5, 1.5], ['nuts|seeds', 0.5, 1, 'opt']] },
+    { name: () => 'Protein oats', slots: [['oats', 0.5, 1.5], ['dairyP|eggs', 1, 2, 'P'], ['berries', 0.5, 1], ['nutButter|seeds', 0.5, 0.5, 'opt']] },
+    { name: () => 'Power cakes & eggs', slots: [['cakes', 0.5, 1.5], ['eggs', 1, 2, 'P'], ['berries', 0.5, 1]] },
+    { name: () => 'Breakfast tacos', slots: [['tortilla', 1, 2], ['eggs', 1, 2, 'P'], ['bfMeat', 1, 1, 'opt'], ['salsa', 1, 1]] },
+  ],
+  Lunch: [
+    { name: p => `${p} salad`, slots: [['poultry|fish|canned', 1, 2, 'P'], ['greens', 1, 2], ['rawVeg', 1, 2], ['avocado|oil|nuts', 0.5, 1], ['grain', 0.5, 1, 'opt'], ['vinegar', 1, 1, 'opt']] },
+    { name: p => `${p} wrap`, slots: [['deli|poultry', 1, 3, 'P'], ['tortilla', 1, 2], ['greens', 0.5, 1], ['rawVeg', 1, 1.5], ['avocado', 0.5, 1, 'opt']] },
+    { name: p => `${p} rice bowl`, slots: [['poultry|fish|ground|tofu|red', 1, 2, 'P'], ['grain', 1, 2], ['cookVeg', 1, 2], ['salsa|stirSauce', 1, 1]] },
+    { name: p => `${p} sandwich`, slots: [['canned|deli', 1.5, 3, 'P'], ['toast', 2, 2], ['rawVeg', 1, 1.5], ['greens', 0.5, 1, 'opt']] },
+  ],
+  Dinner: [
+    { name: p => `${p} with roasted veggies`, slots: [['poultry|red|fish', 1, 2, 'P'], ['starch|grain', 0.5, 2], ['cookVeg', 1, 2.5], ['oil', 0.5, 1, 'opt']] },
+    { name: p => `${p} tacos`, slots: [['ground|poultry|fish', 1, 2, 'P'], ['cornTort', 1, 2], ['rawVeg', 1, 1.5], ['salsa', 1, 1], ['avocado', 0.5, 1, 'opt']] },
+    { name: p => `${p} stir-fry`, slots: [['poultry|red|fish|tofu', 1, 2, 'P'], ['grain', 1, 2], ['cookVeg', 1, 2], ['cookVeg', 1, 1.5], ['stirSauce', 1, 2]] },
+    { name: p => `${p} plate`, fish: true, slots: [['oilyFish|fish', 1, 2, 'P'], ['grain|starch', 0.5, 2], ['cookVeg', 1, 2.5], ['greens', 1, 1, 'opt']] },
+    { name: p => `${p} marinara bowl`, slots: [['ground', 1, 2, 'P'], ['marinara', 1, 1], ['cookVeg', 1, 2], ['grain|starch', 0.5, 1.5], ['greens', 1, 1, 'opt']] },
+  ],
+  Snacks: [
+    { name: () => 'Protein snack', slots: [['pSnack', 1, 2, 'P'], ['fruit', 1, 1, 'opt']] },
+    { name: () => 'Snack plate', slots: [['cheeseSnack|pSnack', 1, 2, 'P'], ['rawVeg|fruit', 1, 1], ['nuts', 0.5, 1, 'opt']] },
+  ],
+};
+const PROTEIN_LABELS = [[/salmon|sockeye/, 'Salmon'], [/steelhead/, 'Steelhead'], [/sardine/, 'Sardine'], [/shrimp/, 'Shrimp'],
+  [/ahi|tuna/, 'Tuna'], [/tilapia|rockfish|halibut|sea bass/, 'Fish'], [/ground turkey/, 'Turkey'], [/ground beef|bison/, 'Beef'],
+  [/chicken/, 'Chicken'], [/turkey/, 'Turkey'], [/\bham\b/, 'Ham'], [/pork/, 'Pork'], [/sirloin|eye round|flank|steak/, 'Steak'], [/tofu/, 'Tofu']];
+const proteinLabel = f => (PROTEIN_LABELS.find(([re]) => re.test(nm(f))) || [0, 'Protein'])[1];
+
+// Foods that come in whole units (bars, shakes, cups, slices, eggs) are planned in whole numbers.
+const isUnit = f => f.whole || /\b(bars?|shakes?|sticks?|pouch|pack|bottle|patty|links?|tortillas?|pita|slices?|bagel|rolls?|kiwi|mandarin|eggs?|piece|can)\b/.test(f.serving || '')
+  || /cups\)|\bcups\b|5\.3 oz|6\.7 oz/.test(nm(f) + ' ' + (f.serving || ''));
+function buildMeal(meal, tmpl, pool, used, preferFish, avoidLabels = []) {
+  const items = []; let main = null;
+  for (const [roleStr, lo, hi, flag = ''] of tmpl.slots) {
+    const roles = roleStr.split('|'), opt = flag.includes('opt');
+    const hasDairy = items.some(x => isDairy(getFood(x.id)));
+    let cand = pool.filter(f => roles.some(r => ROLES[r](f)) && !items.some(x => x.id === f.id) && !(hasDairy && isDairy(f)));
+    if (flag.includes('P') && preferFish) { const fishy = cand.filter(f => ROLES.oilyFish(f)); if (fishy.length) cand = fishy; }
+    if (flag.includes('P') && avoidLabels.length) { const fresh = cand.filter(f => !avoidLabels.includes(proteinLabel(f))); if (fresh.length) cand = fresh; }
+    if (!cand.length) { if (opt) continue; return null; }
+    if (opt && Math.random() < 0.35) continue;
+    const f = weightedPick(cand, used);
+    used[f.id] = (used[f.id] || 0) + 1;
+    const whole = isUnit(f), step = whole ? 1 : 0.5;
+    const big = flag.includes('P') && S.planOpts.pf && meal !== 'Snacks' ? 0.5 : 0;
+    const min = whole ? Math.max(1, Math.round(lo)) : lo, max = whole ? Math.max(min, Math.floor(hi + big)) : hi + big;
+    items.push({ id: f.id, sv: Math.round(((min + max) / 2) / step) * step, step, min, max });
+    if (flag.includes('P')) main = f;
+  }
+  return { meal, title: tmpl.name(main ? proteinLabel(main) : ''), label: main ? proteinLabel(main) : '', items };
+}
+function makeDay(pool, used, opts = {}) {
+  const meals = [], prev = opts.prev || {};
+  const order = ['Breakfast', 'Lunch', 'Dinner', ...Array(S.planOpts.snacks).fill('Snacks')];
+  order.forEach((meal, idx) => {
+    const wantFish = meal === 'Dinner' && opts.fishDinner;
+    const list = MEAL_TEMPLATES[meal].filter(t => !(wantFish && !t.fish))
+      .sort(() => Math.random() - 0.5)
+      .sort((a, b) => (prev[meal + idx] === a ? 1 : 0) - (prev[meal + idx] === b ? 1 : 0));
+    const usedLabels = meals.filter(m => m.meal !== 'Breakfast' && m.meal !== 'Snacks').map(m => m.label);
+    for (const t of list) {
+      const m = buildMeal(meal, t, pool, used, wantFish, meal === 'Lunch' || meal === 'Dinner' ? usedLabels : []);
+      if (m) { meals.push(m); prev[meal + idx] = t; return; }
+    }
+  });
+  if (meals.filter(m => m.meal !== 'Snacks').length < 3) return makeDayBasic(pool, used); // too few foods for real meals
+  optimize(meals, S.planOpts.pf);
+  for (const m of meals) m.items = m.items.filter(x => x.sv > 0);
+  return { meals };
+}
 function generatePlan() {
   const pool = planPool();
   const used = {};
   const days = [];
-  for (let i = 0; i < S.planOpts.days; i++) days.push(makeDay(pool, used));
+  const prev = {}, n = S.planOpts.days;
+  // Fatty fish twice a week helps triglycerides: days 2 and 5 of a week, or a coin flip for a single day.
+  const fishDays = n >= 7 ? [1, 4] : (Math.random() < 0.5 ? [0] : []);
+  for (let i = 0; i < n; i++) days.push(makeDay(pool, used, { prev, fishDinner: fishDays.includes(i) }));
   S.plan = { made: Date.now(), days, pf: S.planOpts.pf, ver: APP_VERSION }; planDay = 0; save();
 }
 function planTotals(day) {
@@ -1359,10 +1480,11 @@ function renderPlan() {
     else if (S.plan.pf) h += `<div class="small" style="color:var(--p);margin:0 0 8px"><b>💪 Protein-forward plan</b> — every meal is built around a protein.</div>`;
     h += `<div class="card"><h2>Day ${planDay + 1} totals</h2>
       ${macroBar('Calories', t.cal, T.cal, 'var(--cal)', '')}${macroBar('Protein', t.p, T.p, 'var(--p)', ' g')}
-      ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}</div>`;
+      ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}
+      <div class="small muted" style="margin-top:6px">${(() => { const all = day.meals.flatMap(m => m.items); const fb = all.reduce((a, x) => a + (getFood(x.id).fb || 0) * x.sv, 0); const veg = all.reduce((a, x) => a + (getFood(x.id).cat === 'veg' ? x.sv : 0), 0); const sat = all.reduce((a, x) => a + (getFood(x.id).sf || 0) * x.sv, 0); return `Fiber ${Math.round(fb)} g · Vegetables ${r1(veg)} servings · Saturated fat ${Math.round(sat)} / ${sfTarget()} g`; })()}</div></div>`;
     day.meals.forEach((m, mi) => {
       const mt = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
-      h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
+      h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal}${m.title ? ` · ${esc(m.title)}` : ''} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
         ${m.items.map(x => { const f = getFood(x.id); return `<div class="item tap" data-act="open" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div>
           <div class="meta">${r1(x.sv)} × ${esc(f.serving)} · ${Math.round(f.cal * x.sv)} cal</div></div></div>`; }).join('')}
         <button class="btn alt sm" style="margin-top:6px" data-act="logmeal" data-m="${mi}">Log this meal today</button></div>`;
