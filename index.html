@@ -106,6 +106,16 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--sky); outli
 .tbig { font-family: var(--display); font-weight: 800; font-size: 1.9rem; line-height: 42px; }
 .temo { font-size: 2rem; line-height: 42px; }
 .thint { margin: 0; color: var(--muted); font-size: .88rem; }
+.plan { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pstep { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--bg); border-radius: 16px; padding: 10px 12px; }
+.pstep.pdone { background: var(--good-soft); }
+.pico { font-size: 1.7rem; flex: none; }
+.pname { flex: 1; min-width: 110px; font-family: var(--display); font-weight: 800; font-size: 1.15rem; display: flex; flex-direction: column; }
+.pname small { font-family: var(--body); font-size: .8rem; color: var(--muted); font-weight: 700; }
+.pplay, .ppaper { border: 0; border-radius: 99px; padding: 8px 14px; font-weight: 800; font-size: .9rem; }
+.pplay { background: var(--sky); color: #fff; }
+.ppaper { background: var(--surface); border: 1px solid var(--line); }
+.wsprevs { display: flex; flex-direction: column; gap: 12px; }
 .wsprev { width: 100%; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
 .voice .vrow { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border-radius: var(--r); padding: 16px; }
 .voice .btn { align-self: flex-start; }
@@ -432,7 +442,7 @@ const COURSES = [
     } },
   { id: 'counting', name: 'Counting', icon: '🍎', tone: 'sun', ages: [2, 3, 4, 5], q(age, n) {
       const max = age <= 2 ? 3 : age === 3 ? 5 : 10, k = 1 + rand(max), t = pick(THINGS);
-      return { say: `How many ${k === 1 ? t.one : t.many}?`, show: Array(k).fill(t.e).join(' '), choices: numberChoices(k, 1, Math.max(max, n), n), praise: `${k}! ${k === 1 ? 'One ' + t.one : k + ' ' + t.many}!`, sayParts: ['how-many', t.many], praiseParts: [NUM_WORD[k], t.many] };
+      return { say: `How many ${k === 1 ? t.one : t.many}?`, show: Array(k).fill(t.e).join(' '), choices: numberChoices(k, 1, Math.max(max, n), n), praise: `${k}! ${k === 1 ? 'One ' + t.one : k + ' ' + t.many}!`, pr: { count: k, e: t.e }, sayParts: ['how-many', t.many], praiseParts: [NUM_WORD[k], t.many] };
     } },
   { id: 'letters', name: 'Letters', icon: '🔤', tone: 'sky', ages: [3, 4, 5], q(age, n) {
       const t = pick(LETTERS);
@@ -440,11 +450,11 @@ const COURSES = [
     } },
   { id: 'sounds', name: 'First Sounds', icon: '🐝', tone: 'leaf', ages: [4, 5], q(age, n) {
       const t = pick(WORDS);
-      return { say: `Which one starts with ${t[0]}?`, show: `<span class="bigletter">${t[0]}</span>`, choices: shuffle([t, ...others(WORDS, t, n - 1, w => w[0])]).map(w => ({ html: w[2], label: w[1], correct: w === t })), praise: `${t[1]} starts with ${t[0]}!` };
+      return { say: `Which one starts with ${t[0]}?`, show: `<span class="bigletter">${t[0]}</span>`, choices: shuffle([t, ...others(WORDS, t, n - 1, w => w[0])]).map(w => ({ html: w[2], label: w[1], correct: w === t })), praise: `${t[1]} starts with ${t[0]}!`, pr: { letter: t[0] } };
     } },
   { id: 'adding', name: 'Adding Up', icon: '➕', tone: 'tomato', ages: [4, 5], q(age, n) {
       const a = 1 + rand(4), b = 1 + rand(3), t = pick(THINGS), sum = a + b;
-      return { say: `${a} plus ${b}. How many in all?`, show: `<span>${Array(a).fill(t.e).join('')}</span><span class="plus">+</span><span>${Array(b).fill(t.e).join('')}</span>`, choices: numberChoices(sum, 1, 9, n), praise: `${a} plus ${b} makes ${sum}!` };
+      return { say: `${a} plus ${b}. How many in all?`, show: `<span>${Array(a).fill(t.e).join('')}</span><span class="plus">+</span><span>${Array(b).fill(t.e).join('')}</span>`, choices: numberChoices(sum, 1, 9, n), praise: `${a} plus ${b} makes ${sum}!`, pr: { add: [a, b], e: t.e } };
     } }
 ];
 const COURSE = Object.fromEntries(COURSES.map(c => [c.id, c]));
@@ -552,7 +562,7 @@ async function fillFeed(ul) {
     let icon, text;
     if (f.kind === 'cheer') { icon = f.emoji || '👏'; text = [who ? (who === 'you' ? 'You' : who) : 'Someone', ' cheered for ', h('b', {}, k.name)]; }
     else if (f.kind === 'joined') { icon = k.avatar || '🌱'; text = [h('b', {}, k.name), ' joined the family room']; }
-    else { icon = '⭐'; text = [h('b', {}, k.name), ' earned a star in ', h('b', {}, c ? c.name : 'a lesson'), f.score != null ? ` (${f.score}/${ROUND} first try)` : '']; }
+    else { icon = '⭐'; text = [h('b', {}, k.name), ' earned a star in ', h('b', {}, c ? c.name : 'a lesson'), f.paper ? ' on paper' : f.score != null ? ` (${f.score}/${ROUND} first try)` : '']; }
     return h('li', {}, h('span', { class: 'fi', 'aria-hidden': 'true' }, icon),
       h('span', { class: 'ft' }, ...text, h('small', {}, ago(f.ts) + (who && f.kind !== 'cheer' ? ' · on ' + (who === 'you' ? 'your' : who + "'s") + ' phone' : ''))),
       f.kind === 'star' && !S.readOnly ? h('button', { class: 'cheer', onclick: () => store.addFeed({ kind: 'cheer', kidId: f.kidId, emoji: pick(['👏', '🎉', '💖', '🙌']) }) }, '👏 Cheer') : null);
@@ -932,30 +942,178 @@ async function drawWorksheet(k, plan) {
 }
 
 let downloads = null;
-const wsCache = new Map();
-async function worksheetCanvas(k) {
-  const plan = dayPlan(k, todayKey()), key = plan.key + k.id + k.age + k.name;
-  if (!wsCache.has(key)) wsCache.set(key, drawWorksheet(k, plan));
-  return wsCache.get(key);
+
+/* ---------- today's plan: 3 lessons picked for the child's age, the same on every phone ---------- */
+const PLAN_SIZE = 3;
+function planCourses(k, key) {
+  const r = seeded('plan|' + key + '|' + k.id + '|' + k.age);
+  const pool = COURSES.filter(c => c.ages.includes(k.age)).slice();
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return pool.slice(0, PLAN_SIZE);
 }
-async function saveWorksheet(k, btn) {
+function withSeed(str, fn) { const orig = Math.random; Math.random = seeded(str); try { return fn(); } finally { Math.random = orig; } }
+const paperQuestions = (k, course, key) => withSeed('paper|' + key + '|' + k.id + '|' + course.id, () => Array.from({ length: ROUND }, () => course.q(k.age, choicesFor(k.age))));
+
+/* ---------- drawing helpers shared by the printable pages ---------- */
+const PW = 1275, PH = 1650, PM = 75, P_INK = '#1D2B3A', P_MUTED = '#5B6B7C', P_LINE = '#C9D5E0';
+async function loadPrintFonts() {
+  try { await Promise.race([Promise.all(['800 40px Sniglet', '800 40px Nunito', '700 20px Nunito'].map(f => document.fonts.load(f))), new Promise(r => setTimeout(r, 2500))]); } catch (e) {}
+}
+function newPage() {
+  const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+  const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, PW, PH);
+  const P = {
+    cv, c,
+    txt(s, x, y, size, o = {}) { c.font = `${o.weight || 800} ${size}px ${o.font || BODYF}`; c.fillStyle = o.color || P_INK; c.textAlign = o.align || 'left'; c.textBaseline = 'alphabetic'; c.fillText(s, x, y); },
+    emo(e, x, y, size) { c.font = `${size}px ${EMOJI_FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = P_INK; c.fillText(e, x, y); c.textBaseline = 'alphabetic'; },
+    rr(x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); },
+    shp(name, cx, cy, size, o = {}) {
+      c.save(); c.translate(cx - size / 2, cy - size / 2); c.scale(size / 100, size / 100);
+      const p = new Path2D(SHAPE_PATHS[name]);
+      if (o.fill) { c.fillStyle = o.fill; c.fill(p); }
+      c.lineWidth = (o.lw || 4) * 100 / size; c.strokeStyle = P_INK; c.lineJoin = 'round'; c.stroke(p); c.restore();
+    },
+    dot(x, y, r, fill) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = fill; c.fill(); c.lineWidth = 3; c.strokeStyle = P_INK; c.stroke(); },
+    header(title, icon, right1, right2) {
+      if (icon) P.emo(icon, PM + 34, 112, 60);
+      P.txt(title, PM + (icon ? 86 : 0), 128, 58, { font: DISP });
+      P.txt(right1, PW - PM, 100, 26, { align: 'right', color: P_MUTED, weight: 700 });
+      P.txt(right2, PW - PM, 140, 32, { align: 'right' });
+      c.fillStyle = P_LINE; c.fillRect(PM, 180, PW - 2 * PM, 3);
+    }
+  };
+  return P;
+}
+
+/* one answer choice, drawn from the same question data the app uses */
+function drawChoice(P, courseId, ch, cx, cy, s) {
+  if (courseId === 'colors') { const col = COLORS.find(x => x.n === ch.label); P.dot(cx, cy, s * .36, col ? col.hex : '#ccc'); return; }
+  if (courseId === 'animals') { const a = ANIMALS.find(x => x.n === ch.label); P.emo(a ? a.e : '?', cx, cy, s * .7); return; }
+  if (courseId === 'shapes') { const m = /fill="(#[0-9A-Fa-f]+)"/.exec(ch.html); P.shp(ch.label, cx, cy, s * .72, { fill: m ? m[1] : null, lw: 5 }); return; }
+  if (courseId === 'bigsmall') { const m = /font-size:([\d.]+)em">(.+)<\/span>/.exec(ch.html); P.emo(m ? m[2] : '?', cx, cy, s * .62 * (m ? +m[1] : 1)); return; }
+  if (courseId === 'sounds') { const w = WORDS.find(x => x[1] === ch.label); P.emo(w ? w[2] : '?', cx, cy - s * .08, s * .55); P.txt(ch.label, cx, cy + s * .38, 22, { align: 'center', color: P_MUTED, weight: 700 }); return; }
+  P.txt(ch.label, cx, cy + s * .2, s * .55, { font: DISP, align: 'center' });
+}
+/* the picture a question asks about (counting, adding, first sounds) */
+function drawShow(P, q, x, y, w, h) {
+  const pr = q.pr || {};
+  if (pr.count) {
+    const n = pr.count, perRow = n > 5 ? Math.ceil(n / 2) : n, rows = Math.ceil(n / perRow);
+    const size = Math.min(70, h / rows - 6, w / perRow - 6);
+    for (let i = 0; i < n; i++) P.emo(pr.e, x + (w - perRow * (size + 6)) / 2 + (i % perRow + .5) * (size + 6), y + (Math.floor(i / perRow) + .5) * (h / rows), size);
+  } else if (pr.add) {
+    const s = Math.min(46, h * .5); let cx = x + 10;
+    const put = () => { P.emo(pr.e, cx + s / 2, y + h / 2, s); cx += s + 2; };
+    for (let i = 0; i < pr.add[0]; i++) put();
+    P.txt('+', cx + 18, y + h / 2 + 18, 50, { font: DISP, align: 'center' }); cx += 38;
+    for (let i = 0; i < pr.add[1]; i++) put();
+  } else if (pr.letter) {
+    P.txt(pr.letter, x + w / 2, y + h / 2 + h * .32, h * .9, { font: DISP, align: 'center', color: '#2B7FD4' });
+  }
+}
+
+async function drawLessonPage(k, key, course, idx, total) {
+  await loadPrintFonts();
+  const P = newPage(), { c } = P, qs = paperQuestions(k, course, key);
+  P.header(course.name, course.icon, `Lesson ${idx} of ${total} · ${prettyDate(key)}`, `${k.name} · Age ${k.age}`);
+  P.txt('Read each question out loud. Your child points to the answer or circles it.', PM, 228, 26, { color: P_MUTED, weight: 700 });
+  const top = 258, bottom = PH - PM - 46, gap = 18, rowH = (bottom - top - gap * (ROUND - 1)) / ROUND, keys = [];
+  qs.forEach((q, i) => {
+    const y = top + i * (rowH + gap);
+    P.rr(PM, y, PW - 2 * PM, rowH, 26); c.lineWidth = 3; c.strokeStyle = P_LINE; c.stroke();
+    c.beginPath(); c.arc(PM + 42, y + 44, 22, 0, Math.PI * 2); c.fillStyle = '#2B7FD4'; c.fill();
+    P.txt(String(i + 1), PM + 42, y + 53, 26, { font: DISP, color: '#fff', align: 'center' });
+    P.txt(q.say, PM + 80, y + 56, 36, { font: DISP });
+    const aTop = y + 76, aH = rowH - 90;
+    let rx = PM + 30, rw = PW - 2 * PM - 60;
+    if (q.pr) { drawShow(P, q, rx, aTop, 400, aH); rx += 430; rw -= 430; }
+    const n = q.choices.length, s = Math.min(aH, (rw - (n - 1) * 22) / n), x0 = rx + (rw - (n * s + (n - 1) * 22)) / 2;
+    q.choices.forEach((ch, j) => {
+      const bx = x0 + j * (s + 22);
+      P.rr(bx, aTop, s, s, 20); c.lineWidth = 2; c.strokeStyle = P_LINE; c.stroke();
+      P.txt('ABCD'[j], bx + 14, aTop + 26, 18, { color: P_MUTED });
+      drawChoice(P, course.id, ch, bx + s / 2, aTop + s / 2, s);
+      if (ch.correct) keys.push(`${i + 1}: ${'ABCD'[j]}`);
+    });
+  });
+  P.txt('Answers for grown-ups  ·  ' + keys.join('   '), PM, PH - PM, 22, { color: P_MUTED, weight: 700 });
+  return P.cv;
+}
+
+async function drawPlanPage(k, key, courses) {
+  await loadPrintFonts();
+  const P = newPage(), { c } = P, plan = dayPlan(k, key);
+  P.header("Today's Plan", '🌱', prettyDate(key), `${k.name} · Age ${k.age}`);
+  P.txt('Do these together today, in any order. Tick each box when you finish.', PM, 228, 26, { color: P_MUTED, weight: 700 });
+  const rows = [...courses.map((co, i) => ({ icon: co.icon, name: co.name, sub: `${ROUND} questions · about 5 minutes · page ${i + 2}` })),
+    { icon: '✏️', name: 'Practice sheet', sub: `Color, count and circle · page ${courses.length + 2}` }];
+  rows.forEach((r, i) => {
+    const y = 262 + i * 168;
+    P.rr(PM, y, PW - 2 * PM, 150, 26); c.lineWidth = 3; c.strokeStyle = P_LINE; c.stroke();
+    P.rr(PM + 30, y + 40, 70, 70, 14); c.lineWidth = 5; c.strokeStyle = P_INK; c.stroke();
+    P.emo(r.icon, PM + 170, y + 75, 72);
+    P.txt(r.name, PM + 240, y + 72, 46, { font: DISP });
+    P.txt(r.sub, PM + 240, y + 112, 26, { color: P_MUTED, weight: 700 });
+  });
+  // words of the day
+  const ty = 262 + rows.length * 168 + 20;
+  P.txt("TODAY'S WORDS", PM, ty + 10, 22, { color: P_MUTED });
+  const tiles = [['Color', 'color'], ['Shape', 'shape'], ['Number', 'number'], ['Animal', 'animal']];
+  if (k.age >= 3) tiles.splice(2, 0, ['Letter', 'letter']);
+  const tw = (PW - 2 * PM - (tiles.length - 1) * 20) / tiles.length, th = 190, y0 = ty + 30;
+  tiles.forEach(([label, kind], i) => {
+    const x = PM + i * (tw + 20), cx = x + tw / 2;
+    P.rr(x, y0, tw, th, 24); c.fillStyle = '#EEF4F9'; c.fill();
+    P.txt(label.toUpperCase(), cx, y0 + 36, 20, { align: 'center', color: P_MUTED });
+    if (kind === 'color') { P.dot(cx, y0 + 98, 36, plan.color.hex); P.txt(plan.color.n, cx, y0 + 168, 28, { align: 'center' }); }
+    if (kind === 'shape') { P.shp(plan.shape, cx, y0 + 98, 76, { lw: 5 }); P.txt(plan.shape, cx, y0 + 168, 28, { align: 'center' }); }
+    if (kind === 'letter') { P.txt(plan.letter + plan.letter.toLowerCase(), cx, y0 + 128, 72, { font: DISP, align: 'center' }); P.txt(plan.word[1], cx, y0 + 168, 24, { align: 'center', color: P_MUTED, weight: 700 }); }
+    if (kind === 'number') { P.txt(String(plan.number), cx, y0 + 130, 80, { font: DISP, align: 'center' }); P.txt(NUM_WORD[plan.number], cx, y0 + 168, 26, { align: 'center' }); }
+    if (kind === 'animal') { P.emo(plan.animal.e, cx, y0 + 94, 70); P.txt(plan.animal.n, cx, y0 + 168, 28, { align: 'center' }); }
+  });
+  const ny = PH - PM - 150;
+  P.rr(PM, ny, PW - 2 * PM, 150, 24); c.fillStyle = '#FDF0D2'; c.fill();
+  P.txt('FOR GROWN-UPS', PM + 30, ny + 42, 20, { color: '#8A6A12' });
+  P.txt('Keep it short and happy: stop while your child still wants more.', PM + 30, ny + 84, 24, { weight: 700 });
+  P.txt('Finished on paper? Tap "Did it on paper" in the app so the star shows in the family feed.', PM + 30, ny + 122, 22, { color: P_MUTED, weight: 700 });
+  return P.cv;
+}
+
+const packCache = new Map();
+function packPages(k) {
+  const key = todayKey(), id = key + k.id + k.age + k.name;
+  if (!packCache.has(id)) packCache.set(id, (async () => {
+    const courses = planCourses(k, key), pages = [await drawPlanPage(k, key, courses)];
+    for (let i = 0; i < courses.length; i++) pages.push(await drawLessonPage(k, key, courses[i], i + 1, courses.length));
+    pages.push(await drawWorksheet(k, dayPlan(k, key)));
+    return pages;
+  })());
+  return packCache.get(id);
+}
+async function savePack(k, btn) {
   const label = btn.textContent; btn.disabled = true; btn.textContent = 'Making your PDF…';
   try {
-    const cv = await worksheetCanvas(k);
+    const pages = await packPages(k);
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'in', format: 'letter' });
-    pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 8.5, 11);
+    pages.forEach((cv, i) => { if (i) pdf.addPage('letter'); pdf.addImage(cv.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, 8.5, 11); });
     const safe = (k.name || 'Lesson').replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'Lesson';
-    await downloads.save({ filename: `${safe} lesson ${todayKey()}.pdf`, data: pdf.output('blob') });
+    await downloads.save({ filename: `${safe} lessons ${todayKey()}.pdf`, data: pdf.output('blob') });
     btn.textContent = 'Saved. Open it and tap Print.';
   } catch (e) {
-    btn.textContent = e && e.code === 'declined' ? label : 'Could not save. Press and hold the picture instead.';
+    btn.textContent = e && e.code === 'declined' ? label : 'Could not save. Press and hold the pages instead.';
   }
   btn.disabled = false;
   setTimeout(() => { if (btn.isConnected) btn.textContent = label; }, 5000);
 }
+async function paperDone(k, course) {
+  const key = todayKey();
+  await store.updateKid(k.id, { stars: { [course.id]: ((k.stars || {})[course.id] || 0) + 1 }, paperDone: { [key]: { ...(((k.paperDone || {})[key]) || {}), [course.id]: true } } });
+  await store.addFeed({ kind: 'star', kidId: k.id, course: course.id, paper: true });
+}
+
 function todayCard(k) {
-  const plan = dayPlan(k, todayKey());
+  const key = todayKey(), plan = dayPlan(k, key), courses = planCourses(k, key), done = ((k.paperDone || {})[key]) || {};
   const chip = (label, visual, word) => h('div', { class: 'tchip' }, h('span', { class: 'tl' }, label), visual, h('span', { class: 'tw' }, word));
   const chips = [
     chip('Color', h('span', { class: 'tsw', style: `background:${plan.color.hex}` }), plan.color.n),
@@ -964,20 +1122,33 @@ function todayCard(k) {
     chip('Number', h('span', { class: 'tbig' }, String(plan.number)), plan.thing.many),
     chip('Animal', h('span', { class: 'temo' }, plan.animal.e), plan.animal.n)
   ];
-  const img = h('img', { class: 'wsprev', alt: `Printable worksheet for ${k.name}`, hidden: true });
+  const steps = h('ol', { class: 'plan' }, courses.map(co => h('li', { class: 'pstep' + (done[co.id] ? ' pdone' : '') },
+    h('span', { class: 'pico', 'aria-hidden': 'true' }, co.icon),
+    h('span', { class: 'pname' }, co.name, h('small', {}, done[co.id] ? 'Done on paper ⭐' : `${ROUND} questions`)),
+    h('button', { class: 'pplay', type: 'button', onclick: () => startLesson(k.id, co.id) }, '▶ Play'),
+    S.readOnly || done[co.id] ? null : h('button', { class: 'ppaper', type: 'button', onclick: e => { e.currentTarget.disabled = true; paperDone(k, co); } }, 'Did it on paper'))),
+    h('li', { class: 'pstep' }, h('span', { class: 'pico', 'aria-hidden': 'true' }, '✏️'), h('span', { class: 'pname' }, 'Practice sheet', h('small', {}, 'Printed page only'))));
+  const prev = h('div', { class: 'wsprevs', hidden: true });
+  const n = courses.length + 2;
   const prevBtn = h('button', { class: 'btn ghost', type: 'button', onclick: async () => {
-      if (img.hidden) { prevBtn.textContent = 'Loading…'; const cv = await worksheetCanvas(k); img.src = cv.toDataURL('image/png'); img.hidden = false; prevBtn.textContent = 'Hide worksheet'; }
-      else { img.hidden = true; prevBtn.textContent = 'See worksheet'; }
-    } }, 'See worksheet');
+      if (prev.hidden) {
+        prevBtn.textContent = 'Loading…';
+        const pages = await packPages(k);
+        prev.replaceChildren(...pages.map((cv, i) => h('img', { class: 'wsprev', alt: `Printable page ${i + 1} of ${pages.length} for ${k.name}`, src: cv.toDataURL('image/jpeg', 0.85) })));
+        prev.hidden = false; prevBtn.textContent = 'Hide pages';
+      } else { prev.hidden = true; prevBtn.textContent = 'See pages'; }
+    } }, 'See pages');
+  const canSave = downloads && window.jspdf;
   const actions = h('div', { class: 'actions', style: 'justify-content:flex-start;flex-wrap:wrap' }, prevBtn);
-  if (downloads && window.jspdf) actions.prepend(h('button', { class: 'btn', type: 'button', onclick: e => saveWorksheet(k, e.currentTarget) }, 'Save PDF to print'));
+  if (canSave) actions.prepend(h('button', { class: 'btn', type: 'button', onclick: e => savePack(k, e.currentTarget) }, `🖨 Print today's lessons`));
   return h('section', { class: 'today' },
-    h('div', { class: 'sec-head' }, h('h2', {}, "Today's lesson"), h('span', {}, prettyDate(plan.key))),
+    h('div', { class: 'sec-head' }, h('h2', {}, "Today's plan"), h('span', {}, prettyDate(key))),
+    steps,
     h('div', { class: 'tchips' }, chips),
-    h('p', { class: 'thint' }, downloads && window.jspdf
-      ? `A one-page worksheet built for age ${k.age}. Save the PDF, open it, and tap Share then Print. It changes every day.`
-      : `A one-page worksheet built for age ${k.age}. Tap See worksheet, then press and hold the picture to save or print it.`),
-    actions, img);
+    h('p', { class: 'thint' }, canSave
+      ? `Print all ${n} pages to do today's lessons without the phone: the plan, one page per lesson, and a practice sheet. Save the PDF, open it, then tap Share and Print.`
+      : `Tap See pages, then press and hold each page to save or print it. There are ${n} pages: the plan, one page per lesson, and a practice sheet.`),
+    actions, prev);
 }
 
 /* ---------- boot ---------- */
