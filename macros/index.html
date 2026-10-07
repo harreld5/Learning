@@ -732,7 +732,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '3.8 (swap foods, plan follows the calendar)';
+const APP_VERSION = '3.9 (back button on shopping list)';
 const PLANNER_VERSION = 5; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -923,8 +923,11 @@ function defaultMeal() { const h = new Date().getHours(); return h < 11 ? 'Break
 /* ================= tabs ================= */
 let tab = 'today', viewDay = todayKey(), costcoView = 'catalog', costcoFilter = 'all', costcoCat = '', costcoQ = '', planDay = 0, planDayPicked = false;
 const TITLES = { today: 'Today', scan: 'Scan food', costco: 'Costco', plan: 'Meal plan', list: 'Shopping list', settings: 'Goals & rules' };
+let prevTab = 'today';
 function go(t) {
   if (tab === 'scan' && t !== 'scan') stopScan();
+  if (t !== tab) prevTab = tab;
+  if (!$('#sheet').hidden) { $('#sheet').hidden = true; sheetFood = null; }
   tab = t; render(); window.scrollTo(0, 0);
 }
 function render() {
@@ -1291,6 +1294,8 @@ const AISLES = [['protein', 'Meat & seafood'], ['bprotein', 'Eggs & dairy'], ['v
   ['fat', 'Nuts, cheese & oils'], ['snack', 'Snacks & bars'], ['other', 'Drinks, sauces & more']];
 const aisleOf = f => (AISLES.find(([c]) => c === f.cat) || AISLES[AISLES.length - 1])[1];
 function renderList() {
+  const back = prevTab && prevTab !== 'list' ? prevTab : 'today';
+  $('#hdr-extra').innerHTML = `<button class="btn alt sm" data-act="tab" data-t="${back}" aria-label="Back">‹ Back to ${({ today: 'Today', scan: 'Scan', costco: 'Costco', plan: 'Plan', settings: 'Goals' })[back]}</button>`;
   const ids = Object.keys(S.list).filter(id => S.list[id].on && getFood(id));
   const line = id => { const pr = priceOf(id); return pr == null ? null : pr * (S.list[id].qty || 1); };
   let total = 0, inCart = 0, missing = 0, count = 0;
@@ -1314,7 +1319,7 @@ function renderList() {
         const L = S.list[f.id], pr = priceOf(f.id), qty = L.qty || 1, pkg = PRICES[f.id] ? PRICES[f.id][1] : '';
         return `<div class="item" style="align-items:flex-start"><input type="checkbox" data-act="got" data-id="${esc(f.id)}" ${L.got ? 'checked' : ''} aria-label="Got it" style="margin-top:3px">
           <div class="grow"><div class="name tap" data-act="open" data-id="${esc(f.id)}" style="${L.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(f.name)}</div>
-            <div class="meta">${pkg ? esc(pkg) : ''}${(() => { const pi = packageInfo(f); return pi.servings ? ` · ≈ ${Math.floor(pi.servings)} servings${pi.portion && Math.abs(pi.portion - 1) > 0.05 ? ` / ${Math.floor(pi.meals)} meals` : ''} per package` : ''; })()}${L.need ? ` · plan needs ≈ ${r1(L.need)} servings` : ''}</div>
+            <div class="meta">${(() => { const pi = packageInfo(f); return [pkg ? esc(pkg) : '', pi.servings ? `≈ ${Math.floor(pi.servings)} servings${pi.portion && Math.abs(pi.portion - 1) > 0.05 ? ` / ${Math.floor(pi.meals)} meals` : ''} per package` : '', L.need ? `plan needs ≈ ${r1(L.need)} servings` : ''].filter(Boolean).join(' · '); })()}</div>
             <div class="row" style="margin-top:6px;gap:6px">
               <div class="stepper"><button data-act="qty" data-id="${esc(f.id)}" data-d="-1" aria-label="Fewer">−</button><span style="min-width:22px;text-align:center"><b>${qty}</b></span><button data-act="qty" data-id="${esc(f.id)}" data-d="1" aria-label="More">+</button></div>
               <span class="small muted">×</span>
