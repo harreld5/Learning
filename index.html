@@ -278,30 +278,42 @@ const CLIP_SETS = {
   star: ['star'],
   start: ['lets-learn']
 };
-const clipBuf = {};
-let clipSrc = null, lastClip = '';
+let lastClip = '', clipDone = null;
 const useMyVoice = () => voicePref.mine !== false && Object.keys(CLIPS).length > 0;
-function decodeClip(name) {
-  if (!clipBuf[name]) clipBuf[name] = new Promise((res, rej) => {
-    const ctx = audioCtx(), b64 = CLIPS[name]; if (!ctx || !b64) return rej();
-    const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    ctx.decodeAudioData(u8.buffer, res, rej);
-  }).catch(() => { delete clipBuf[name]; return null; });
-  return clipBuf[name];
-}
-function stopClip() { try { clipSrc && clipSrc.stop(); } catch (e) {} clipSrc = null; }
-// Plays one recorded clip from a set; resolves true when it finished, false when it could not play.
-async function playClip(set) {
-  if (!useMyVoice()) return false;
+const player = new Audio();
+player.preload = 'auto'; player.setAttribute('playsinline', '');
+function stopClip() { try { player.pause(); } catch (e) {} if (clipDone) { clipDone(false); clipDone = null; } }
+// Starts a recorded clip immediately (so a tap counts), resolves true when it finished, false if the phone refused it.
+function playClip(set) {
+  if (!useMyVoice()) return Promise.resolve(false);
   const pool = CLIP_SETS[set].filter(n => CLIPS[n]), fresh = pool.filter(n => n !== lastClip);
-  if (!pool.length) return false;
+  if (!pool.length) return Promise.resolve(false);
   const name = pick(fresh.length ? fresh : pool); lastClip = name;
-  const buf = await decodeClip(name); if (!buf) return false;
-  stopClip(); try { speechSynthesis.cancel(); } catch (e) {}
-  const src = actx.createBufferSource(); src.buffer = buf; src.connect(actx.destination); src.start(); clipSrc = src;
-  await new Promise(r => { src.onended = r; setTimeout(r, buf.duration * 1000 + 300); });
-  return true;
+  stopClip(); try { if (Date.now() - unlockedAt > 1500) speechSynthesis.cancel(); } catch (e) {}
+  return new Promise(resolve => {
+    let settled = false;
+    const fin = ok => { if (settled) return; settled = true; clipDone = null; player.onended = player.onerror = null; resolve(ok); };
+    clipDone = fin;
+    player.onended = () => fin(true);
+    player.onerror = () => { lastAudioError = 'This phone could not play the recording.'; fin(false); };
+    player.src = 'data:audio/mpeg;base64,' + CLIPS[name];
+    let p; try { p = player.play(); } catch (e) { lastAudioError = e.name || 'blocked'; return fin(false); }
+    if (p && p.catch) p.catch(e => { lastAudioError = (e && e.name) || 'blocked'; fin(false); });
+    setTimeout(() => fin(true), 6000);
+  });
 }
+let lastAudioError = '';
+
+/* ---------- unlock sound on the first taps (iPhone requires a tap before any sound) ---------- */
+let speechUnlocked = false, unlockedAt = 0;
+function unlockSound() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  audioCtx();
+  if (!speechUnlocked && 'speechSynthesis' in window) {
+    try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); speechUnlocked = true; unlockedAt = Date.now(); } catch (e) {}
+  }
+}
+['touchend', 'click'].forEach(ev => document.addEventListener(ev, unlockSound, { capture: true, passive: true }));
 
 /* ---------- course content ---------- */
 const COLORS = [
@@ -509,7 +521,12 @@ function voicePanel() {
     sec.append(h('div', { class: 'vrow', style: 'margin-bottom:12px' },
       h('div', { class: 'field' }, "Mommy's recorded cheers", mine),
       h('p', { class: 'thint', style: 'margin:0' }, 'Plays your recordings for right answers, try-agains, stars, and the start of each lesson. The phone voice still reads the questions.'),
-      h('button', { class: 'btn', type: 'button', onclick: () => { voicePref.mine = true; saveVoicePref(); playClip('right'); } }, '▶ Hear a cheer')));
+      h('button', { class: 'btn', type: 'button', onclick: async e => {
+          const b = e.currentTarget; voicePref.mine = true; saveVoicePref(); lastAudioError = '';
+          const ok = await playClip('right');
+          b.textContent = ok ? '▶ Hear a cheer' : 'No sound? Turn the ringer switch on and the volume up, then tap again.';
+          if (!ok && lastAudioError) b.title = lastAudioError;
+        } }, '▶ Hear a cheer')));
   }
   const cur = currentVoice();
   const sel = h('select', { id: 'voice-pick', onchange: e => { voicePref.uri = e.target.value; saveVoicePref(); speak("Hi friend! Let's learn together!"); } },
@@ -587,7 +604,7 @@ function startLesson(kidId, courseId) {
   const k = kidById(kidId); if (!k) return;
   L = { kidId, courseId, age: k.age, i: 0, firstTry: 0, missed: false, q: null, locked: false, done: false };
   if (!S.readOnly) store.updateKid(kidId, { playing: { course: courseId, ts: Date.now() } });
-  if (useMyVoice()) { audioCtx(); Object.keys(CLIPS).forEach(decodeClip); }
+  unlockSound();
   nextQuestion(true);
 }
 function endLesson() {
@@ -600,7 +617,7 @@ function nextQuestion(first) {
   L.q = c.q(L.age, choicesFor(L.age)); L.missed = false; L.locked = false;
   drawLesson();
   const my = L, q = L.q;
-  if (first && useMyVoice()) playClip('start').then(() => { if (L === my && L.q === q) speak(q.say); });
+  if (first && useMyVoice()) playClip('start').then(() => { if (L === my && L.q === q && !L.locked) speak(q.say); });
   else speak(q.say);
 }
 function drawLesson() {
