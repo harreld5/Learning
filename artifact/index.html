@@ -89,7 +89,32 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--sky); outli
 .course:hover { transform: scale(1.02); }
 .course .ci { font-size: 2.4rem; line-height: 1; }
 .course .cn { font-family: var(--display); font-size: 1.3rem; font-weight: 800; line-height: 1.1; }
-.course .cs { font-size: .85rem; font-weight: 800; opacity: .92; margin-top: auto; font-variant-numeric: tabular-nums; }
+.course .cl { font-size: .78rem; font-weight: 800; opacity: .92; line-height: 1.25; }
+.cup { display: inline-flex; gap: 4px; align-items: center; }
+.cup i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.35); border: 1.5px solid rgba(255,255,255,.85); }
+.cup i.on { background: #fff; }
+.c-sun .cup i { background: rgba(58,42,0,.2); border-color: rgba(58,42,0,.6); }
+.c-sun .cup i.on { background: #3A2A00; }
+.levels { background: var(--surface); border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.lrow { display: flex; align-items: center; gap: 8px; }
+.lname { flex: 1; min-width: 0; font-weight: 800; display: flex; flex-direction: column; }
+.lname small { font-weight: 700; color: var(--muted); font-size: .8rem; }
+.lbtn { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); font-size: 1.2rem; font-weight: 800; }
+.lbtn:disabled { opacity: .35; cursor: default; }
+.levelup { margin: 0; font-weight: 800; font-size: 1.1rem; color: var(--good); }
+.ctext { font-family: var(--display); line-height: 1; }
+.ctext.long { font-size: .6em; letter-spacing: .02em; }
+.cemo { display: flex; flex-direction: column; align-items: center; line-height: 1.05; font-size: .85em; }
+.cemo small { font-family: var(--body); font-size: .28em; color: var(--muted); font-weight: 800; }
+.cgroup { display: flex; flex-wrap: wrap; justify-content: center; font-size: .42em; line-height: 1.15; max-width: 92%; }
+.cgroup.many { font-size: .32em; }
+.show .bignum { font-family: var(--display); font-weight: 800; }
+.show .bigemo { font-size: 1.5em; }
+.show .showword { font-family: var(--display); font-weight: 800; letter-spacing: .06em; color: var(--sky); width: 100%; }
+.show .show-blob { width: 1.1em; height: 1.1em; border-radius: 50%; display: inline-block; border: 3px solid rgba(0,0,0,.15); }
+.show .showshape { width: 1.8em; height: 1.8em; color: var(--ink); display: inline-block; }
+.show .showshape svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 5; }
+.course .cs { font-size: .85rem; font-weight: 800; opacity: .92; margin-top: auto; font-variant-numeric: tabular-nums; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .c-tomato { background: var(--tomato); } .c-sun { background: var(--sun); color: #3A2A00; } .c-leaf { background: var(--leaf); }
 .c-sky { background: var(--sky); } .c-plum { background: var(--plum); }
 .more { border: 1px solid var(--line); background: transparent; border-radius: 99px; padding: 8px 16px; font-weight: 800; color: var(--muted); align-self: flex-start; }
@@ -376,13 +401,27 @@ const COLORS = [
   { n: 'green', hex: '#43A047' }, { n: 'orange', hex: '#FB8C00' }, { n: 'purple', hex: '#8E24AA' },
   { n: 'pink', hex: '#EC407A' }, { n: 'brown', hex: '#8D6E63' }
 ];
+const MIX_COLORS = [...COLORS, { n: 'white', hex: '#FFFFFF' }, { n: 'black', hex: '#212121' }, { n: 'gray', hex: '#9E9E9E' }];
+const colorNamed = n => MIX_COLORS.find(c => c.n === n);
+const MIXES = [['red', 'yellow', 'orange'], ['blue', 'yellow', 'green'], ['red', 'blue', 'purple'], ['red', 'white', 'pink'], ['black', 'white', 'gray']];
+const COLOR_OF = [
+  ['banana', '🍌', 'yellow'], ['strawberry', '🍓', 'red'], ['frog', '🐸', 'green'], ['carrot', '🥕', 'orange'], ['grapes', '🍇', 'purple'],
+  ['tomato', '🍅', 'red'], ['broccoli', '🥦', 'green'], ['pig', '🐷', 'pink'], ['bear', '🐻', 'brown'], ['lemon', '🍋', 'yellow'],
+  ['blueberries', '🫐', 'blue'], ['eggplant', '🍆', 'purple'], ['pumpkin', '🎃', 'orange'], ['chocolate', '🍫', 'brown'], ['flamingo', '🦩', 'pink'], ['whale', '🐳', 'blue']
+];
 const SOUND_KEY = { cow: 'moo', dog: 'woof', cat: 'meow', duck: 'quack', pig: 'oink', sheep: 'baa', lion: 'roar', frog: 'ribbit', horse: 'neigh', chicken: 'cluck', bee: 'buzz', owl: 'hoo' };
 const NUM_WORD = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 const ANIMALS = [
-  { n: 'cow', e: '🐮', s: 'moo' }, { n: 'dog', e: '🐶', s: 'woof woof' }, { n: 'cat', e: '🐱', s: 'meow' },
-  { n: 'duck', e: '🦆', s: 'quack quack' }, { n: 'pig', e: '🐷', s: 'oink oink' }, { n: 'sheep', e: '🐑', s: 'baa' },
-  { n: 'lion', e: '🦁', s: 'roar' }, { n: 'frog', e: '🐸', s: 'ribbit' }, { n: 'horse', e: '🐴', s: 'neigh' },
-  { n: 'chicken', e: '🐔', s: 'cluck cluck' }, { n: 'bee', e: '🐝', s: 'buzz' }, { n: 'owl', e: '🦉', s: 'hoo hoo' }
+  { n: 'cow', e: '🐮', s: 'moo', baby: 'calf' }, { n: 'dog', e: '🐶', s: 'woof woof', baby: 'puppy' }, { n: 'cat', e: '🐱', s: 'meow', baby: 'kitten' },
+  { n: 'duck', e: '🦆', s: 'quack quack', baby: 'duckling' }, { n: 'pig', e: '🐷', s: 'oink oink', baby: 'piglet' }, { n: 'sheep', e: '🐑', s: 'baa', baby: 'lamb' },
+  { n: 'lion', e: '🦁', s: 'roar', baby: 'cub' }, { n: 'frog', e: '🐸', s: 'ribbit', baby: 'tadpole' }, { n: 'horse', e: '🐴', s: 'neigh', baby: 'foal' },
+  { n: 'chicken', e: '🐔', s: 'cluck cluck', baby: 'chick' }, { n: 'bee', e: '🐝', s: 'buzz' }, { n: 'owl', e: '🦉', s: 'hoo hoo', baby: 'owlet' }
+];
+const HOMES = [
+  { where: 'in the ocean', list: [{ n: 'whale', e: '🐳' }, { n: 'octopus', e: '🐙' }, { n: 'crab', e: '🦀' }, { n: 'shark', e: '🦈' }, { n: 'dolphin', e: '🐬' }, { n: 'fish', e: '🐟' }] },
+  { where: 'on a farm', list: [{ n: 'cow', e: '🐮' }, { n: 'pig', e: '🐷' }, { n: 'sheep', e: '🐑' }, { n: 'horse', e: '🐴' }, { n: 'chicken', e: '🐔' }] },
+  { where: 'in the jungle', list: [{ n: 'monkey', e: '🐒' }, { n: 'tiger', e: '🐯' }, { n: 'parrot', e: '🦜' }, { n: 'gorilla', e: '🦍' }, { n: 'sloth', e: '🦥' }] },
+  { where: 'where it is icy and cold', list: [{ n: 'penguin', e: '🐧' }, { n: 'polar bear', e: '🐻‍❄️' }, { n: 'seal', e: '🦭' }] }
 ];
 function star(n, ro, ri) {
   const p = [];
@@ -402,6 +441,8 @@ const SHAPES = {
   hexagon: '<polygon points="' + hexagon() + '"/>'
 };
 const shapeSvg = (name, hex) => `<svg viewBox="0 0 100 100" aria-hidden="true" fill="${hex}">${SHAPES[name]}</svg>`;
+const SIDES = { triangle: 3, square: 4, rectangle: 4, diamond: 4, hexagon: 6 };
+const SHAPE_THINGS = [['circle', ['🍩', '⚽', '🍪', '🕐']], ['triangle', ['🍕', '⛺']], ['square', ['🎲', '🧇']], ['rectangle', ['🚪', '📱', '💵']], ['star', ['⭐', '🌟']]];
 const THINGS = [
   { e: '🍎', one: 'apple', many: 'apples' }, { e: '🍌', one: 'banana', many: 'bananas' }, { e: '⭐', one: 'star', many: 'stars' },
   { e: '🐟', one: 'fish', many: 'fish' }, { e: '🎈', one: 'balloon', many: 'balloons' }, { e: '🚗', one: 'car', many: 'cars' },
@@ -413,57 +454,301 @@ const WORDS = [
   ['M', 'moon', '🌙'], ['N', 'nose', '👃'], ['O', 'octopus', '🐙'], ['P', 'pig', '🐷'], ['Q', 'queen', '👸'], ['R', 'rabbit', '🐰'],
   ['S', 'sun', '☀️'], ['T', 'tree', '🌳'], ['U', 'umbrella', '☂️'], ['V', 'van', '🚐'], ['W', 'whale', '🐳'], ['Y', 'yo-yo', '🪀'], ['Z', 'zebra', '🦓']
 ];
+const RHYMES = [
+  [['cat', '🐱'], ['hat', '🎩'], ['bat', '🦇']], [['dog', '🐶'], ['frog', '🐸'], ['log', '🪵']], [['bee', '🐝'], ['tree', '🌳'], ['key', '🔑']],
+  [['car', '🚗'], ['star', '⭐'], ['jar', '🫙']], [['moon', '🌙'], ['spoon', '🥄']], [['fish', '🐟'], ['dish', '🍽️']],
+  [['bear', '🐻'], ['pear', '🍐'], ['chair', '🪑']], [['goat', '🐐'], ['boat', '⛵'], ['coat', '🧥']], [['mouse', '🐭'], ['house', '🏠']],
+  [['sock', '🧦'], ['clock', '🕰️'], ['rock', '🪨']], [['snake', '🐍'], ['cake', '🎂']], [['bug', '🐛'], ['mug', '☕']]
+];
+const SHORT_WORDS = [['CAT', '🐱'], ['DOG', '🐶'], ['SUN', '☀️'], ['PIG', '🐷'], ['BUS', '🚌'], ['BED', '🛏️'], ['HAT', '🎩'], ['CUP', '🥤'], ['BUG', '🐛'], ['FOX', '🦊'], ['BOX', '📦'], ['HEN', '🐔'], ['MAP', '🗺️'], ['VAN', '🚐'], ['NUT', '🥜']];
+const LONG_WORDS = [['FROG', '🐸'], ['DUCK', '🦆'], ['FISH', '🐟'], ['STAR', '⭐'], ['TREE', '🌳'], ['CAKE', '🎂'], ['BOAT', '⛵'], ['MOON', '🌙'], ['BEAR', '🐻'], ['SHIP', '🚢'], ['SOCK', '🧦'], ['KITE', '🪁'], ['BIKE', '🚲'], ['LION', '🦁'], ['BOOK', '📖']];
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const MIRROR = { b: ['d', 'p', 'q'], d: ['b', 'p', 'q'], p: ['q', 'b', 'd'], q: ['p', 'b', 'd'], m: ['n', 'w', 'u'], n: ['m', 'u', 'h'], u: ['n', 'v', 'w'], w: ['m', 'v', 'u'] };
+
+/* ---------- how a choice or a question picture looks: shared by the screen and the printed page ---------- */
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const P_ = {
+  color: c => ({ t: 'color', hex: c.hex }),
+  emoji: (e, s) => ({ t: 'emoji', e, s }),
+  shape: (name, hex) => ({ t: 'shape', name, hex }),
+  size: (e, scale) => ({ t: 'size', e, scale }),
+  group: (e, n) => ({ t: 'group', e, n }),
+  text: s => ({ t: 'text', s: String(s) })
+};
+function choiceHtml(p) {
+  if (p.t === 'color') return `<span class="blob" style="background:${p.hex}"></span>`;
+  if (p.t === 'emoji') return p.s ? `<span class="cemo">${p.e}<small>${esc(p.s)}</small></span>` : p.e;
+  if (p.t === 'shape') return shapeSvg(p.name, p.hex);
+  if (p.t === 'size') return `<span style="font-size:${p.scale}em">${p.e}</span>`;
+  if (p.t === 'group') return `<span class="cgroup${p.n > 6 ? ' many' : ''}">${Array(p.n).fill(p.e).join('')}</span>`;
+  return `<span class="ctext${p.s.length > 2 ? ' long' : ''}">${esc(p.s)}</span>`;
+}
+function showHtml(sh) {
+  if (!sh) return '';
+  if (sh.t === 'count') return Array(sh.n).fill(sh.e).join(' ');
+  if (sh.t === 'math') {
+    const side = v => sh.e ? `<span>${Array(v).fill(sh.e).join('')}</span>` : `<span class="bignum">${v}</span>`;
+    return side(sh.a) + `<span class="plus">${sh.op}</span>` + (sh.b == null ? '<span class="bignum">?</span>' : side(sh.b)) + (sh.eq != null ? `<span class="plus">=</span><span class="bignum">${sh.eq}</span>` : '');
+  }
+  if (sh.t === 'letter') return `<span class="bigletter">${esc(sh.s)}</span>`;
+  if (sh.t === 'emoji') return `<span class="bigemo">${sh.e}</span>` + (sh.s ? `<span class="showword">${esc(sh.s)}</span>` : '');
+  if (sh.t === 'text') return `<span class="showword">${esc(sh.s)}</span>`;
+  if (sh.t === 'mix') return `<span class="blob show-blob" style="background:${sh.a}"></span><span class="plus">+</span><span class="blob show-blob" style="background:${sh.b}"></span><span class="plus">=</span><span class="bignum">?</span>`;
+  if (sh.t === 'shape') return `<span class="showshape">${shapeSvg(sh.name, 'currentColor')}</span>`;
+  return '';
+}
+
+/* ---------- question builders ---------- */
+// One right answer plus n-1 others; each becomes { p, label, correct }.
+function choose(pool, target, n, look, label, key = x => x) {
+  return shuffle([target, ...others(pool, target, n - 1, key)]).map(x => ({ p: look(x), label: label(x), correct: x === target }));
+}
 const numberChoices = (target, lo, hi, n) => {
   const pool = []; for (let i = lo; i <= hi; i++) pool.push(i);
-  return shuffle([target, ...others(pool, target, n - 1)]).map(v => ({ html: String(v), label: String(v), correct: v === target }));
+  return choose(pool, target, n, P_.text, String);
+};
+const randColor = () => pick(COLORS).hex;
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+const findColor = (pool, n) => () => {
+  const t = pick(pool);
+  return { say: `Find ${t.n}!`, choices: choose(pool, t, n, P_.color, c => c.n), praise: `Yes! That is ${t.n}!`, sayParts: ['find', t.n], praiseParts: ['thats', t.n] };
+};
+const colorOf = n => () => {
+  const [name, e, col] = pick(COLOR_OF), t = colorNamed(col);
+  return { say: `What color is the ${name}?`, sh: { t: 'emoji', e }, choices: choose(COLORS, t, n, P_.color, c => c.n), praise: `Yes! The ${name} is ${col}!` };
+};
+const mixColors = n => () => {
+  const [a, b, out] = pick(MIXES), t = colorNamed(out);
+  const pool = COLORS.concat(out === 'gray' ? [t] : []);
+  return { say: `${a[0].toUpperCase() + a.slice(1)} and ${b} make what color?`, sh: { t: 'mix', a: colorNamed(a).hex, b: colorNamed(b).hex }, choices: choose(pool, t, n, P_.color, c => c.n), praise: `Yes! ${a} and ${b} make ${out}!` };
 };
 
+const BASIC_ANIMALS = ANIMALS.slice(0, 6);
+const findAnimal = (pool, n) => () => {
+  const t = pick(pool);
+  return { say: `Find the ${t.n}!`, choices: choose(pool, t, n, a => P_.emoji(a.e), a => a.n), praise: `The ${t.n} says ${t.s}!`, sayParts: ['find-the', t.n], praiseParts: [t.n, SOUND_KEY[t.n]] };
+};
+const whoSays = n => () => {
+  const t = pick(ANIMALS);
+  return { say: `Who says ${t.s}?`, choices: choose(ANIMALS, t, n, a => P_.emoji(a.e), a => a.n), praise: `The ${t.n} says ${t.s}!`, sayParts: ['who-says', SOUND_KEY[t.n]], praiseParts: [t.n, SOUND_KEY[t.n]] };
+};
+const babyOf = n => () => {
+  const pool = ANIMALS.filter(a => a.baby), t = pick(pool);
+  return { say: `A ${t.baby} is a baby what?`, choices: choose(pool, t, n, a => P_.emoji(a.e), a => a.n), praise: `Yes! A baby ${t.n} is called a ${t.baby}!` };
+};
+const babyName = n => () => {
+  const pool = ANIMALS.filter(a => a.baby), t = pick(pool);
+  return { say: `What is a baby ${t.n} called?`, sh: { t: 'emoji', e: t.e }, choices: choose(pool, t, n, a => P_.text(a.baby), a => a.baby), praise: `Yes! A baby ${t.n} is a ${t.baby}!` };
+};
+const whereLives = n => () => {
+  const home = pick(HOMES), t = pick(home.list);
+  const rest = HOMES.filter(x => x !== home).flatMap(x => x.list);
+  const opts = shuffle([t, ...shuffle(rest).slice(0, n - 1)]);
+  return { say: `Which one lives ${home.where}?`, choices: opts.map(a => ({ p: P_.emoji(a.e), label: a.n, correct: a === t })), praise: `Yes! The ${t.n} lives ${home.where}!` };
+};
+
+const BASIC_SHAPES = ['circle', 'square', 'triangle', 'star', 'heart'];
+const findShape = (pool, n) => () => {
+  const t = pick(pool);
+  return { say: `Find the ${t}!`, choices: choose(pool, t, n, s => P_.shape(s, randColor()), s => s), praise: `Great! That is a ${t}!`, sayParts: ['find-the', t], praiseParts: ['thats-a', t] };
+};
+const countSides = n => () => {
+  const t = pick(Object.keys(SIDES)), k = SIDES[t];
+  return { say: `How many sides does a ${t} have?`, sh: { t: 'shape', name: t }, choices: numberChoices(k, 3, 8, n), praise: `Yes! A ${t} has ${k} sides!` };
+};
+const shapeWithSides = n => () => {
+  const k = pick([3, 4, 6]), right = Object.keys(SIDES).filter(s => SIDES[s] === k), t = pick(right);
+  const wrong = shuffle(['circle', 'oval', 'heart', 'star', ...Object.keys(SIDES).filter(s => SIDES[s] !== k)]).slice(0, n - 1);
+  return { say: `Which shape has ${k} sides?`, choices: shuffle([t, ...wrong]).map(s => ({ p: P_.shape(s, randColor()), label: s, correct: s === t })), praise: `Yes! A ${t} has ${k} sides!` };
+};
+const shapeInLife = n => () => {
+  const [shape, things] = pick(SHAPE_THINGS), e = pick(things);
+  const wrong = shuffle(SHAPE_THINGS.filter(x => x[0] !== shape).map(x => pick(x[1]))).slice(0, n - 1);
+  return { say: `Which one is shaped like a ${shape}?`, choices: shuffle([e, ...wrong]).map(x => ({ p: P_.emoji(x), label: x, correct: x === e })), praise: `Yes! That one is shaped like a ${shape}!` };
+};
+
+const sizes = (count, ask) => () => {
+  const a = pick(ANIMALS), scales = [1.15, .85, .6, .38].slice(0, count === 2 ? 4 : count).filter((_, i) => count !== 2 || i === 0 || i === 3);
+  const target = ask === 'big' ? scales[0] : ask === 'little' ? scales[scales.length - 1] : scales[1];
+  const word = { big: count === 2 ? 'big' : 'biggest', little: count === 2 ? 'little' : 'smallest', middle: 'middle-sized' }[ask];
+  const parts = count === 2 ? { sayParts: [ask === 'big' ? 'find-the-big' : 'find-the-little', a.n], praiseParts: [ask === 'big' ? 'that-one-is-big' : 'that-one-is-little'] } : {};
+  return { say: `Find the ${word} ${a.n}!`, choices: shuffle(scales).map(s => ({ p: P_.size(a.e, s), label: s === target ? word : 'other', correct: s === target })), praise: `Yes, that one is the ${word}!`, ...parts };
+};
+const bigLittle = count => () => sizes(count, count === 3 && Math.random() < .34 ? 'middle' : (Math.random() < .5 ? 'big' : 'little'))();
+const moreFewer = (n, ask, max) => () => {
+  const t = pick(THINGS), counts = shuffle(range(1, max)).slice(0, n);
+  const target = ask === 'more' ? Math.max(...counts) : Math.min(...counts);
+  const most = n > 2 ? (ask === 'more' ? 'the most' : 'the fewest') : (ask === 'more' ? 'more' : 'fewer');
+  return { say: `Which one has ${most} ${t.many}?`, choices: counts.map(c => ({ p: P_.group(t.e, c), label: `${c} ${t.many}`, correct: c === target })), praise: `Yes! That one has ${ask === 'more' ? 'the most' : 'the fewest'}!` };
+};
+
+const howMany = (lo, hi, n) => () => {
+  const k = lo + rand(hi - lo + 1), t = pick(THINGS);
+  return { say: `How many ${k === 1 ? t.one : t.many}?`, sh: { t: 'count', n: k, e: t.e }, choices: numberChoices(k, Math.max(1, k - 4), Math.max(k + 4, n), n), praise: `${k}! ${k === 1 ? 'One ' + t.one : k + ' ' + t.many}!`, sayParts: ['how-many', t.many], praiseParts: [NUM_WORD[k], t.many] };
+};
+const afterBefore = (dir, hi, n) => () => {
+  const k = 2 + rand(hi - 2), ans = dir === 'after' ? k + 1 : k - 1;
+  return { say: `What number comes ${dir} ${k}?`, sh: { t: 'text', s: dir === 'after' ? `${k}, ?` : `?, ${k}` }, choices: numberChoices(ans, Math.max(1, ans - 3), ans + 3, n), praise: `Yes! ${ans} comes ${dir} ${k}!` };
+};
+const skipCount = n => () => {
+  const step = pick([2, 2, 5, 10]), start = step * (1 + rand(3)), seq = [start, start + step, start + 2 * step], ans = start + 3 * step;
+  const pool = [ans, ans + 1, ans - 1, ans + step, ans - step + 1, ans + 2].filter(v => v > 0);
+  return { say: `Count by ${step}s. What comes next?`, sh: { t: 'text', s: seq.join(', ') + ', ?' }, choices: choose([...new Set(pool)], ans, n, P_.text, String), praise: `Yes! ${seq.join(', ')}, ${ans}!` };
+};
+const biggestNumber = (hi, n) => () => {
+  const vals = shuffle(range(1, hi)).slice(0, n), t = Math.max(...vals);
+  return { say: 'Which is the biggest number?', choices: vals.map(v => ({ p: P_.text(v), label: String(v), correct: v === t })), praise: `Yes! ${t} is the biggest!` };
+};
+
+const findLetter = (pool, n, lower) => () => {
+  const t = pick(pool), show = lower ? t.toLowerCase() : t;
+  return { say: lower ? `Find the small letter ${t}!` : `Find the letter ${t}!`, choices: choose(pool, t, n, l => P_.text(lower ? l.toLowerCase() : l), l => lower ? l.toLowerCase() : l), praise: `Yes! That is ${lower ? 'small ' : ''}${show}!` };
+};
+const matchCase = n => () => {
+  const t = pick(LETTERS), lo = t.toLowerCase();
+  const trick = shuffle(MIRROR[lo] || []).map(x => x.toUpperCase());
+  const wrong = [...new Set([...trick, ...shuffle(LETTERS)])].filter(x => x !== t).slice(0, n - 1);
+  return { say: `Find the small letter that matches big ${t}.`, sh: { t: 'letter', s: t }, choices: shuffle([t, ...wrong]).map(l => ({ p: P_.text(l.toLowerCase()), label: l.toLowerCase(), correct: l === t })), praise: `Yes! Big ${t} and small ${lo} match!` };
+};
+const letterOrder = (dir, n) => () => {
+  const i = 1 + rand(24), k = LETTERS[i], ans = LETTERS[dir === 'after' ? i + 1 : i - 1];
+  const near = LETTERS.slice(Math.max(0, i - 3), i + 4).filter(x => x !== ans && x !== k);
+  return { say: `What letter comes ${dir} ${k}?`, sh: { t: 'text', s: dir === 'after' ? `${k}, ?` : `?, ${k}` }, choices: shuffle([ans, ...shuffle(near).slice(0, n - 1)]).map(l => ({ p: P_.text(l), label: l, correct: l === ans })), praise: `Yes! ${ans} comes ${dir} ${k}!` };
+};
+
+const startsWith = n => () => {
+  const t = pick(WORDS);
+  return { say: `Which one starts with ${t[0]}?`, sh: { t: 'letter', s: t[0] }, choices: choose(WORDS, t, n, w => P_.emoji(w[2], w[1]), w => w[1], w => w[0]), praise: `${t[1]} starts with ${t[0]}!` };
+};
+const rhymes = n => () => {
+  const set = pick(RHYMES), [w, mate] = shuffle(set).slice(0, 2);
+  const wrong = shuffle(RHYMES.filter(s => s !== set)).slice(0, n - 1).map(s => pick(s));
+  return { say: `Which one rhymes with ${w[0]}?`, sh: { t: 'emoji', e: w[1], s: w[0] }, choices: shuffle([mate, ...wrong]).map(x => ({ p: P_.emoji(x[1]), label: x[0], correct: x === mate })), praise: `Yes! ${w[0]} and ${mate[0]} rhyme!` };
+};
+const readWord = (list, n) => () => {
+  const t = pick(list);
+  return { say: 'Read the word. Find its picture!', sh: { t: 'text', s: t[0] }, choices: choose(list, t, n, x => P_.emoji(x[1]), x => x[0].toLowerCase()), praise: `Yes! That says ${t[0].toLowerCase()}!` };
+};
+const pickWord = (list, n) => () => {
+  const t = pick(list);
+  return { say: 'Which word matches the picture?', sh: { t: 'emoji', e: t[1] }, choices: choose(list, t, n, x => P_.text(x[0]), x => x[0].toLowerCase()), praise: `Yes! That word is ${t[0].toLowerCase()}!` };
+};
+
+const addPics = (maxSum, n) => () => {
+  const sum = 2 + rand(maxSum - 1), a = 1 + rand(sum - 1), b = sum - a, t = pick(THINGS);
+  return { say: `${a} plus ${b}. How many in all?`, sh: { t: 'math', a, b, op: '+', e: t.e }, choices: numberChoices(sum, Math.max(1, sum - 3), sum + 3, n), praise: `${a} plus ${b} makes ${sum}!` };
+};
+const takeAway = (max, n, pics) => () => {
+  const a = 2 + rand(max - 1), b = 1 + rand(a - 1), t = pick(THINGS), ans = a - b;
+  return { say: `${a} take away ${b}. How many are left?`, sh: { t: 'math', a, b, op: '−', e: pics ? t.e : null }, choices: numberChoices(ans, Math.max(0, ans - 3), ans + 3, n), praise: `${a} take away ${b} leaves ${ans}!` };
+};
+const addNums = (maxSum, n) => () => {
+  const sum = 2 + rand(maxSum - 1), a = 1 + rand(sum - 1), b = sum - a;
+  return { say: `What is ${a} plus ${b}?`, sh: { t: 'math', a, b, op: '+' }, choices: numberChoices(sum, Math.max(1, sum - 3), sum + 3, n), praise: `Yes! ${a} plus ${b} is ${sum}!` };
+};
+const missingAddend = (maxSum, n) => () => {
+  const sum = 3 + rand(maxSum - 2), a = 1 + rand(sum - 1), b = sum - a;
+  return { say: `${a} plus what makes ${sum}?`, sh: { t: 'math', a, b: null, op: '+', eq: sum }, choices: numberChoices(b, Math.max(1, b - 3), b + 3, n), praise: `Yes! ${a} plus ${b} makes ${sum}!` };
+};
+const addTens = n => () => {
+  const a = 10 * (1 + rand(5)), b = 10 * (1 + rand(4)), sum = a + b;
+  return { say: `What is ${a} plus ${b}?`, sh: { t: 'math', a, b, op: '+' }, choices: choose([sum, sum - 10, sum + 10, sum + 1, sum - 1].filter(v => v > 0), sum, n, P_.text, String), praise: `Yes! ${a} plus ${b} is ${sum}!` };
+};
+
+/* ---------- courses: each level is a little harder than the one before ---------- */
 const COURSES = [
-  { id: 'colors', name: 'Colors', icon: '🎨', tone: 'tomato', ages: [2, 3, 4, 5], q(age, n) {
-      const t = pick(COLORS);
-      return { say: `Find ${t.n}!`, choices: shuffle([t, ...others(COLORS, t, n - 1)]).map(c => ({ html: `<span class="blob" style="background:${c.hex}"></span>`, label: c.n, correct: c === t })), praise: `Yes! That is ${t.n}!`, sayParts: ['find', t.n], praiseParts: ['thats', t.n] };
-    } },
-  { id: 'animals', name: 'Animal Sounds', icon: '🐮', tone: 'leaf', ages: [2, 3, 4, 5], q(age, n) {
-      const t = pick(ANIMALS);
-      const say = age <= 2 ? `Find the ${t.n}!` : `Who says ${t.s}?`;
-      return { say, choices: shuffle([t, ...others(ANIMALS, t, n - 1)]).map(a => ({ html: a.e, label: a.n, correct: a === t })), praise: `The ${t.n} says ${t.s}!`, sayParts: age <= 2 ? ['find-the', t.n] : ['who-says', SOUND_KEY[t.n]], praiseParts: [t.n, SOUND_KEY[t.n]] };
-    } },
-  { id: 'shapes', name: 'Shapes', icon: '🔺', tone: 'sky', ages: [2, 3, 4, 5], q(age, n) {
-      const pool = age <= 2 ? ['circle', 'square', 'triangle', 'star', 'heart'] : Object.keys(SHAPES);
-      const t = pick(pool);
-      return { say: `Find the ${t}!`, choices: shuffle([t, ...others(pool, t, n - 1)]).map(s => ({ html: shapeSvg(s, pick(COLORS).hex), label: s, correct: s === t })), praise: `Great! That is a ${t}!`, sayParts: ['find-the', t], praiseParts: ['thats-a', t] };
-    } },
-  { id: 'bigsmall', name: 'Big & Little', icon: '🐘', tone: 'plum', ages: [2, 3], q(age, n) {
-      const a = pick(ANIMALS), big = Math.random() < .5;
-      const sizes = n >= 3 ? [1.1, .75, .4] : [1.1, .45];
-      const target = big ? sizes[0] : sizes[sizes.length - 1];
-      return { say: big ? `Find the big ${a.n}!` : `Find the little ${a.n}!`, choices: shuffle(sizes.slice(0, Math.min(n, sizes.length))).map(s => ({ html: `<span style="font-size:${s}em">${a.e}</span>`, label: s === target ? (big ? 'big' : 'little') : 'other', correct: s === target })), praise: big ? 'Yes, that one is big!' : 'Yes, that one is little!', sayParts: [big ? 'find-the-big' : 'find-the-little', a.n], praiseParts: [big ? 'that-one-is-big' : 'that-one-is-little'] };
-    } },
-  { id: 'counting', name: 'Counting', icon: '🍎', tone: 'sun', ages: [2, 3, 4, 5], q(age, n) {
-      const max = age <= 2 ? 3 : age === 3 ? 5 : 10, k = 1 + rand(max), t = pick(THINGS);
-      return { say: `How many ${k === 1 ? t.one : t.many}?`, show: Array(k).fill(t.e).join(' '), choices: numberChoices(k, 1, Math.max(max, n), n), praise: `${k}! ${k === 1 ? 'One ' + t.one : k + ' ' + t.many}!`, pr: { count: k, e: t.e }, sayParts: ['how-many', t.many], praiseParts: [NUM_WORD[k], t.many] };
-    } },
-  { id: 'letters', name: 'Letters', icon: '🔤', tone: 'sky', ages: [3, 4, 5], q(age, n) {
-      const t = pick(LETTERS);
-      return { say: `Find the letter ${t}!`, choices: shuffle([t, ...others(LETTERS, t, n - 1)]).map(l => ({ html: l, label: l, correct: l === t })), praise: `Yes! That is ${t}!` };
-    } },
-  { id: 'sounds', name: 'First Sounds', icon: '🐝', tone: 'leaf', ages: [4, 5], q(age, n) {
-      const t = pick(WORDS);
-      return { say: `Which one starts with ${t[0]}?`, show: `<span class="bigletter">${t[0]}</span>`, choices: shuffle([t, ...others(WORDS, t, n - 1, w => w[0])]).map(w => ({ html: w[2], label: w[1], correct: w === t })), praise: `${t[1]} starts with ${t[0]}!`, pr: { letter: t[0] } };
-    } },
-  { id: 'adding', name: 'Adding Up', icon: '➕', tone: 'tomato', ages: [4, 5], q(age, n) {
-      const a = 1 + rand(4), b = 1 + rand(3), t = pick(THINGS), sum = a + b;
-      return { say: `${a} plus ${b}. How many in all?`, show: `<span>${Array(a).fill(t.e).join('')}</span><span class="plus">+</span><span>${Array(b).fill(t.e).join('')}</span>`, choices: numberChoices(sum, 1, 9, n), praise: `${a} plus ${b} makes ${sum}!`, pr: { add: [a, b], e: t.e } };
-    } }
+  { id: 'colors', name: 'Colors', icon: '🎨', tone: 'tomato', ages: [2, 3, 4, 5], start: { 2: 1, 3: 2, 4: 3, 5: 4 }, levels: [
+    { label: 'Find 4 colors', q: findColor(COLORS.slice(0, 4), 2) },
+    { label: 'Find 8 colors', q: findColor(COLORS, 3) },
+    { label: 'Find colors, 4 choices', q: findColor(COLORS, 4) },
+    { label: 'What color is it?', q: colorOf(3) },
+    { label: 'What color is it? (harder)', q: colorOf(4) },
+    { label: 'Mixing colors', q: mixColors(3) },
+    { label: 'Mixing colors (harder)', q: mixColors(4) } ] },
+  { id: 'animals', name: 'Animals', icon: '🐮', tone: 'leaf', ages: [2, 3, 4, 5], start: { 2: 1, 3: 3, 4: 4, 5: 5 }, levels: [
+    { label: 'Find farm animals', q: findAnimal(BASIC_ANIMALS, 2) },
+    { label: 'Find 12 animals', q: findAnimal(ANIMALS, 3) },
+    { label: 'Who says it?', q: whoSays(3) },
+    { label: 'Who says it? (harder)', q: whoSays(4) },
+    { label: 'Baby animals', q: babyOf(4) },
+    { label: 'Where animals live', q: whereLives(4) },
+    { label: 'Baby animal names', q: babyName(4) } ] },
+  { id: 'shapes', name: 'Shapes', icon: '🔺', tone: 'sky', ages: [2, 3, 4, 5], start: { 2: 1, 3: 2, 4: 3, 5: 4 }, levels: [
+    { label: 'Find 5 shapes', q: findShape(BASIC_SHAPES, 2) },
+    { label: 'Find 5 shapes, 3 choices', q: findShape(BASIC_SHAPES, 3) },
+    { label: 'Find 9 shapes', q: findShape(Object.keys(SHAPES), 4) },
+    { label: 'Shapes all around us', q: shapeInLife(3) },
+    { label: 'Count the sides', q: countSides(3) },
+    { label: 'Which shape has these sides?', q: shapeWithSides(4) } ] },
+  { id: 'bigsmall', name: 'Big & Little', icon: '🐘', tone: 'plum', ages: [2, 3], start: { 2: 1, 3: 2, 4: 4, 5: 5 }, levels: [
+    { label: 'Big or little', q: bigLittle(2) },
+    { label: 'Biggest, smallest, middle', q: bigLittle(3) },
+    { label: 'Biggest or smallest of 4', q: bigLittle(4) },
+    { label: 'Which has more?', q: moreFewer(2, 'more', 6) },
+    { label: 'Which has fewer?', q: moreFewer(3, 'fewer', 8) },
+    { label: 'Which has the most?', q: moreFewer(4, 'more', 10) } ] },
+  { id: 'counting', name: 'Counting', icon: '🍎', tone: 'sun', ages: [2, 3, 4, 5], start: { 2: 1, 3: 2, 4: 3, 5: 4 }, levels: [
+    { label: 'Count to 3', q: howMany(1, 3, 2) },
+    { label: 'Count to 5', q: howMany(1, 5, 3) },
+    { label: 'Count to 10', q: howMany(1, 10, 4) },
+    { label: 'Count to 20', q: howMany(10, 20, 4) },
+    { label: 'What comes after?', q: afterBefore('after', 20, 4) },
+    { label: 'What comes before?', q: afterBefore('before', 20, 4) },
+    { label: 'Count by 2s, 5s and 10s', q: skipCount(4) },
+    { label: 'Biggest number to 100', q: biggestNumber(100, 4) } ] },
+  { id: 'letters', name: 'Letters', icon: '🔤', tone: 'sky', ages: [3, 4, 5], start: { 2: 1, 3: 1, 4: 2, 5: 3 }, unlock: { from: 'shapes', level: 4 }, levels: [
+    { label: 'Letters A to F', q: findLetter(LETTERS.slice(0, 6), 3) },
+    { label: 'All capital letters', q: findLetter(LETTERS, 4) },
+    { label: 'Small letters', q: findLetter(LETTERS, 4, true) },
+    { label: 'Match big and small', q: matchCase(4) },
+    { label: 'What letter comes after?', q: letterOrder('after', 4) },
+    { label: 'What letter comes before?', q: letterOrder('before', 4) } ] },
+  { id: 'sounds', name: 'Sounds & Reading', icon: '🐝', tone: 'leaf', ages: [4, 5], start: { 2: 1, 3: 1, 4: 1, 5: 2 }, unlock: { from: 'letters', level: 3 }, levels: [
+    { label: 'Starts with…', q: startsWith(3) },
+    { label: 'Starts with… (harder)', q: startsWith(4) },
+    { label: 'Rhyming words', q: rhymes(3) },
+    { label: 'Read 3-letter words', q: readWord(SHORT_WORDS, 3) },
+    { label: 'Pick the word', q: pickWord(SHORT_WORDS, 3) },
+    { label: 'Read 4-letter words', q: readWord(LONG_WORDS, 4) },
+    { label: 'Pick the word (harder)', q: pickWord(LONG_WORDS, 4) } ] },
+  { id: 'adding', name: 'Math', icon: '➕', tone: 'tomato', ages: [4, 5], start: { 2: 1, 3: 1, 4: 1, 5: 2 }, unlock: { from: 'counting', level: 4 }, levels: [
+    { label: 'Adding to 5 with pictures', q: addPics(5, 3) },
+    { label: 'Adding to 10 with pictures', q: addPics(10, 4) },
+    { label: 'Taking away with pictures', q: takeAway(8, 4, true) },
+    { label: 'Adding numbers to 10', q: addNums(10, 4) },
+    { label: 'Taking away numbers', q: takeAway(10, 4, false) },
+    { label: 'Adding to 20', q: addNums(20, 4) },
+    { label: 'Find the missing number', q: missingAddend(10, 4) },
+    { label: 'Adding tens', q: addTens(4) } ] }
 ];
 const COURSE = Object.fromEntries(COURSES.map(c => [c.id, c]));
-const choicesFor = age => (age <= 2 ? 2 : age === 3 ? 3 : 4);
 const ROUND = 5;
 const AVATARS = ['🦊', '🐻', '🐼', '🐸', '🦁', '🐯', '🐨', '🐵', '🐰', '🐙', '🦄', '🐢'];
 
+/* ---------- levels: per child, per course ---------- */
+const UP_AFTER = 2, DOWN_AFTER = 2;
+function levelOf(k, c) {
+  const p = (k.progress || {})[c.id];
+  return Math.max(1, Math.min(p && p.level ? p.level : (c.start[k.age] || 1), c.levels.length));
+}
+const levelInfo = (k, c) => { const n = levelOf(k, c); return { n, max: c.levels.length, label: c.levels[n - 1].label }; };
+const courseQ = (c, level) => c.levels[Math.max(1, Math.min(level, c.levels.length)) - 1].q();
+function availableCourses(k) {
+  return COURSES.filter(c => c.ages.includes(k.age) || (c.unlock && levelOf(k, COURSE[c.unlock.from]) >= c.unlock.level));
+}
+// After a round: 4-5 right on the first try twice in a row moves up; 0-2 twice in a row moves down.
+function nextProgress(k, c, score) {
+  const cur = (k.progress || {})[c.id] || {};
+  let level = levelOf(k, c), good = cur.good || 0, bad = cur.bad || 0, change = 0;
+  if (score >= 4) { good++; bad = 0; } else if (score <= 2) { bad++; good = 0; } else { good = 0; bad = 0; }
+  if (good >= UP_AFTER && level < c.levels.length) { level++; good = 0; change = 1; }
+  else if (bad >= DOWN_AFTER && level > 1) { level--; bad = 0; change = -1; }
+  return { p: { level, good, bad }, change };
+}
+
 /* ---------- state + storage ---------- */
-const S = { kids: [], feed: [], live: false, loading: true, readOnly: false, view: 'home', kidId: null, showAll: false, sheet: null, confirmRemove: false };
+const S = { showLevels: false, kids: [], feed: [], live: false, loading: true, readOnly: false, view: 'home', kidId: null, showAll: false, sheet: null, confirmRemove: false };
 let db = null, user = null, myId = null;
 let local = { kids: {}, feed: [] };
 const LS = 'little-sprouts-local';
@@ -562,6 +847,8 @@ async function fillFeed(ul) {
     let icon, text;
     if (f.kind === 'cheer') { icon = f.emoji || '👏'; text = [who ? (who === 'you' ? 'You' : who) : 'Someone', ' cheered for ', h('b', {}, k.name)]; }
     else if (f.kind === 'joined') { icon = k.avatar || '🌱'; text = [h('b', {}, k.name), ' joined the family room']; }
+    else if (f.kind === 'level') { icon = '🚀'; text = [h('b', {}, k.name), ' reached ', h('b', {}, `Level ${f.level}`), ' in ', h('b', {}, c ? c.name : 'a course'), c && c.levels[f.level - 1] ? `: ${c.levels[f.level - 1].label}` : '']; }
+    else if (f.kind === 'unlock') { icon = '🔓'; text = [h('b', {}, k.name), ' unlocked a new course: ', h('b', {}, c ? c.name : 'a course')]; }
     else { icon = '⭐'; text = [h('b', {}, k.name), ' earned a star in ', h('b', {}, c ? c.name : 'a lesson'), f.paper ? ' on paper' : f.score != null ? ` (${f.score}/${ROUND} first try)` : '']; }
     return h('li', {}, h('span', { class: 'fi', 'aria-hidden': 'true' }, icon),
       h('span', { class: 'ft' }, ...text, h('small', {}, ago(f.ts) + (who && f.kind !== 'cheer' ? ' · on ' + (who === 'you' ? 'your' : who + "'s") + ' phone' : ''))),
@@ -629,30 +916,45 @@ function voicePanel() {
 }
 
 function kidView(k) {
-  const recommended = COURSES.filter(c => c.ages.includes(k.age));
-  const rest = COURSES.filter(c => !c.ages.includes(k.age));
-  const tile = c => h('button', { class: 'course c-' + c.tone, onclick: () => startLesson(k.id, c.id) },
-    h('span', { class: 'ci', 'aria-hidden': 'true' }, c.icon), h('span', { class: 'cn' }, c.name),
-    h('span', { class: 'cs' }, '⭐ ' + ((k.stars || {})[c.id] || 0)));
+  const recommended = availableCourses(k);
+  const rest = COURSES.filter(c => !recommended.includes(c));
+  const tile = c => {
+    const lv = levelInfo(k, c), good = (((k.progress || {})[c.id]) || {}).good || 0;
+    return h('button', { class: 'course c-' + c.tone, onclick: () => startLesson(k.id, c.id), 'aria-label': `${c.name}, level ${lv.n} of ${lv.max}: ${lv.label}` },
+      h('span', { class: 'ci', 'aria-hidden': 'true' }, c.icon), h('span', { class: 'cn' }, c.name),
+      h('span', { class: 'cl' }, `Level ${lv.n} · ${lv.label}`),
+      h('span', { class: 'cs' }, h('span', {}, '⭐ ' + ((k.stars || {})[c.id] || 0)),
+        lv.n < lv.max ? h('span', { class: 'cup', title: 'Great rounds toward the next level' }, Array.from({ length: UP_AFTER }, (_, i) => h('i', { class: i < good ? 'on' : '' }))) : h('span', {}, 'Top level!')));
+  };
   const wrap = h('div', { style: 'display:flex;flex-direction:column;gap:20px' },
     h('div', { class: 'bar' }, h('button', { class: 'back', onclick: () => { S.view = 'home'; render(); } }, '← Family')),
     h('div', { class: 'kidhead' }, h('span', { class: 'ava', 'aria-hidden': 'true' }, k.avatar || '🌱'),
       h('div', {}, h('h2', {}, k.name), h('p', {}, `Age ${k.age} · ${totalStars(k)} stars so far`))),
     todayCard(k),
     h('section', {}, h('div', { class: 'sec-head' }, h('h2', {}, `Courses for age ${k.age}`), h('span', {}, `${ROUND} questions each`)),
-      h('div', { class: 'courses' }, recommended.map(tile))));
+      h('div', { class: 'courses' }, recommended.map(tile)),
+      h('p', { class: 'thint', style: 'margin:10px 0 0' }, 'Two great rounds in a row (4 or 5 right the first time) moves up a level. New courses unlock as skills grow.')));
   if (rest.length) {
     if (S.showAll) wrap.append(h('section', {}, h('div', { class: 'sec-head' }, h('h2', {}, 'More courses')), h('div', { class: 'courses' }, rest.map(tile))));
     else wrap.append(h('button', { class: 'more', onclick: () => { S.showAll = true; render(); } }, `Show ${rest.length} more courses`));
   }
   if (!S.readOnly) {
     const g = h('div', { class: 'grownup' }, h('span', {}, 'Grown-ups:'),
-      h('button', { class: 'link', style: 'color:var(--sky)', onclick: () => { S.sheet = { id: k.id, name: k.name, age: k.age, avatar: k.avatar }; render(); } }, 'Edit'));
+      h('button', { class: 'link', style: 'color:var(--sky)', onclick: () => { S.sheet = { id: k.id, name: k.name, age: k.age, avatar: k.avatar }; render(); } }, 'Edit'),
+      h('button', { class: 'link', style: 'color:var(--sky)', onclick: () => { S.showLevels = !S.showLevels; render(); } }, S.showLevels ? 'Hide levels' : 'Set levels'));
     if (S.confirmRemove) g.append(h('span', {}, `Remove ${k.name} and their stars?`),
       h('button', { class: 'danger', onclick: async () => { await store.removeKid(k.id); S.view = 'home'; S.confirmRemove = false; render(); } }, 'Remove'),
       h('button', { class: 'link', style: 'color:var(--muted)', onclick: () => { S.confirmRemove = false; render(); } }, 'Keep'));
     else g.append(h('button', { class: 'link', onclick: () => { S.confirmRemove = true; render(); } }, 'Remove'));
     wrap.append(g);
+    if (S.showLevels) {
+      const setLevel = (c, n) => store.updateKid(k.id, { progress: { ...(k.progress || {}), [c.id]: { level: n, good: 0, bad: 0 } } });
+      wrap.append(h('div', { class: 'levels' }, h('p', { class: 'thint', style: 'margin:0' }, `Move ${k.name} up if a course feels too easy, or down if it feels too hard.`),
+        COURSES.map(c => { const lv = levelInfo(k, c); return h('div', { class: 'lrow' },
+          h('span', { class: 'lname' }, c.icon + ' ' + c.name, h('small', {}, `Level ${lv.n} of ${lv.max}: ${lv.label}`)),
+          h('button', { class: 'lbtn', type: 'button', 'aria-label': `Lower ${c.name} level`, disabled: lv.n <= 1 || null, onclick: () => setLevel(c, lv.n - 1) }, '−'),
+          h('button', { class: 'lbtn', type: 'button', 'aria-label': `Raise ${c.name} level`, disabled: lv.n >= lv.max || null, onclick: () => setLevel(c, lv.n + 1) }, '+')); })));
+    }
   }
   return wrap;
 }
@@ -688,7 +990,7 @@ function renderSheet() {
 let L = null;
 function startLesson(kidId, courseId) {
   const k = kidById(kidId); if (!k) return;
-  L = { kidId, courseId, age: k.age, i: 0, firstTry: 0, missed: false, q: null, locked: false, done: false };
+  L = { kidId, courseId, age: k.age, level: levelOf(k, COURSE[courseId]), i: 0, firstTry: 0, missed: false, q: null, locked: false, done: false };
   if (!S.readOnly) store.updateKid(kidId, { playing: { course: courseId, ts: Date.now() } });
   unlockSound();
   nextQuestion(true);
@@ -700,7 +1002,7 @@ function endLesson() {
 }
 function nextQuestion(first) {
   const c = COURSE[L.courseId];
-  L.q = c.q(L.age, choicesFor(L.age)); L.missed = false; L.locked = false;
+  L.q = courseQ(c, L.level); L.missed = false; L.locked = false;
   drawLesson();
   const my = L, q = L.q;
   if (first && useMyVoice()) playClip('start').then(() => { if (L === my && L.q === q && !L.locked) sayLine(q.say, q.sayParts); });
@@ -717,14 +1019,17 @@ function drawLesson() {
       h('div', { class: 'bigstar', 'aria-hidden': 'true' }, '⭐'),
       h('h2', { class: 'prompt' }, `Great job, ${k ? k.name : 'friend'}!`),
       h('p', { style: 'margin:0;color:var(--muted);font-size:1.1rem' }, `You earned a star in ${c.name}.`),
+      L.change === 1 ? h('p', { class: 'levelup' }, `🚀 Level up! ${c.name} Level ${L.level}: ${c.levels[L.level - 1].label}`) : null,
+      L.change === -1 ? h('p', { class: 'thint', style: 'margin:0' }, `Let's practice ${c.levels[L.level - 1].label.toLowerCase()} a bit more.`) : null,
+      (L.unlocked || []).map(u => h('p', { class: 'levelup' }, `🔓 New course unlocked: ${u.icon} ${u.name}!`)),
       h('div', { class: 'actions', style: 'justify-content:center' },
         h('button', { class: 'btn ghost', onclick: endLesson }, 'All done'),
-        h('button', { class: 'btn', onclick: () => { L.i = 0; L.firstTry = 0; L.done = false; nextQuestion(); } }, 'Play again'))));
+        h('button', { class: 'btn', onclick: () => { L.i = 0; L.firstTry = 0; L.done = false; L.change = 0; L.unlocked = []; nextQuestion(); } }, 'Play again'))));
   } else {
     const n = L.q.choices.length;
-    stage = h('div', { class: 'stage' }, h('div', { class: 'prompt' }, L.q.say), L.q.show ? h('div', { class: 'show', html: L.q.show, 'aria-hidden': 'true' }) : null,
+    stage = h('div', { class: 'stage' }, h('div', { class: 'prompt' }, L.q.say), L.q.sh ? h('div', { class: 'show', html: showHtml(L.q.sh), 'aria-hidden': 'true' }) : null,
       h('div', { class: 'choices' + (n === 3 ? ' three' : '') }, L.q.choices.map(ch =>
-        h('button', { class: 'choice', 'aria-label': ch.label, html: ch.html, onclick: e => answer(ch, e.currentTarget) }))));
+        h('button', { class: 'choice c-' + ch.p.t, 'aria-label': ch.label, html: choiceHtml(ch.p), onclick: e => answer(ch, e.currentTarget) }))));
   }
   const el = h('div', { class: 'lesson', role: 'dialog', 'aria-label': c.name }, bar, stage);
   const old = document.querySelector('.lesson'); if (old) old.replaceWith(el); else document.body.append(el);
@@ -755,13 +1060,24 @@ function answer(ch, btn) {
   })();
 }
 async function finishRound() {
-  L.done = true; drawLesson(); burst(document.querySelector('.bigstar'), 14);
-  const k = kidById(L.kidId); chime(CHIME_DONE);
-  setTimeout(async () => { if (!(await playClip('star'))) speak(`Hooray${k ? ', ' + k.name : ''}! You earned a star! Great job!`); }, 700);
-  if (S.readOnly || !k) return;
-  const n = ((k.stars || {})[L.courseId] || 0) + 1;
-  await store.updateKid(L.kidId, { stars: { [L.courseId]: n } });
-  await store.addFeed({ kind: 'star', kidId: L.kidId, course: L.courseId, score: L.firstTry });
+  const k = kidById(L.kidId), c = COURSE[L.courseId];
+  if (k && !S.readOnly) {
+    const before = availableCourses(k);
+    const { p, change } = nextProgress(k, c, L.firstTry);
+    const after = availableCourses({ ...k, progress: { ...(k.progress || {}), [c.id]: p } });
+    L.change = change; L.level = p.level; L.unlocked = after.filter(x => !before.includes(x));
+    L.pending = { k, c, p, change };
+  }
+  L.done = true; drawLesson(); burst(document.querySelector('.bigstar'), L.change === 1 ? 24 : 14);
+  chime(CHIME_DONE);
+  setTimeout(async () => { if (!(await playClip('star'))) speak(`Hooray${k ? ', ' + k.name : ''}! You earned a star!${L && L.change === 1 ? ' Level up!' : ''}`); }, 700);
+  if (!L.pending) return;
+  const { k: kid, c: course, p, change } = L.pending, kidId = L.kidId, score = L.firstTry, unlocked = L.unlocked;
+  L.pending = null;
+  await store.updateKid(kidId, { stars: { [course.id]: ((kid.stars || {})[course.id] || 0) + 1 }, progress: { ...(kid.progress || {}), [course.id]: p } });
+  await store.addFeed({ kind: 'star', kidId, course: course.id, score });
+  if (change === 1) await store.addFeed({ kind: 'level', kidId, course: course.id, level: p.level });
+  for (const u of unlocked) await store.addFeed({ kind: 'unlock', kidId, course: u.id });
 }
 function burst(el, count) {
   if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -947,12 +1263,12 @@ let downloads = null;
 const PLAN_SIZE = 3;
 function planCourses(k, key) {
   const r = seeded('plan|' + key + '|' + k.id + '|' + k.age);
-  const pool = COURSES.filter(c => c.ages.includes(k.age)).slice();
+  const pool = availableCourses(k).slice();
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   return pool.slice(0, PLAN_SIZE);
 }
 function withSeed(str, fn) { const orig = Math.random; Math.random = seeded(str); try { return fn(); } finally { Math.random = orig; } }
-const paperQuestions = (k, course, key) => withSeed('paper|' + key + '|' + k.id + '|' + course.id, () => Array.from({ length: ROUND }, () => course.q(k.age, choicesFor(k.age))));
+const paperQuestions = (k, course, key) => withSeed('paper|' + key + '|' + k.id + '|' + course.id + '|' + levelOf(k, course), () => Array.from({ length: ROUND }, () => courseQ(course, levelOf(k, course))));
 
 /* ---------- drawing helpers shared by the printable pages ---------- */
 const PW = 1275, PH = 1650, PM = 75, P_INK = '#1D2B3A', P_MUTED = '#5B6B7C', P_LINE = '#C9D5E0';
@@ -976,7 +1292,12 @@ function newPage() {
     dot(x, y, r, fill) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = fill; c.fill(); c.lineWidth = 3; c.strokeStyle = P_INK; c.stroke(); },
     header(title, icon, right1, right2) {
       if (icon) P.emo(icon, PM + 34, 112, 60);
-      P.txt(title, PM + (icon ? 86 : 0), 128, 58, { font: DISP });
+      c.font = `700 26px ${BODYF}`; const w1 = c.measureText(right1).width;
+      c.font = `800 32px ${BODYF}`; const w2 = c.measureText(right2).width;
+      const room = PW - 2 * PM - (icon ? 86 : 0) - Math.max(w1, w2) - 30;
+      let size = 58; c.font = `800 ${size}px ${DISP}`;
+      while (size > 30 && c.measureText(title).width > room) { size -= 2; c.font = `800 ${size}px ${DISP}`; }
+      P.txt(title, PM + (icon ? 86 : 0), 128, size, { font: DISP });
       P.txt(right1, PW - PM, 100, 26, { align: 'right', color: P_MUTED, weight: 700 });
       P.txt(right2, PW - PM, 140, 32, { align: 'right' });
       c.fillStyle = P_LINE; c.fillRect(PM, 180, PW - 2 * PM, 3);
@@ -985,37 +1306,54 @@ function newPage() {
   return P;
 }
 
-/* one answer choice, drawn from the same question data the app uses */
-function drawChoice(P, courseId, ch, cx, cy, s) {
-  if (courseId === 'colors') { const col = COLORS.find(x => x.n === ch.label); P.dot(cx, cy, s * .36, col ? col.hex : '#ccc'); return; }
-  if (courseId === 'animals') { const a = ANIMALS.find(x => x.n === ch.label); P.emo(a ? a.e : '?', cx, cy, s * .7); return; }
-  if (courseId === 'shapes') { const m = /fill="(#[0-9A-Fa-f]+)"/.exec(ch.html); P.shp(ch.label, cx, cy, s * .72, { fill: m ? m[1] : null, lw: 5 }); return; }
-  if (courseId === 'bigsmall') { const m = /font-size:([\d.]+)em">(.+)<\/span>/.exec(ch.html); P.emo(m ? m[2] : '?', cx, cy, s * .62 * (m ? +m[1] : 1)); return; }
-  if (courseId === 'sounds') { const w = WORDS.find(x => x[1] === ch.label); P.emo(w ? w[2] : '?', cx, cy - s * .08, s * .55); P.txt(ch.label, cx, cy + s * .38, 22, { align: 'center', color: P_MUTED, weight: 700 }); return; }
-  P.txt(ch.label, cx, cy + s * .2, s * .55, { font: DISP, align: 'center' });
+/* one answer choice, drawn from the same description the app screen uses */
+function drawChoice(P, ch, cx, cy, s) {
+  const p = ch.p;
+  if (p.t === 'color') { P.dot(cx, cy, s * .36, p.hex); return; }
+  if (p.t === 'shape') { P.shp(p.name, cx, cy, s * .72, { fill: p.hex, lw: 5 }); return; }
+  if (p.t === 'size') { P.emo(p.e, cx, cy, s * .62 * p.scale); return; }
+  if (p.t === 'emoji') { if (p.s) { P.emo(p.e, cx, cy - s * .08, s * .55); P.txt(p.s, cx, cy + s * .38, 22, { align: 'center', color: P_MUTED, weight: 700 }); } else P.emo(p.e, cx, cy, s * .7); return; }
+  if (p.t === 'group') {
+    const per = p.n > 4 ? Math.ceil(Math.sqrt(p.n)) : p.n, rows = Math.ceil(p.n / per), e = Math.min(s * .8 / per, s * .8 / rows);
+    for (let i = 0; i < p.n; i++) P.emo(p.e, cx - (per - 1) * e / 2 + (i % per) * e, cy - (rows - 1) * e / 2 + Math.floor(i / per) * e, e * .9);
+    return;
+  }
+  const size = Math.min(s * .55, s * 1.5 / Math.max(1, p.s.length));
+  P.txt(p.s, cx, cy + size * .36, size, { font: DISP, align: 'center' });
 }
-/* the picture a question asks about (counting, adding, first sounds) */
-function drawShow(P, q, x, y, w, h) {
-  const pr = q.pr || {};
-  if (pr.count) {
-    const n = pr.count, perRow = n > 5 ? Math.ceil(n / 2) : n, rows = Math.ceil(n / perRow);
+/* the picture a question asks about */
+function drawShow(P, sh, x, y, w, h) {
+  if (sh.t === 'count') {
+    const n = sh.n, perRow = n > 10 ? Math.ceil(n / 3) : n > 5 ? Math.ceil(n / 2) : n, rows = Math.ceil(n / perRow);
     const size = Math.min(70, h / rows - 6, w / perRow - 6);
-    for (let i = 0; i < n; i++) P.emo(pr.e, x + (w - perRow * (size + 6)) / 2 + (i % perRow + .5) * (size + 6), y + (Math.floor(i / perRow) + .5) * (h / rows), size);
-  } else if (pr.add) {
-    const s = Math.min(46, h * .5); let cx = x + 10;
-    const put = () => { P.emo(pr.e, cx + s / 2, y + h / 2, s); cx += s + 2; };
-    for (let i = 0; i < pr.add[0]; i++) put();
-    P.txt('+', cx + 18, y + h / 2 + 18, 50, { font: DISP, align: 'center' }); cx += 38;
-    for (let i = 0; i < pr.add[1]; i++) put();
-  } else if (pr.letter) {
-    P.txt(pr.letter, x + w / 2, y + h / 2 + h * .32, h * .9, { font: DISP, align: 'center', color: '#2B7FD4' });
+    for (let i = 0; i < n; i++) P.emo(sh.e, x + (w - perRow * (size + 6)) / 2 + (i % perRow + .5) * (size + 6), y + (Math.floor(i / perRow) + .5) * (h / rows), size);
+  } else if (sh.t === 'math') {
+    const items = sh.e ? sh.a + (sh.b || 0) : 0, s = sh.e ? Math.min(46, h * .5, (w - 60) / Math.max(1, items)) : 0;
+    let cx = x + 10;
+    const num = v => { P.txt(String(v), cx + 30, y + h / 2 + 22, 64, { font: DISP, align: 'center' }); cx += 64; };
+    const side = v => { if (v == null) return num('?'); if (!sh.e) return num(v); for (let i = 0; i < v; i++) { P.emo(sh.e, cx + s / 2, y + h / 2, s); cx += s + 2; } };
+    side(sh.a); P.txt(sh.op, cx + 18, y + h / 2 + 18, 50, { font: DISP, align: 'center' }); cx += 38; side(sh.b);
+    if (sh.eq != null) { P.txt('=', cx + 18, y + h / 2 + 18, 50, { font: DISP, align: 'center' }); cx += 38; num(sh.eq); }
+  } else if (sh.t === 'letter') {
+    P.txt(sh.s, x + w / 2, y + h / 2 + h * .32, h * .9, { font: DISP, align: 'center', color: '#2B7FD4' });
+  } else if (sh.t === 'emoji') {
+    P.emo(sh.e, x + w / 2, y + h / 2 - (sh.s ? 14 : 0), Math.min(h * .8, 110));
+    if (sh.s) P.txt(sh.s, x + w / 2, y + h - 2, 26, { align: 'center', color: P_MUTED, weight: 700 });
+  } else if (sh.t === 'text') {
+    P.txt(sh.s, x + w / 2, y + h / 2 + 24, Math.min(68, w * 1.6 / Math.max(1, sh.s.length)), { font: DISP, align: 'center' });
+  } else if (sh.t === 'mix') {
+    P.dot(x + 60, y + h / 2, 40, sh.a); P.txt('+', x + 130, y + h / 2 + 18, 50, { font: DISP, align: 'center' });
+    P.dot(x + 200, y + h / 2, 40, sh.b); P.txt('= ?', x + 300, y + h / 2 + 18, 50, { font: DISP, align: 'center' });
+  } else if (sh.t === 'shape') {
+    P.shp(sh.name, x + w / 2, y + h / 2, Math.min(h, 130), { lw: 5 });
   }
 }
 
 async function drawLessonPage(k, key, course, idx, total) {
   await loadPrintFonts();
   const P = newPage(), { c } = P, qs = paperQuestions(k, course, key);
-  P.header(course.name, course.icon, `Lesson ${idx} of ${total} · ${prettyDate(key)}`, `${k.name} · Age ${k.age}`);
+  const lv = levelInfo(k, course);
+  P.header(course.name, course.icon, `Lesson ${idx} of ${total} · Level ${lv.n}: ${lv.label}`, `${k.name} · ${prettyDate(key)}`);
   P.txt('Read each question out loud. Your child points to the answer or circles it.', PM, 228, 26, { color: P_MUTED, weight: 700 });
   const top = 258, bottom = PH - PM - 46, gap = 18, rowH = (bottom - top - gap * (ROUND - 1)) / ROUND, keys = [];
   qs.forEach((q, i) => {
@@ -1026,13 +1364,13 @@ async function drawLessonPage(k, key, course, idx, total) {
     P.txt(q.say, PM + 80, y + 56, 36, { font: DISP });
     const aTop = y + 76, aH = rowH - 90;
     let rx = PM + 30, rw = PW - 2 * PM - 60;
-    if (q.pr) { drawShow(P, q, rx, aTop, 400, aH); rx += 430; rw -= 430; }
+    if (q.sh) { drawShow(P, q.sh, rx, aTop, 400, aH); rx += 430; rw -= 430; }
     const n = q.choices.length, s = Math.min(aH, (rw - (n - 1) * 22) / n), x0 = rx + (rw - (n * s + (n - 1) * 22)) / 2;
     q.choices.forEach((ch, j) => {
       const bx = x0 + j * (s + 22);
       P.rr(bx, aTop, s, s, 20); c.lineWidth = 2; c.strokeStyle = P_LINE; c.stroke();
       P.txt('ABCD'[j], bx + 14, aTop + 26, 18, { color: P_MUTED });
-      drawChoice(P, course.id, ch, bx + s / 2, aTop + s / 2, s);
+      drawChoice(P, ch, bx + s / 2, aTop + s / 2, s);
       if (ch.correct) keys.push(`${i + 1}: ${'ABCD'[j]}`);
     });
   });
@@ -1045,7 +1383,7 @@ async function drawPlanPage(k, key, courses) {
   const P = newPage(), { c } = P, plan = dayPlan(k, key);
   P.header("Today's Plan", '🌱', prettyDate(key), `${k.name} · Age ${k.age}`);
   P.txt('Do these together today, in any order. Tick each box when you finish.', PM, 228, 26, { color: P_MUTED, weight: 700 });
-  const rows = [...courses.map((co, i) => ({ icon: co.icon, name: co.name, sub: `${ROUND} questions · about 5 minutes · page ${i + 2}` })),
+  const rows = [...courses.map((co, i) => ({ icon: co.icon, name: co.name, sub: `Level ${levelOf(k, co)}: ${co.levels[levelOf(k, co) - 1].label} · page ${i + 2}` })),
     { icon: '✏️', name: 'Practice sheet', sub: `Color, count and circle · page ${courses.length + 2}` }];
   rows.forEach((r, i) => {
     const y = 262 + i * 168;
@@ -1080,8 +1418,9 @@ async function drawPlanPage(k, key, courses) {
 }
 
 const packCache = new Map();
+const packKey = k => [todayKey(), k.id, k.age, k.name, COURSES.map(c => levelOf(k, c)).join('.')].join('|');
 function packPages(k) {
-  const key = todayKey(), id = key + k.id + k.age + k.name;
+  const key = todayKey(), id = packKey(k);
   if (!packCache.has(id)) packCache.set(id, (async () => {
     const courses = planCourses(k, key), pages = [await drawPlanPage(k, key, courses)];
     for (let i = 0; i < courses.length; i++) pages.push(await drawLessonPage(k, key, courses[i], i + 1, courses.length));
@@ -1124,7 +1463,7 @@ function todayCard(k) {
   ];
   const steps = h('ol', { class: 'plan' }, courses.map(co => h('li', { class: 'pstep' + (done[co.id] ? ' pdone' : '') },
     h('span', { class: 'pico', 'aria-hidden': 'true' }, co.icon),
-    h('span', { class: 'pname' }, co.name, h('small', {}, done[co.id] ? 'Done on paper ⭐' : `${ROUND} questions`)),
+    h('span', { class: 'pname' }, co.name, h('small', {}, done[co.id] ? 'Done on paper ⭐' : `Level ${levelOf(k, co)} · ${co.levels[levelOf(k, co) - 1].label}`)),
     h('button', { class: 'pplay', type: 'button', onclick: () => startLesson(k.id, co.id) }, '▶ Play'),
     S.readOnly || done[co.id] ? null : h('button', { class: 'ppaper', type: 'button', onclick: e => { e.currentTarget.disabled = true; paperDone(k, co); } }, 'Did it on paper'))),
     h('li', { class: 'pstep' }, h('span', { class: 'pico', 'aria-hidden': 'true' }, '✏️'), h('span', { class: 'pname' }, 'Practice sheet', h('small', {}, 'Printed page only'))));

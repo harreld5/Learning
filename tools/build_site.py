@@ -123,7 +123,7 @@ const downloads = { save: ({ filename, data }) => saveFile(data, filename) };
 // The PDF is built ahead of time, so tapping Print opens the share sheet right away (phones only allow it straight after a tap).
 const pdfCache = new Map();
 function packPdf(k) {
-  const id = todayKey() + k.id + k.age + k.name;
+  const id = packKey(k);
   if (!pdfCache.has(id)) {
     const entry = { blob: null };
     entry.promise = packPages(k).then(pages => {
@@ -221,7 +221,7 @@ s = s[:start] + r"""async function connect() {
   } catch (e) { S.live = false; S.loading = false; render(); }
 }
 """ + s[end:]
-rep("const S = { kids: [], feed: [], live: false, loading: true,", "const S = { kids: [], feed: [], live: false, loading: true, needFamily: false,")
+rep("const S = { showLevels: false, kids: [], feed: [], live: false, loading: true,", "const S = { showLevels: false, kids: [], feed: [], live: false, loading: true, needFamily: false,")
 
 for bad in ('window.claude', 'claude.use'):
     if bad in s: sys.exit('leftover platform reference: ' + bad)
