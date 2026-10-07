@@ -155,6 +155,21 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--sky); outli
 .wyes, .wno { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 1.1rem; font-weight: 800; }
 .wyes[aria-pressed="true"] { background: var(--good); color: #fff; border-color: var(--good); }
 .wno[aria-pressed="true"] { background: var(--tomato); color: #fff; border-color: var(--tomato); }
+.recpanel .rtabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.rtabs button { flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: 99px; padding: 7px 12px; font-weight: 800; font-size: .85rem; white-space: nowrap; }
+.rtabs button[aria-selected="true"] { background: var(--sky); border-color: var(--sky); color: #fff; }
+.rcount { margin: 0; font-weight: 800; color: var(--muted); font-size: .85rem; }
+.rlist { display: flex; flex-direction: column; gap: 8px; }
+.rrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 14px; background: var(--bg); }
+.rrow.active { box-shadow: 0 0 0 2px var(--sky); }
+.rtext { flex: 1; min-width: 140px; font-weight: 800; font-size: 1.05rem; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.rbtns { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.recbtn { border: 0; border-radius: 99px; padding: 9px 14px; font-weight: 800; background: var(--tomato); color: #fff; }
+.recbtn.live { animation: pulse 1s infinite; }
+.recbtn.keep { background: var(--good); }
+@keyframes pulse { 50% { opacity: .6; } }
+.wplay.small { flex: none; padding: 8px 12px; }
+.rerr { margin: 0; width: 100%; color: var(--tomato); font-weight: 700; font-size: .9rem; }
 .field select { font: inherit; font-size: 1rem; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--bg); color: var(--ink); max-width: 100%; }
 .link { border: 0; background: none; color: var(--tomato); font-weight: 800; padding: 4px 0; }
 .danger { border: 0; background: var(--tomato); color: #fff; border-radius: 99px; padding: 6px 14px; font-weight: 800; }
@@ -328,13 +343,12 @@ const CLIP_SETS = {
   start: ['lets-learn']
 };
 let lastClip = '', clipDone = null, seqToken = 0;
-const useMyVoice = () => voicePref.mine !== false && Object.keys(CLIPS).length > 0;
 const player = new Audio();
 player.preload = 'auto'; player.setAttribute('playsinline', '');
 function haltPlayer() { try { player.pause(); } catch (e) {} if (clipDone) { clipDone(false); clipDone = null; } }
 function stopClip() { seqToken++; haltPlayer(); }
 // Starts one recording immediately (so a tap counts); resolves true when it finished, false if the phone refused it.
-function playData(b64) {
+function playData(b64, mime = 'audio/mpeg') {
   haltPlayer(); try { if (Date.now() - unlockedAt > 1500) speechSynthesis.cancel(); } catch (e) {}
   return new Promise(resolve => {
     let settled = false;
@@ -342,46 +356,150 @@ function playData(b64) {
     clipDone = fin;
     player.onended = () => fin(true);
     player.onerror = () => { lastAudioError = 'This phone could not play the recording.'; fin(false); };
-    player.src = 'data:audio/mpeg;base64,' + b64;
+    player.src = 'data:' + mime + ';base64,' + b64;
     let p; try { p = player.play(); } catch (e) { lastAudioError = e.name || 'blocked'; return fin(false); }
     if (p && p.catch) p.catch(e => { lastAudioError = (e && e.name) || 'blocked'; fin(false); });
-    setTimeout(() => fin(true), 6000);
+    setTimeout(() => fin(true), 8000);
   });
 }
-function playClip(set) {
-  if (!useMyVoice()) return Promise.resolve(false);
-  const pool = CLIP_SETS[set].filter(n => CLIPS[n]), fresh = pool.filter(n => n !== lastClip);
-  if (!pool.length) return Promise.resolve(false);
-  const name = pick(fresh.length ? fresh : pool); lastClip = name;
-  stopClip();
-  return playData(CLIPS[name]);
-}
 
-/* ---------- Mommy's lesson words: sentences built from recorded words ---------- */
+/* ---------- your recorded voice: new recordings (shared through the family database) and the first recordings ---------- */
 const MY_WORDS = window.SPROUT_WORDS || {};
 const WORD_LIST = (window.SPROUT_WORDS_LIST || []).filter(w => MY_WORDS[w.key]);
 const WORD_AUTO = new Set(WORD_LIST.filter(w => w.auto).map(w => w.key));
 let wordReview = { approve: {}, reject: {} };
 const REVIEW_KEY = 'little-sprouts-words';
 try { const v = JSON.parse(localStorage.getItem(REVIEW_KEY) || 'null'); if (v) wordReview = { approve: v.approve || {}, reject: v.reject || {} }; } catch (e) {}
-const wordOk = k => !!MY_WORDS[k] && !wordReview.reject[k] && (WORD_AUTO.has(k) || !!wordReview.approve[k]);
+let recIndex = {};                 // key -> { ts, byName } for every recording the family has made
+const recCache = {};               // key -> { ts, b64 } once downloaded
+const recLoading = {};
+const embeddedOk = k => !!MY_WORDS[k] && !wordReview.reject[k] && (WORD_AUTO.has(k) || !!wordReview.approve[k]);
+const hasVoice = k => !!k && (!!recIndex[k] || embeddedOk(k));
+const useMyVoice = () => voicePref.mine !== false && (Object.keys(CLIPS).length > 0 || Object.keys(recIndex).length > 0);
+function loadRec(k) {
+  const want = recIndex[k] && recIndex[k].ts;
+  if (!want) return Promise.resolve(null);
+  if (recCache[k] && recCache[k].ts === want) return Promise.resolve(recCache[k]);
+  if (!recLoading[k] || recLoading[k].ts !== want) {
+    recLoading[k] = { ts: want, p: db.doc('recordings/' + k).get().then(sn => {
+      const d = sn.exists ? sn.data() : null;
+      if (d && d.wav) recCache[k] = { ts: d.ts || want, b64: d.wav };
+      return recCache[k] || null;
+    }).catch(() => null) };
+  }
+  return recLoading[k].p;
+}
+const ensureRecs = keys => Promise.all([...new Set(keys.filter(k => k && recIndex[k]))].map(loadRec));
+function sourceOf(k) {
+  if (recIndex[k]) { const c = recCache[k]; return c && c.ts === recIndex[k].ts ? { b64: c.b64, mime: 'audio/wav' } : null; }
+  return embeddedOk(k) ? { b64: MY_WORDS[k], mime: 'audio/mpeg' } : null;
+}
 async function playWords(keys) {
   const my = ++seqToken;
   for (const k of keys) {
     if (my !== seqToken) return false;
-    if (!(await playData(MY_WORDS[k]))) return false;
+    const src = sourceOf(k);
+    if (!src || !(await playData(src.b64, src.mime))) return false;
   }
   return my === seqToken;
 }
-// Reads a lesson line in Mommy's voice when every word of it is recorded and approved; otherwise the phone voice reads it.
-function sayLine(text, parts) {
-  if (useMyVoice() && parts && parts.length && parts.every(wordOk)) return playWords(parts);
+// Reads a lesson line in your voice when every piece is recorded; otherwise the phone voice reads it.
+async function sayLine(text, parts) {
+  if (useMyVoice() && parts && parts.length && parts.every(hasVoice)) {
+    const my = seqToken;
+    await Promise.race([ensureRecs(parts), wait(1500)]);
+    if (my === seqToken && parts.every(k => sourceOf(k))) return playWords(parts);
+  }
   return speak(text);
+}
+function playClip(set) {
+  if (!useMyVoice()) return Promise.resolve(false);
+  const pool = CLIP_SETS[set].filter(n => CLIPS[n] || recIndex['cheer-' + n]), fresh = pool.filter(n => n !== lastClip);
+  if (!pool.length) return Promise.resolve(false);
+  const name = pick(fresh.length ? fresh : pool); lastClip = name;
+  stopClip();
+  const rec = sourceOf('cheer-' + name);
+  if (rec) return playData(rec.b64, rec.mime);
+  if (recIndex['cheer-' + name]) loadRec('cheer-' + name);
+  return CLIPS[name] ? playData(CLIPS[name]) : Promise.resolve(false);
 }
 async function saveReview() {
   if (S.live && db) { try { await db.doc('settings/voice').set({ approve: wordReview.approve, reject: wordReview.reject }); } catch (e) { onWriteError(e); } }
   else { try { localStorage.setItem(REVIEW_KEY, JSON.stringify(wordReview)); } catch (e) {} }
 }
+
+/* ---------- the recorder: capture, trim the silence, even out the volume, save a small WAV every phone can play ---------- */
+const canRecord = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+let micStream = null;
+async function startRecording(maxMs = 4000) {
+  if (!micStream || micStream.getTracks().every(t => t.readyState === 'ended')) {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  }
+  const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+  const rec = new MediaRecorder(micStream, type ? { mimeType: type } : undefined), chunks = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  const done = new Promise(res => { rec.onstop = () => res(new Blob(chunks, { type: rec.mimeType || type || 'audio/mp4' })); });
+  rec.start();
+  const timer = setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, maxMs);
+  return { stop: () => { clearTimeout(timer); if (rec.state === 'recording') rec.stop(); }, done };
+}
+async function cleanRecording(blob) {
+  const ctx = audioCtx(), raw = await blob.arrayBuffer();
+  const audio = await new Promise((res, rej) => ctx.decodeAudioData(raw, res, rej));
+  const RATE = 16000, n = Math.ceil(audio.duration * RATE);
+  let pcm;
+  try {
+    const off = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, n, RATE);
+    const src = off.createBufferSource(); src.buffer = audio; src.connect(off.destination); src.start();
+    pcm = (await off.startRendering()).getChannelData(0);
+  } catch (e) {   // fall back: simple pick-every-nth resample of the first channel
+    const d = audio.getChannelData(0), step = audio.sampleRate / RATE; pcm = new Float32Array(n);
+    for (let i = 0; i < n; i++) pcm[i] = d[Math.min(d.length - 1, Math.floor(i * step))];
+  }
+  // find the spoken part: 20 ms windows louder than a threshold set from the loudest window
+  const W = RATE / 50, rms = [];
+  for (let i = 0; i < pcm.length; i += W) { let s = 0, m = Math.min(pcm.length, i + W); for (let j = i; j < m; j++) s += pcm[j] * pcm[j]; rms.push(Math.sqrt(s / Math.max(1, m - i))); }
+  const loud = Math.max(...rms), th = Math.max(0.012, loud * 0.12);
+  // skip the first 120 ms (the tap) when looking for the start
+  let a = rms.findIndex((v, i) => i >= 6 && v > th), b = rms.length - 1 - [...rms].reverse().findIndex(v => v > th);
+  if (a < 0 || loud < 0.01) throw new Error('quiet');
+  const s0 = Math.max(0, (a - 4) * W), s1 = Math.min(pcm.length, (b + 7) * W);
+  const out = pcm.slice(s0, s1);
+  let peak = 0; for (const v of out) peak = Math.max(peak, Math.abs(v));
+  const gain = Math.min(8, 0.89 / Math.max(peak, 1e-4)), fade = Math.min(out.length / 4, RATE * 0.015);
+  for (let i = 0; i < out.length; i++) out[i] *= gain * Math.min(1, i / fade, (out.length - 1 - i) / fade);
+  // 16-bit mono WAV
+  const buf = new ArrayBuffer(44 + out.length * 2), v = new DataView(buf), w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + out.length * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, RATE, true); v.setUint32(28, RATE * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, out.length * 2, true);
+  for (let i = 0; i < out.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, out[i])) * 0x7fff, true);
+  let bin = ''; const u8 = new Uint8Array(buf);
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return { b64: btoa(bin), seconds: out.length / RATE };
+}
+async function saveRecording(key, b64) {
+  const ts = Date.now(), byName = (typeof phoneName === 'function' && phoneName()) || null;
+  await db.doc('recordings/' + key).set({ wav: b64, ts, byName });
+  await db.doc('recIndex/' + key).set({ ts, byName });
+  recCache[key] = { ts, b64 }; recIndex = { ...recIndex, [key]: { ts, byName } };
+}
+async function deleteRecording(key) {
+  await db.doc('recIndex/' + key).delete(); await db.doc('recordings/' + key).delete();
+  const r = { ...recIndex }; delete r[key]; recIndex = r; delete recCache[key];
+}
+
+/* which pieces each course level uses, found by trying many questions (always the same answer) */
+const keysCache = {};
+function levelKeys(c, level) {
+  const id = c.id + '|' + level;
+  if (!keysCache[id]) keysCache[id] = withSeed('keys|' + id, () => {
+    const seen = new Set();
+    for (let i = 0; i < 160; i++) { const q = courseQ(c, level); [...(q.sayParts || []), ...(q.praiseParts || [])].forEach(k => { if (k) seen.add(k); }); }
+    return [...seen];
+  });
+  return keysCache[id];
+}
+const CHEER_KEYS = ['lets-learn', 'yay', 'great-job', 'you-got-it', 'woohoo', 'great-job-2', 'oops-try-again', 'almost-try-again', 'star'].map(n => 'cheer-' + n);
 let lastAudioError = '';
 
 /* ---------- unlock sound on the first taps (iPhone requires a tap before any sound) ---------- */
@@ -499,6 +617,34 @@ function showHtml(sh) {
 }
 
 /* ---------- question builders ---------- */
+// sayParts / praiseParts name the recorded pieces a line is built from (e.g. ['find', 'red']).
+// A line is read in your voice only when every piece is recorded; null pieces (like 45) always use the phone voice.
+const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const NUM_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+const numKey = n => (n >= 0 && n <= 20 ? NUM_WORDS[n] : null);
+const letterKey = l => 'letter-' + l.toLowerCase();
+const PHRASE_TEXT = {
+  'find': 'Find…', 'find-the': 'Find the…', 'thats': "That's…", 'thats-a': "That's a…", 'who-says': 'Who says…', 'how-many': 'How many…',
+  'find-the-big': 'Find the big…', 'find-the-little': 'Find the little…', 'that-one-is-big': 'That one is big!', 'that-one-is-little': 'That one is little!', 'says': '…says…',
+  'what-color-is-the': 'What color is the…', 'and': '…and…', 'make-what-color': '…make what color?', 'make': '…make…',
+  'is-a-baby-what': '…is a baby what?', 'a': 'A…', 'a-baby': 'A baby…', 'is-a': '…is a…', 'what-is-a-baby': 'What is a baby…', 'called': '…called?',
+  'which-one-lives': 'Which one lives…', 'lives': '…lives…', 'in-the-ocean': 'in the ocean', 'on-a-farm': 'on a farm', 'in-the-jungle': 'in the jungle', 'where-it-is-icy-and-cold': 'where it is icy and cold',
+  'how-many-sides-does-a': 'How many sides does a…', 'have': '…have?', 'which-shape-has': 'Which shape has…', 'sides': '…sides', 'which-one-is-shaped-like-a': 'Which one is shaped like a…', 'shaped-like-a': 'Shaped like a…',
+  'biggest': 'biggest', 'smallest': 'smallest', 'middle-sized': 'middle-sized', 'yes-thats-the': "Yes! That's the…",
+  'which-one-has': 'Which one has…', 'more': 'more', 'fewer': 'fewer', 'the-most': 'the most', 'the-fewest': 'the fewest', 'yes-that-one-has': 'Yes! That one has…',
+  'what-number-comes': 'What number comes…', 'after': 'after', 'before': 'before', 'comes': '…comes…', 'count-by': 'Count by…', 'twos': '2s', 'fives': '5s', 'tens': '10s', 'what-comes-next': 'What comes next?',
+  'which-is-the-biggest-number': 'Which is the biggest number?', 'is-the-biggest': '…is the biggest!',
+  'find-the-letter': 'Find the letter…', 'find-the-small-letter': 'Find the small letter…', 'yes-that-is': 'Yes! That is…', 'small': 'small', 'find-the-small-letter-that-matches-big': 'Find the small letter that matches big…', 'yes-they-match': 'Yes! They match!',
+  'what-letter-comes': 'What letter comes…', 'which-one-starts-with': 'Which one starts with…', 'starts-with': '…starts with…', 'which-one-rhymes-with': 'Which one rhymes with…', 'rhyme': '…rhyme!',
+  'read-the-word-find-its-picture': 'Read the word. Find its picture!', 'yes-that-says': 'Yes! That says…', 'which-word-matches-the-picture': 'Which word matches the picture?', 'yes-that-word-is': 'Yes! That word is…',
+  'plus': 'plus', 'how-many-in-all': 'How many in all?', 'makes': '…makes…', 'take-away': 'take away', 'how-many-are-left': 'How many are left?', 'leaves': '…leaves…', 'what-is': 'What is…', 'is': '…is…', 'plus-what-makes': '…plus what makes…',
+  moo: 'Moo!', woof: 'Woof woof!', meow: 'Meow!', quack: 'Quack quack!', oink: 'Oink oink!', baa: 'Baa!', roar: 'Roar!', ribbit: 'Ribbit!', neigh: 'Neigh!', cluck: 'Cluck cluck!', buzz: 'Buzz!', hoo: 'Hoo hoo!',
+  'cheer-yay': 'Yay!', 'cheer-great-job': 'Great job!', 'cheer-you-got-it': 'You got it!', 'cheer-woohoo': 'Woohoo!', 'cheer-great-job-2': 'Great job! (a second way)',
+  'cheer-oops-try-again': 'Oops! Try again.', 'cheer-almost-try-again': 'Almost! Try again.', 'cheer-star': "You earned a star! I'm so proud of you!", 'cheer-lets-learn': "Let's learn together!"
+};
+const wordText = k => PHRASE_TEXT[k] || (k.startsWith('letter-') ? k.slice(7).toUpperCase() : k.replace(/-/g, ' '));
+const cap = s => s[0].toUpperCase() + s.slice(1);
+
 // One right answer plus n-1 others; each becomes { p, label, correct }.
 function choose(pool, target, n, look, label, key = x => x) {
   return shuffle([target, ...others(pool, target, n - 1, key)]).map(x => ({ p: look(x), label: label(x), correct: x === target }));
@@ -516,12 +662,12 @@ const findColor = (pool, n) => () => {
 };
 const colorOf = n => () => {
   const [name, e, col] = pick(COLOR_OF), t = colorNamed(col);
-  return { say: `What color is the ${name}?`, sh: { t: 'emoji', e }, choices: choose(COLORS, t, n, P_.color, c => c.n), praise: `Yes! The ${name} is ${col}!` };
+  return { say: `What color is the ${name}?`, sh: { t: 'emoji', e }, choices: choose(COLORS, t, n, P_.color, c => c.n), praise: `Yes! The ${name} is ${col}!`, sayParts: ['what-color-is-the', slug(name)], praiseParts: ['thats', col] };
 };
 const mixColors = n => () => {
   const [a, b, out] = pick(MIXES), t = colorNamed(out);
   const pool = COLORS.concat(out === 'gray' ? [t] : []);
-  return { say: `${a[0].toUpperCase() + a.slice(1)} and ${b} make what color?`, sh: { t: 'mix', a: colorNamed(a).hex, b: colorNamed(b).hex }, choices: choose(pool, t, n, P_.color, c => c.n), praise: `Yes! ${a} and ${b} make ${out}!` };
+  return { say: `${cap(a)} and ${b} make what color?`, sh: { t: 'mix', a: colorNamed(a).hex, b: colorNamed(b).hex }, choices: choose(pool, t, n, P_.color, c => c.n), praise: `Yes! ${a} and ${b} make ${out}!`, sayParts: [a, 'and', b, 'make-what-color'], praiseParts: [a, 'and', b, 'make', out] };
 };
 
 const BASIC_ANIMALS = ANIMALS.slice(0, 6);
@@ -535,17 +681,17 @@ const whoSays = n => () => {
 };
 const babyOf = n => () => {
   const pool = ANIMALS.filter(a => a.baby), t = pick(pool);
-  return { say: `A ${t.baby} is a baby what?`, choices: choose(pool, t, n, a => P_.emoji(a.e), a => a.n), praise: `Yes! A baby ${t.n} is called a ${t.baby}!` };
+  return { say: `A ${t.baby} is a baby what?`, choices: choose(pool, t, n, a => P_.emoji(a.e), a => a.n), praise: `Yes! A baby ${t.n} is called a ${t.baby}!`, sayParts: ['a', t.baby, 'is-a-baby-what'], praiseParts: ['a-baby', t.n, 'is-a', t.baby] };
 };
 const babyName = n => () => {
   const pool = ANIMALS.filter(a => a.baby), t = pick(pool);
-  return { say: `What is a baby ${t.n} called?`, sh: { t: 'emoji', e: t.e }, choices: choose(pool, t, n, a => P_.text(a.baby), a => a.baby), praise: `Yes! A baby ${t.n} is a ${t.baby}!` };
+  return { say: `What is a baby ${t.n} called?`, sh: { t: 'emoji', e: t.e }, choices: choose(pool, t, n, a => P_.text(a.baby), a => a.baby), praise: `Yes! A baby ${t.n} is a ${t.baby}!`, sayParts: ['what-is-a-baby', t.n, 'called'], praiseParts: ['a-baby', t.n, 'is-a', t.baby] };
 };
 const whereLives = n => () => {
   const home = pick(HOMES), t = pick(home.list);
   const rest = HOMES.filter(x => x !== home).flatMap(x => x.list);
   const opts = shuffle([t, ...shuffle(rest).slice(0, n - 1)]);
-  return { say: `Which one lives ${home.where}?`, choices: opts.map(a => ({ p: P_.emoji(a.e), label: a.n, correct: a === t })), praise: `Yes! The ${t.n} lives ${home.where}!` };
+  return { say: `Which one lives ${home.where}?`, choices: opts.map(a => ({ p: P_.emoji(a.e), label: a.n, correct: a === t })), praise: `Yes! The ${t.n} lives ${home.where}!`, sayParts: ['which-one-lives', slug(home.where)], praiseParts: [slug(t.n), 'lives', slug(home.where)] };
 };
 
 const BASIC_SHAPES = ['circle', 'square', 'triangle', 'star', 'heart'];
@@ -555,24 +701,26 @@ const findShape = (pool, n) => () => {
 };
 const countSides = n => () => {
   const t = pick(Object.keys(SIDES)), k = SIDES[t];
-  return { say: `How many sides does a ${t} have?`, sh: { t: 'shape', name: t }, choices: numberChoices(k, 3, 8, n), praise: `Yes! A ${t} has ${k} sides!` };
+  return { say: `How many sides does a ${t} have?`, sh: { t: 'shape', name: t }, choices: numberChoices(k, 3, 8, n), praise: `Yes! A ${t} has ${k} sides!`, sayParts: ['how-many-sides-does-a', t, 'have'], praiseParts: [numKey(k), 'sides'] };
 };
 const shapeWithSides = n => () => {
   const k = pick([3, 4, 6]), right = Object.keys(SIDES).filter(s => SIDES[s] === k), t = pick(right);
   const wrong = shuffle(['circle', 'oval', 'heart', 'star', ...Object.keys(SIDES).filter(s => SIDES[s] !== k)]).slice(0, n - 1);
-  return { say: `Which shape has ${k} sides?`, choices: shuffle([t, ...wrong]).map(s => ({ p: P_.shape(s, randColor()), label: s, correct: s === t })), praise: `Yes! A ${t} has ${k} sides!` };
+  return { say: `Which shape has ${k} sides?`, choices: shuffle([t, ...wrong]).map(s => ({ p: P_.shape(s, randColor()), label: s, correct: s === t })), praise: `Yes! A ${t} has ${k} sides!`, sayParts: ['which-shape-has', numKey(k), 'sides'], praiseParts: ['thats-a', t] };
 };
 const shapeInLife = n => () => {
   const [shape, things] = pick(SHAPE_THINGS), e = pick(things);
   const wrong = shuffle(SHAPE_THINGS.filter(x => x[0] !== shape).map(x => pick(x[1]))).slice(0, n - 1);
-  return { say: `Which one is shaped like a ${shape}?`, choices: shuffle([e, ...wrong]).map(x => ({ p: P_.emoji(x), label: x, correct: x === e })), praise: `Yes! That one is shaped like a ${shape}!` };
+  return { say: `Which one is shaped like a ${shape}?`, choices: shuffle([e, ...wrong]).map(x => ({ p: P_.emoji(x), label: x, correct: x === e })), praise: `Yes! That one is shaped like a ${shape}!`, sayParts: ['which-one-is-shaped-like-a', shape], praiseParts: ['shaped-like-a', shape] };
 };
 
 const sizes = (count, ask) => () => {
   const a = pick(ANIMALS), scales = [1.15, .85, .6, .38].slice(0, count === 2 ? 4 : count).filter((_, i) => count !== 2 || i === 0 || i === 3);
   const target = ask === 'big' ? scales[0] : ask === 'little' ? scales[scales.length - 1] : scales[1];
   const word = { big: count === 2 ? 'big' : 'biggest', little: count === 2 ? 'little' : 'smallest', middle: 'middle-sized' }[ask];
-  const parts = count === 2 ? { sayParts: [ask === 'big' ? 'find-the-big' : 'find-the-little', a.n], praiseParts: [ask === 'big' ? 'that-one-is-big' : 'that-one-is-little'] } : {};
+  const parts = count === 2
+    ? { sayParts: [ask === 'big' ? 'find-the-big' : 'find-the-little', a.n], praiseParts: [ask === 'big' ? 'that-one-is-big' : 'that-one-is-little'] }
+    : { sayParts: ['find-the', word, a.n], praiseParts: ['yes-thats-the', word] };
   return { say: `Find the ${word} ${a.n}!`, choices: shuffle(scales).map(s => ({ p: P_.size(a.e, s), label: s === target ? word : 'other', correct: s === target })), praise: `Yes, that one is the ${word}!`, ...parts };
 };
 const bigLittle = count => () => sizes(count, count === 3 && Math.random() < .34 ? 'middle' : (Math.random() < .5 ? 'big' : 'little'))();
@@ -580,80 +728,80 @@ const moreFewer = (n, ask, max) => () => {
   const t = pick(THINGS), counts = shuffle(range(1, max)).slice(0, n);
   const target = ask === 'more' ? Math.max(...counts) : Math.min(...counts);
   const most = n > 2 ? (ask === 'more' ? 'the most' : 'the fewest') : (ask === 'more' ? 'more' : 'fewer');
-  return { say: `Which one has ${most} ${t.many}?`, choices: counts.map(c => ({ p: P_.group(t.e, c), label: `${c} ${t.many}`, correct: c === target })), praise: `Yes! That one has ${ask === 'more' ? 'the most' : 'the fewest'}!` };
+  return { say: `Which one has ${most} ${t.many}?`, choices: counts.map(c => ({ p: P_.group(t.e, c), label: `${c} ${t.many}`, correct: c === target })), praise: `Yes! That one has ${ask === 'more' ? 'the most' : 'the fewest'}!`, sayParts: ['which-one-has', slug(most), t.many], praiseParts: ['yes-that-one-has', ask === 'more' ? 'the-most' : 'the-fewest'] };
 };
 
 const howMany = (lo, hi, n) => () => {
   const k = lo + rand(hi - lo + 1), t = pick(THINGS);
-  return { say: `How many ${k === 1 ? t.one : t.many}?`, sh: { t: 'count', n: k, e: t.e }, choices: numberChoices(k, Math.max(1, k - 4), Math.max(k + 4, n), n), praise: `${k}! ${k === 1 ? 'One ' + t.one : k + ' ' + t.many}!`, sayParts: ['how-many', t.many], praiseParts: [NUM_WORD[k], t.many] };
+  return { say: `How many ${k === 1 ? t.one : t.many}?`, sh: { t: 'count', n: k, e: t.e }, choices: numberChoices(k, Math.max(1, k - 4), Math.max(k + 4, n), n), praise: `${k}! ${k === 1 ? 'One ' + t.one : k + ' ' + t.many}!`, sayParts: ['how-many', t.many], praiseParts: [numKey(k), t.many] };
 };
 const afterBefore = (dir, hi, n) => () => {
   const k = 2 + rand(hi - 2), ans = dir === 'after' ? k + 1 : k - 1;
-  return { say: `What number comes ${dir} ${k}?`, sh: { t: 'text', s: dir === 'after' ? `${k}, ?` : `?, ${k}` }, choices: numberChoices(ans, Math.max(1, ans - 3), ans + 3, n), praise: `Yes! ${ans} comes ${dir} ${k}!` };
+  return { say: `What number comes ${dir} ${k}?`, sh: { t: 'text', s: dir === 'after' ? `${k}, ?` : `?, ${k}` }, choices: numberChoices(ans, Math.max(1, ans - 3), ans + 3, n), praise: `Yes! ${ans} comes ${dir} ${k}!`, sayParts: ['what-number-comes', dir, numKey(k)], praiseParts: [numKey(ans), 'comes', dir, numKey(k)] };
 };
 const skipCount = n => () => {
   const step = pick([2, 2, 5, 10]), start = step * (1 + rand(3)), seq = [start, start + step, start + 2 * step], ans = start + 3 * step;
   const pool = [ans, ans + 1, ans - 1, ans + step, ans - step + 1, ans + 2].filter(v => v > 0);
-  return { say: `Count by ${step}s. What comes next?`, sh: { t: 'text', s: seq.join(', ') + ', ?' }, choices: choose([...new Set(pool)], ans, n, P_.text, String), praise: `Yes! ${seq.join(', ')}, ${ans}!` };
+  return { say: `Count by ${step}s. What comes next?`, sh: { t: 'text', s: seq.join(', ') + ', ?' }, choices: choose([...new Set(pool)], ans, n, P_.text, String), praise: `Yes! ${seq.join(', ')}, ${ans}!`, sayParts: ['count-by', { 2: 'twos', 5: 'fives', 10: 'tens' }[step], 'what-comes-next'], praiseParts: [...seq, ans].map(numKey) };
 };
 const biggestNumber = (hi, n) => () => {
   const vals = shuffle(range(1, hi)).slice(0, n), t = Math.max(...vals);
-  return { say: 'Which is the biggest number?', choices: vals.map(v => ({ p: P_.text(v), label: String(v), correct: v === t })), praise: `Yes! ${t} is the biggest!` };
+  return { say: 'Which is the biggest number?', choices: vals.map(v => ({ p: P_.text(v), label: String(v), correct: v === t })), praise: `Yes! ${t} is the biggest!`, sayParts: ['which-is-the-biggest-number'], praiseParts: [numKey(t), 'is-the-biggest'] };
 };
 
 const findLetter = (pool, n, lower) => () => {
   const t = pick(pool), show = lower ? t.toLowerCase() : t;
-  return { say: lower ? `Find the small letter ${t}!` : `Find the letter ${t}!`, choices: choose(pool, t, n, l => P_.text(lower ? l.toLowerCase() : l), l => lower ? l.toLowerCase() : l), praise: `Yes! That is ${lower ? 'small ' : ''}${show}!` };
+  return { say: lower ? `Find the small letter ${t}!` : `Find the letter ${t}!`, choices: choose(pool, t, n, l => P_.text(lower ? l.toLowerCase() : l), l => lower ? l.toLowerCase() : l), praise: `Yes! That is ${lower ? 'small ' : ''}${show}!`, sayParts: [lower ? 'find-the-small-letter' : 'find-the-letter', letterKey(t)], praiseParts: lower ? ['yes-that-is', 'small', letterKey(t)] : ['yes-that-is', letterKey(t)] };
 };
 const matchCase = n => () => {
   const t = pick(LETTERS), lo = t.toLowerCase();
   const trick = shuffle(MIRROR[lo] || []).map(x => x.toUpperCase());
   const wrong = [...new Set([...trick, ...shuffle(LETTERS)])].filter(x => x !== t).slice(0, n - 1);
-  return { say: `Find the small letter that matches big ${t}.`, sh: { t: 'letter', s: t }, choices: shuffle([t, ...wrong]).map(l => ({ p: P_.text(l.toLowerCase()), label: l.toLowerCase(), correct: l === t })), praise: `Yes! Big ${t} and small ${lo} match!` };
+  return { say: `Find the small letter that matches big ${t}.`, sh: { t: 'letter', s: t }, choices: shuffle([t, ...wrong]).map(l => ({ p: P_.text(l.toLowerCase()), label: l.toLowerCase(), correct: l === t })), praise: `Yes! Big ${t} and small ${lo} match!`, sayParts: ['find-the-small-letter-that-matches-big', letterKey(t)], praiseParts: ['yes-they-match'] };
 };
 const letterOrder = (dir, n) => () => {
   const i = 1 + rand(24), k = LETTERS[i], ans = LETTERS[dir === 'after' ? i + 1 : i - 1];
   const near = LETTERS.slice(Math.max(0, i - 3), i + 4).filter(x => x !== ans && x !== k);
-  return { say: `What letter comes ${dir} ${k}?`, sh: { t: 'text', s: dir === 'after' ? `${k}, ?` : `?, ${k}` }, choices: shuffle([ans, ...shuffle(near).slice(0, n - 1)]).map(l => ({ p: P_.text(l), label: l, correct: l === ans })), praise: `Yes! ${ans} comes ${dir} ${k}!` };
+  return { say: `What letter comes ${dir} ${k}?`, sh: { t: 'text', s: dir === 'after' ? `${k}, ?` : `?, ${k}` }, choices: shuffle([ans, ...shuffle(near).slice(0, n - 1)]).map(l => ({ p: P_.text(l), label: l, correct: l === ans })), praise: `Yes! ${ans} comes ${dir} ${k}!`, sayParts: ['what-letter-comes', dir, letterKey(k)], praiseParts: [letterKey(ans), 'comes', dir, letterKey(k)] };
 };
 
 const startsWith = n => () => {
   const t = pick(WORDS);
-  return { say: `Which one starts with ${t[0]}?`, sh: { t: 'letter', s: t[0] }, choices: choose(WORDS, t, n, w => P_.emoji(w[2], w[1]), w => w[1], w => w[0]), praise: `${t[1]} starts with ${t[0]}!` };
+  return { say: `Which one starts with ${t[0]}?`, sh: { t: 'letter', s: t[0] }, choices: choose(WORDS, t, n, w => P_.emoji(w[2], w[1]), w => w[1], w => w[0]), praise: `${t[1]} starts with ${t[0]}!`, sayParts: ['which-one-starts-with', letterKey(t[0])], praiseParts: [slug(t[1]), 'starts-with', letterKey(t[0])] };
 };
 const rhymes = n => () => {
   const set = pick(RHYMES), [w, mate] = shuffle(set).slice(0, 2);
   const wrong = shuffle(RHYMES.filter(s => s !== set)).slice(0, n - 1).map(s => pick(s));
-  return { say: `Which one rhymes with ${w[0]}?`, sh: { t: 'emoji', e: w[1], s: w[0] }, choices: shuffle([mate, ...wrong]).map(x => ({ p: P_.emoji(x[1]), label: x[0], correct: x === mate })), praise: `Yes! ${w[0]} and ${mate[0]} rhyme!` };
+  return { say: `Which one rhymes with ${w[0]}?`, sh: { t: 'emoji', e: w[1], s: w[0] }, choices: shuffle([mate, ...wrong]).map(x => ({ p: P_.emoji(x[1]), label: x[0], correct: x === mate })), praise: `Yes! ${w[0]} and ${mate[0]} rhyme!`, sayParts: ['which-one-rhymes-with', w[0]], praiseParts: [w[0], 'and', mate[0], 'rhyme'] };
 };
 const readWord = (list, n) => () => {
-  const t = pick(list);
-  return { say: 'Read the word. Find its picture!', sh: { t: 'text', s: t[0] }, choices: choose(list, t, n, x => P_.emoji(x[1]), x => x[0].toLowerCase()), praise: `Yes! That says ${t[0].toLowerCase()}!` };
+  const t = pick(list), w = t[0].toLowerCase();
+  return { say: 'Read the word. Find its picture!', sh: { t: 'text', s: t[0] }, choices: choose(list, t, n, x => P_.emoji(x[1]), x => x[0].toLowerCase()), praise: `Yes! That says ${w}!`, sayParts: ['read-the-word-find-its-picture'], praiseParts: ['yes-that-says', w] };
 };
 const pickWord = (list, n) => () => {
-  const t = pick(list);
-  return { say: 'Which word matches the picture?', sh: { t: 'emoji', e: t[1] }, choices: choose(list, t, n, x => P_.text(x[0]), x => x[0].toLowerCase()), praise: `Yes! That word is ${t[0].toLowerCase()}!` };
+  const t = pick(list), w = t[0].toLowerCase();
+  return { say: 'Which word matches the picture?', sh: { t: 'emoji', e: t[1] }, choices: choose(list, t, n, x => P_.text(x[0]), x => x[0].toLowerCase()), praise: `Yes! That word is ${w}!`, sayParts: ['which-word-matches-the-picture'], praiseParts: ['yes-that-word-is', w] };
 };
 
 const addPics = (maxSum, n) => () => {
   const sum = 2 + rand(maxSum - 1), a = 1 + rand(sum - 1), b = sum - a, t = pick(THINGS);
-  return { say: `${a} plus ${b}. How many in all?`, sh: { t: 'math', a, b, op: '+', e: t.e }, choices: numberChoices(sum, Math.max(1, sum - 3), sum + 3, n), praise: `${a} plus ${b} makes ${sum}!` };
+  return { say: `${a} plus ${b}. How many in all?`, sh: { t: 'math', a, b, op: '+', e: t.e }, choices: numberChoices(sum, Math.max(1, sum - 3), sum + 3, n), praise: `${a} plus ${b} makes ${sum}!`, sayParts: [numKey(a), 'plus', numKey(b), 'how-many-in-all'], praiseParts: [numKey(a), 'plus', numKey(b), 'makes', numKey(sum)] };
 };
 const takeAway = (max, n, pics) => () => {
   const a = 2 + rand(max - 1), b = 1 + rand(a - 1), t = pick(THINGS), ans = a - b;
-  return { say: `${a} take away ${b}. How many are left?`, sh: { t: 'math', a, b, op: '−', e: pics ? t.e : null }, choices: numberChoices(ans, Math.max(0, ans - 3), ans + 3, n), praise: `${a} take away ${b} leaves ${ans}!` };
+  return { say: `${a} take away ${b}. How many are left?`, sh: { t: 'math', a, b, op: '−', e: pics ? t.e : null }, choices: numberChoices(ans, Math.max(0, ans - 3), ans + 3, n), praise: `${a} take away ${b} leaves ${ans}!`, sayParts: [numKey(a), 'take-away', numKey(b), 'how-many-are-left'], praiseParts: [numKey(a), 'take-away', numKey(b), 'leaves', numKey(ans)] };
 };
 const addNums = (maxSum, n) => () => {
   const sum = 2 + rand(maxSum - 1), a = 1 + rand(sum - 1), b = sum - a;
-  return { say: `What is ${a} plus ${b}?`, sh: { t: 'math', a, b, op: '+' }, choices: numberChoices(sum, Math.max(1, sum - 3), sum + 3, n), praise: `Yes! ${a} plus ${b} is ${sum}!` };
+  return { say: `What is ${a} plus ${b}?`, sh: { t: 'math', a, b, op: '+' }, choices: numberChoices(sum, Math.max(1, sum - 3), sum + 3, n), praise: `Yes! ${a} plus ${b} is ${sum}!`, sayParts: ['what-is', numKey(a), 'plus', numKey(b)], praiseParts: [numKey(a), 'plus', numKey(b), 'is', numKey(sum)] };
 };
 const missingAddend = (maxSum, n) => () => {
   const sum = 3 + rand(maxSum - 2), a = 1 + rand(sum - 1), b = sum - a;
-  return { say: `${a} plus what makes ${sum}?`, sh: { t: 'math', a, b: null, op: '+', eq: sum }, choices: numberChoices(b, Math.max(1, b - 3), b + 3, n), praise: `Yes! ${a} plus ${b} makes ${sum}!` };
+  return { say: `${a} plus what makes ${sum}?`, sh: { t: 'math', a, b: null, op: '+', eq: sum }, choices: numberChoices(b, Math.max(1, b - 3), b + 3, n), praise: `Yes! ${a} plus ${b} makes ${sum}!`, sayParts: [numKey(a), 'plus-what-makes', numKey(sum)], praiseParts: [numKey(a), 'plus', numKey(b), 'makes', numKey(sum)] };
 };
 const addTens = n => () => {
   const a = 10 * (1 + rand(5)), b = 10 * (1 + rand(4)), sum = a + b;
-  return { say: `What is ${a} plus ${b}?`, sh: { t: 'math', a, b, op: '+' }, choices: choose([sum, sum - 10, sum + 10, sum + 1, sum - 1].filter(v => v > 0), sum, n, P_.text, String), praise: `Yes! ${a} plus ${b} is ${sum}!` };
+  return { say: `What is ${a} plus ${b}?`, sh: { t: 'math', a, b, op: '+' }, choices: choose([sum, sum - 10, sum + 10, sum + 1, sum - 1].filter(v => v > 0), sum, n, P_.text, String), praise: `Yes! ${a} plus ${b} is ${sum}!`, sayParts: ['what-is', numKey(a), 'plus', numKey(b)], praiseParts: [numKey(a), 'plus', numKey(b), 'is', numKey(sum)] };
 };
 
 /* ---------- courses: each level is a little harder than the one before ---------- */
@@ -748,7 +896,7 @@ function nextProgress(k, c, score) {
 }
 
 /* ---------- state + storage ---------- */
-const S = { showLevels: false, kids: [], feed: [], live: false, loading: true, readOnly: false, view: 'home', kidId: null, showAll: false, sheet: null, confirmRemove: false };
+const S = { rec: null, recGroup: 'now', showLevels: false, kids: [], feed: [], live: false, loading: true, readOnly: false, view: 'home', kidId: null, showAll: false, sheet: null, confirmRemove: false };
 let db = null, user = null, myId = null;
 let local = { kids: {}, feed: [] };
 const LS = 'little-sprouts-local';
@@ -856,36 +1004,98 @@ async function fillFeed(ul) {
   }));
 }
 
-function wordsReview() {
-  const inUse = WORD_LIST.filter(w => wordOk(w.key)).length;
-  const pending = WORD_LIST.filter(w => !WORD_AUTO.has(w.key) && !wordReview.approve[w.key] && !wordReview.reject[w.key]);
-  const done = WORD_LIST.filter(w => !pending.includes(w));
-  const mark = (k, ok) => {
-    if (ok) { wordReview.approve[k] = true; delete wordReview.reject[k]; } else { wordReview.reject[k] = true; delete wordReview.approve[k]; }
-    saveReview(); render();
+let curRec = null, micIdle = null;
+function releaseMicSoon() {
+  clearTimeout(micIdle);
+  micIdle = setTimeout(() => { if (!S.rec && micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; } }, 20000);
+}
+async function recordKey(key) {
+  unlockSound(); stopClip(); try { speechSynthesis.cancel(); } catch (e) {}
+  S.rec = { key, phase: 'recording' }; render();
+  try {
+    curRec = await startRecording();
+    const blob = await curRec.done; curRec = null;
+    if (!S.rec || S.rec.key !== key) return;
+    S.rec = { key, phase: 'processing' }; render();
+    const clean = await cleanRecording(blob);
+    if (!S.rec || S.rec.key !== key) return;
+    S.rec = { key, phase: 'review', b64: clean.b64 }; render();
+    playData(clean.b64, 'audio/wav');
+  } catch (e) {
+    curRec = null;
+    const msg = e && e.message === 'quiet' ? "I didn't hear anything. Hold the phone closer and try again."
+      : e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'The microphone is blocked. Allow it for this site in your phone settings, then try again.'
+      : 'Recording did not work on this phone. Try again, or use another phone.';
+    S.rec = { key, phase: 'error', msg }; render();
+  }
+  releaseMicSoon();
+}
+function voiceKeysNow() {
+  const out = new Set();
+  for (const k of S.kids) for (const c of availableCourses(k)) {
+    const n = levelOf(k, c);
+    levelKeys(c, n).forEach(x => out.add(x));
+    if (n < c.levels.length) levelKeys(c, n + 1).forEach(x => out.add(x));
+  }
+  return [...out];
+}
+function recorderPanel() {
+  const ready = S.live && db && canRecord();
+  const group = S.recGroup || 'now';
+  const tabs = [['now', 'For right now'], ['cheers', 'Cheers'], ...COURSES.map(c => [c.id, c.icon + ' ' + c.name])];
+  const status = k => recIndex[k] ? 'mine' : embeddedOk(k) ? 'first' : (MY_WORDS[k] && !wordReview.reject[k]) ? 'check' : 'none';
+  const pill = { mine: ['on', 'Your voice'], first: ['on', 'First recording'], check: ['check', 'Check it'], none: ['off', 'Phone voice'] };
+  const row = k => {
+    const st = status(k), r = S.rec && S.rec.key === k ? S.rec : null;
+    const play = () => { stopClip(); const src = st === 'mine' ? null : st !== 'none' ? { b64: MY_WORDS[k], mime: 'audio/mpeg' } : null;
+      if (src) playData(src.b64, src.mime); else if (st === 'mine') loadRec(k).then(c => c && playData(c.b64, 'audio/wav')); };
+    const btns = [];
+    if (r && r.phase === 'recording') btns.push(h('button', { class: 'recbtn live', type: 'button', onclick: () => curRec && curRec.stop() }, '■ Stop'));
+    else if (r && r.phase === 'processing') btns.push(h('span', { class: 'thint' }, 'Cleaning up…'));
+    else if (r && r.phase === 'review') btns.push(
+      h('button', { class: 'wplay small', type: 'button', onclick: () => { stopClip(); playData(r.b64, 'audio/wav'); } }, '▶'),
+      h('button', { class: 'recbtn keep', type: 'button', onclick: async () => { S.rec = { key: k, phase: 'processing' }; render(); try { await saveRecording(k, r.b64); S.rec = null; } catch (e) { S.rec = { key: k, phase: 'error', msg: 'Could not save. Check the internet connection and try again.' }; } render(); } }, 'Keep'),
+      h('button', { class: 'recbtn', type: 'button', onclick: () => recordKey(k) }, 'Redo'));
+    else {
+      if (st !== 'none') btns.push(h('button', { class: 'wplay small', type: 'button', 'aria-label': 'Play ' + wordText(k), onclick: play }, '▶'));
+      if (st === 'check') btns.push(h('button', { class: 'wyes', type: 'button', 'aria-label': 'Keep the first recording', onclick: () => { wordReview.approve[k] = true; delete wordReview.reject[k]; saveReview(); render(); } }, '✓'));
+      if (st === 'first' || st === 'check') btns.push(h('button', { class: 'wno', type: 'button', 'aria-label': 'Stop using the first recording', onclick: () => { wordReview.reject[k] = true; delete wordReview.approve[k]; saveReview(); render(); } }, '✗'));
+      if (st === 'mine') btns.push(h('button', { class: 'wno', type: 'button', 'aria-label': 'Delete my recording of ' + wordText(k), onclick: async () => { try { await deleteRecording(k); } catch (e) {} render(); } }, '🗑'));
+      if (ready) btns.push(h('button', { class: 'recbtn', type: 'button', 'aria-label': 'Record ' + wordText(k), onclick: () => recordKey(k) }, st === 'mine' ? '● Redo' : '● Record'));
+    }
+    return h('div', { class: 'rrow' + (r ? ' active' : '') },
+      h('span', { class: 'rtext' }, wordText(k), h('small', { class: 'wst ' + pill[st][0] }, r && r.phase === 'recording' ? 'Recording… speak now' : pill[st][1])),
+      h('span', { class: 'rbtns' }, btns),
+      r && r.phase === 'error' ? h('p', { class: 'rerr' }, r.msg) : null);
   };
-  const row = w => {
-    const ok = wordOk(w.key), off = !!wordReview.reject[w.key];
-    return h('div', { class: 'wrow' },
-      h('button', { class: 'wplay', type: 'button', 'aria-label': 'Play ' + w.label, onclick: () => { stopClip(); playData(MY_WORDS[w.key]); } }, '▶ ', w.label),
-      h('span', { class: 'wst ' + (ok ? 'on' : off ? 'off' : 'check') }, ok ? 'In use' : off ? 'Phone voice' : 'Check'),
-      S.readOnly ? null : h('button', { class: 'wyes', type: 'button', 'aria-label': w.label + ' sounds right', 'aria-pressed': String(ok), onclick: () => mark(w.key, true) }, '✓'),
-      S.readOnly ? null : h('button', { class: 'wno', type: 'button', 'aria-label': w.label + ' is wrong', 'aria-pressed': String(off), onclick: () => mark(w.key, false) }, '✗'));
-  };
-  const det = h('details', { class: 'vrow words', open: S.wordsOpen || null },
-    h('summary', {}, `Mommy's lesson words · ${inUse} of ${WORD_LIST.length} in use`),
-    h('p', { class: 'thint', style: 'margin:0' }, 'Tap a word to hear it. Tap ✓ if it sounds right, or ✗ to use the phone voice for it. A sentence uses your voice only when all its words are in use.'),
-    pending.length ? h('h3', { class: 'wh' }, `Please check (${pending.length})`) : null,
-    pending.map(row),
-    h('h3', { class: 'wh' }, `Checked (${done.length})`),
-    done.map(row));
-  det.addEventListener('toggle', () => { S.wordsOpen = det.open; });
-  const wrap = h('div', { style: 'margin-bottom:12px' }, det);
-  return wrap;
+  let body = [], keys = [];
+  if (group === 'now') {
+    keys = voiceKeysNow();
+    keys.sort((a, b) => (status(a) === 'mine' || status(a) === 'first') - (status(b) === 'mine' || status(b) === 'first'));
+    body = keys.length ? keys.map(row) : [h('p', { class: 'thint' }, 'Add a child first. This list shows the words their current lessons use.')];
+  } else if (group === 'cheers') { keys = CHEER_KEYS; body = keys.map(row); }
+  else {
+    const c = COURSE[group], seen = new Set();
+    c.levels.forEach((lv, i) => {
+      const fresh = levelKeys(c, i + 1).filter(k => !seen.has(k)); fresh.forEach(k => seen.add(k));
+      if (fresh.length) body.push(h('h3', { class: 'wh' }, `Level ${i + 1} · ${lv.label}`), ...fresh.map(row));
+    });
+    keys = [...seen];
+  }
+  const done = keys.filter(k => status(k) === 'mine' || status(k) === 'first').length;
+  return h('div', { class: 'vrow recpanel', style: 'margin-bottom:12px' },
+    h('div', { class: 'field' }, 'Record your voice'),
+    h('p', { class: 'thint', style: 'margin:0' }, ready
+      ? 'Tap ● Record and say the words shown, in your lesson voice. It stops by itself, then plays it back so you can keep it or redo it. "…" means the sentence keeps going, so trail off a little. Lessons use your voice for any line where every piece is recorded.'
+      : !canRecord() ? 'This browser cannot record. Open the app in Safari on iPhone or Chrome on Android to record.'
+      : 'Recording needs family sharing, so it saves for everyone. Open your family link to record.'),
+    h('div', { class: 'rtabs', role: 'tablist' }, tabs.map(([id, label]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(group === id), onclick: () => { S.recGroup = id; render(); } }, label))),
+    h('p', { class: 'rcount' }, `${done} of ${keys.length} recorded`),
+    h('div', { class: 'rlist' }, body));
 }
 
 function voicePanel() {
-  const sec = h('section', { class: 'voice' }, h('div', { class: 'sec-head' }, h('h2', {}, 'Voice'), h('span', {}, 'Saved on this phone')));
+  const sec = h('section', { class: 'voice' }, h('div', { class: 'sec-head' }, h('h2', {}, 'Voice'), h('span', {}, 'Recordings are shared with the family')));
   if (!('speechSynthesis' in window)) { sec.append(h('p', { class: 'empty' }, 'This browser cannot read lessons aloud. Try Safari on iPhone or Chrome on Android.')); return sec; }
   if (Object.keys(CLIPS).length) {
     const mine = h('div', { class: 'seg', role: 'group', 'aria-label': "Mommy's recorded cheers" }, [['On', true], ['Off', false]].map(([label, on]) =>
@@ -900,7 +1110,7 @@ function voicePanel() {
           if (!ok && lastAudioError) b.title = lastAudioError;
         } }, '▶ Hear a cheer')));
   }
-  if (WORD_LIST.length) sec.append(wordsReview());
+  sec.append(recorderPanel());
   const cur = currentVoice();
   const sel = h('select', { id: 'voice-pick', onchange: e => { voicePref.uri = e.target.value; saveVoicePref(); speak("Hi friend! Let's learn together!"); } },
     voices.length ? voices.slice(0, 30).map((v, i) => h('option', { value: v.voiceURI, selected: cur && v.voiceURI === cur.voiceURI }, v.name.replace(/\s*\(.*\)\s*$/, '') + (i === 0 ? ' (best match)' : '') + ' · ' + v.lang))
@@ -993,6 +1203,7 @@ function startLesson(kidId, courseId) {
   L = { kidId, courseId, age: k.age, level: levelOf(k, COURSE[courseId]), i: 0, firstTry: 0, missed: false, q: null, locked: false, done: false };
   if (!S.readOnly) store.updateKid(kidId, { playing: { course: courseId, ts: Date.now() } });
   unlockSound();
+  ensureRecs(CHEER_KEYS);
   nextQuestion(true);
 }
 function endLesson() {
@@ -1003,6 +1214,7 @@ function endLesson() {
 function nextQuestion(first) {
   const c = COURSE[L.courseId];
   L.q = courseQ(c, L.level); L.missed = false; L.locked = false;
+  ensureRecs([...(L.q.sayParts || []), ...(L.q.praiseParts || [])]);
   drawLesson();
   const my = L, q = L.q;
   if (first && useMyVoice()) playClip('start').then(() => { if (L === my && L.q === q && !L.locked) sayLine(q.say, q.sayParts); });

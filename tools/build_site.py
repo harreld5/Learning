@@ -218,10 +218,15 @@ s = s[:start] + r"""async function connect() {
       if (S.view === 'home' && !S.sheet) render();
     }, () => {});
     db.collection('feed').orderBy('ts', 'desc').limit(40).onSnapshot(sn => { S.feed = sn.docs.map(x => ({ id: x.id, ...x.data() })); ready(); }, () => { S.loading = false; render(); });
+    // which words the family has recorded (the audio itself loads only when a lesson needs it)
+    db.collection('recIndex').onSnapshot(sn => {
+      recIndex = Object.fromEntries(sn.docs.map(x => [x.id, x.data()]));
+      if (S.view === 'home' && !S.sheet) render();
+    }, () => {});
   } catch (e) { S.live = false; S.loading = false; render(); }
 }
 """ + s[end:]
-rep("const S = { showLevels: false, kids: [], feed: [], live: false, loading: true,", "const S = { showLevels: false, kids: [], feed: [], live: false, loading: true, needFamily: false,")
+rep("const S = { ", "const S = { needFamily: false, ")
 
 for bad in ('window.claude', 'claude.use'):
     if bad in s: sys.exit('leftover platform reference: ' + bad)
