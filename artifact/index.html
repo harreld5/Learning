@@ -429,32 +429,46 @@ async function saveReview() {
 }
 
 /* ---------- the recorder: capture, trim the silence, even out the volume, save a small WAV every phone can play ---------- */
-const canRecord = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
-let micStream = null;
+const canRecord = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext));
+let micStream = null, recordingNow = false;
+const setAudioSession = type => { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) {} };
+// Captures the microphone straight through Web Audio (works on iPhone and Android alike, no file decoding needed).
 async function startRecording(maxMs = 4000) {
-  if (!micStream || micStream.getTracks().every(t => t.readyState === 'ended')) {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  }
-  const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
-  const rec = new MediaRecorder(micStream, type ? { mimeType: type } : undefined), chunks = [];
-  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-  const done = new Promise(res => { rec.onstop = () => res(new Blob(chunks, { type: rec.mimeType || type || 'audio/mp4' })); });
-  rec.start();
-  const timer = setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, maxMs);
-  return { stop: () => { clearTimeout(timer); if (rec.state === 'recording') rec.stop(); }, done };
-}
-async function cleanRecording(blob) {
-  const ctx = audioCtx(), raw = await blob.arrayBuffer();
-  const audio = await new Promise((res, rej) => ctx.decodeAudioData(raw, res, rej));
-  const RATE = 16000, n = Math.ceil(audio.duration * RATE);
-  let pcm;
+  recordingNow = true;
+  setAudioSession('play-and-record');           // iPhone blocks the microphone while the app is set to "playback only"
+  let stream;
   try {
-    const off = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, n, RATE);
-    const src = off.createBufferSource(); src.buffer = audio; src.connect(off.destination); src.start();
-    pcm = (await off.startRendering()).getChannelData(0);
-  } catch (e) {   // fall back: simple pick-every-nth resample of the first channel
-    const d = audio.getChannelData(0), step = audio.sampleRate / RATE; pcm = new Float32Array(n);
-    for (let i = 0; i < n; i++) pcm[i] = d[Math.min(d.length - 1, Math.floor(i * step))];
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  } catch (e) { recordingNow = false; setAudioSession('playback'); throw e; }
+  micStream = stream;
+  const ctx = audioCtx();
+  if (ctx.state !== 'running') { try { await ctx.resume(); } catch (e) {} }
+  const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(4096, 1, 1), mute = ctx.createGain();
+  const chunks = []; mute.gain.value = 0;
+  proc.onaudioprocess = e => { chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+  src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
+  let finished = false, resolveDone;
+  const done = new Promise(r => { resolveDone = r; });
+  const finish = () => {
+    if (finished) return; finished = true; clearTimeout(timer);
+    try { src.disconnect(); proc.disconnect(); mute.disconnect(); } catch (e) {}
+    stream.getTracks().forEach(t => t.stop()); micStream = null;
+    recordingNow = false; setAudioSession('playback');
+    let len = 0; chunks.forEach(c => { len += c.length; });
+    const pcm = new Float32Array(len); let o = 0; chunks.forEach(c => { pcm.set(c, o); o += c.length; });
+    resolveDone({ pcm, rate: ctx.sampleRate, state: ctx.state });
+  };
+  const timer = setTimeout(finish, maxMs);
+  return { stop: finish, done };
+}
+async function cleanRecording(capture) {
+  const RATE = 16000, ratio = capture.rate / RATE, src = capture.pcm;
+  if (!src.length) throw new Error('nosound:' + capture.state);
+  const n = Math.floor(src.length / ratio), pcm = new Float32Array(n);
+  for (let i = 0; i < n; i++) {           // downsample by averaging each step
+    const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio));
+    let sum = 0; for (let j = a; j < b && j < src.length; j++) sum += src[j];
+    pcm[i] = sum / (b - a);
   }
   // find the spoken part: 20 ms windows louder than a threshold set from the loudest window
   const W = RATE / 50, rms = [];
@@ -505,7 +519,7 @@ let lastAudioError = '';
 /* ---------- unlock sound on the first taps (iPhone requires a tap before any sound) ---------- */
 let speechUnlocked = false, unlockedAt = 0;
 function unlockSound() {
-  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  if (!recordingNow) setAudioSession('playback');
   audioCtx();
   if (!speechUnlocked && 'speechSynthesis' in window) {
     try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); speechUnlocked = true; unlockedAt = Date.now(); } catch (e) {}
@@ -1004,20 +1018,17 @@ async function fillFeed(ul) {
   }));
 }
 
-let curRec = null, micIdle = null;
-function releaseMicSoon() {
-  clearTimeout(micIdle);
-  micIdle = setTimeout(() => { if (!S.rec && micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; } }, 20000);
-}
+let curRec = null;
 async function recordKey(key) {
-  unlockSound(); stopClip(); try { speechSynthesis.cancel(); } catch (e) {}
+  stopClip(); try { speechSynthesis.cancel(); } catch (e) {}
+  audioCtx();
   S.rec = { key, phase: 'recording' }; render();
   try {
     curRec = await startRecording();
-    const blob = await curRec.done; curRec = null;
+    const capture = await curRec.done; curRec = null;
     if (!S.rec || S.rec.key !== key) return;
     S.rec = { key, phase: 'processing' }; render();
-    const clean = await cleanRecording(blob);
+    const clean = await cleanRecording(capture);
     if (!S.rec || S.rec.key !== key) return;
     S.rec = { key, phase: 'review', b64: clean.b64 }; render();
     playData(clean.b64, 'audio/wav');
@@ -1025,10 +1036,11 @@ async function recordKey(key) {
     curRec = null;
     const msg = e && e.message === 'quiet' ? "I didn't hear anything. Hold the phone closer and try again."
       : e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'The microphone is blocked. Allow it for this site in your phone settings, then try again.'
+      : e && String(e.message).startsWith('nosound') ? 'The microphone sent no sound. Close the app completely, open it again, and try once more.'
       : 'Recording did not work on this phone. Try again, or use another phone.';
-    S.rec = { key, phase: 'error', msg }; render();
+    const detail = e ? [e.name, e.message].filter(Boolean).join(': ').slice(0, 120) : '';
+    S.rec = { key, phase: 'error', msg: msg + (detail ? ` (${detail})` : '') }; render();
   }
-  releaseMicSoon();
 }
 function voiceKeysNow() {
   const out = new Set();
