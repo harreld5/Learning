@@ -168,7 +168,7 @@ const CATALOG_RAW = [
   ['k2','Costco Rotisserie Chicken (meat, no skin)','protein','3 oz',140,19,0,7,0,0],
   ['k3','Kirkland Lean Ground Beef 88/12','protein','4 oz raw',200,21,0,12,0,0,{ppl:6.80}],
   ['k4','Kirkland Ground Turkey 93/7','protein','4 oz raw',170,21,0,9,0,0],
-  ['k5','Kirkland Atlantic Salmon Fillet','protein','4 oz raw',230,23,0,15,0,0],
+  ['k5','Kirkland Atlantic Salmon Fillet','protein','4 oz raw',230,23,0,15,0,0,{ppl:15.88}],
   ['k6','Kirkland Wild Sockeye Salmon','protein','4 oz raw',150,24,0,6,0,0],
   ['k7','Kirkland Tilapia Loins (frozen)','protein','4 oz',110,23,0,2,0,0],
   ['k8','Kirkland Cooked Shrimp (frozen)','protein','4 oz',120,24,0,2,0,0],
@@ -288,6 +288,17 @@ const CATALOG_RAW = [
   ['ch8','Kirkland Garlic Pepper Chicken Wings','protein','4 oz raw',220,20,1,15,0,0,{sf:4,ppl:4.53}],
   ['ch9','Kirkland Organic Air-Chilled Chicken Breasts','protein','4 oz raw',120,26,0,1.5,0,0,{sf:0.5,ppl:6.8}],
   ['ch10','Norbest Ground Turkey 93% Lean','protein','4 oz raw',170,21,0,9,0,0,{sf:2.5,ppl:4.34}],
+  // Seafood from the Lodi Costco (Instacart list, Oct 2026). USDA values.
+  ['fs1','Kirkland Wild Rockfish Fillet','protein','4 oz raw',100,21,0,1.8,0,0,{sf:0.4,ppl:7.93}],
+  ['fs2','Kirkland Wild Cooked Dungeness Crab (sections)','protein','4 oz crab meat',125,25,0,1.4,0,0,{sf:0.2,ppl:19.28}],
+  ['fs3','Kirkland Head-On White Shrimp 9/14 (whole)','protein','4 oz raw, peeled',95,23,0,0.6,0,0,{sf:0.2,ppl:6.24}],
+  ['fs4','Kirkland Wild Pacific Halibut Fillet','protein','4 oz raw',105,21,0,1.5,0,0,{sf:0.3,ppl:32.9}],
+  ['fs5','Kirkland Whole Tilapia (fresh)','protein','4 oz raw fillet',110,23,0,2,0,0,{sf:0.7,ppl:5.66}],
+  ['fs6','Kirkland Chilean Sea Bass Fillet','protein','4 oz raw',210,16,0,16,0,0,{sf:3.5,ppl:37.44}],
+  ['fs7','Kirkland Wild Ahi Tuna Fillet','protein','4 oz raw',125,27.5,0,0.6,0,0,{sf:0.2,ppl:19.28}],
+  ['fs8','Kirkland Atlantic Salmon Portions','protein','4 oz raw',230,23,0,15,0,0,{sf:3,ppl:14.74}],
+  ['fs9','Kirkland Steelhead Fillet','protein','4 oz raw',170,22,0,9,0,0,{sf:2.2,ppl:13.61}],
+  ['fs10','Kirkland U-15 White Shrimp (shell-on)','protein','4 oz raw, peeled',95,23,0,0.6,0,0,{sf:0.2,ppl:12.47}],
 ];
 // Saturated fat per serving (g), approximate.
 const SAT_FAT = { k1: 0.5, k2: 2, k3: 5, k4: 2.5, k5: 3, k6: 1, k7: 0.5, k8: 0.5, k9: 0, k10: 0.5, k11: 3, k12: 1.5, k13: 0.5, k14: 0,
@@ -300,7 +311,7 @@ const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '1.7 (Lodi meat)';
+const APP_VERSION = '1.8 (Lodi seafood)';
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -345,7 +356,7 @@ const isHighProtein = f => proteinRatio(f) >= 0.3 && (f.p || 0) >= 8;
 // Cost of one serving when we know the price per pound and the serving is in ounces.
 // Bone-in cuts: share of the package weight that is edible meat, so the cost reflects meat you actually eat.
 const EDIBLE_YIELD = { m3: 0.55, m4: 0.5, m17: 0.5, p2: 0.75, p3: 0.7, p4: 0.8, p5: 0.55, p13: 0.55, p14: 0.55,
-  ch2: 0.6, ch4: 0.7, ch6: 0.65, ch8: 0.6 };
+  ch2: 0.6, ch4: 0.7, ch6: 0.65, ch8: 0.6, fs2: 0.25, fs3: 0.55, fs5: 0.4, fs10: 0.85 };
 function servingCost(f) {
   const m = /([\d.]+)\s*oz/i.exec(f.serving || '');
   return f.ppl && m ? f.ppl * parseFloat(m[1]) / 16 / (EDIBLE_YIELD[f.id] || 1) : null;
@@ -881,7 +892,7 @@ function renderSettings() {
         <label class="switch" style="margin-top:8px"><input type="checkbox" data-c="pf" ${c.pf ? 'checked' : ''}><span class="grow">Protein-forward<br><span class="small muted">At least 35% of calories from protein</span></span></label>
         <label class="switch"><input type="checkbox" data-c="tg" ${c.tg ? 'checked' : ''}><span class="grow">High triglycerides or low HDL<br><span class="small muted">Fewer carbs, more healthy fat, tighter saturated fat limit</span></span></label>
         <button class="btn alt block" style="margin-top:10px" data-act="calc">Use calculated goals</button>
-        <div class="small muted" style="margin-top:6px">Mifflin–St Jeor estimate. Protein 0.9 g per lb (0.8 g when maintaining), using adjusted weight if BMI is 30+; fat 28% of calories, carbs the rest, saturated fat under 10%. Protein-forward: protein at least 35% of calories. With high triglycerides: carbs 34%, fat the rest, saturated fat under 7%. A starting point, not medical advice.</div></details></div>
+        <div class="small muted" style="margin-top:6px">Mifflin–St Jeor estimate. Protein 0.9 g per lb (0.8 g when maintaining), using adjusted weight if BMI is 30+; fat 28% of calories, carbs the rest, saturated fat under 10%. Protein-forward: protein at least 35% of calories. With high triglycerides: carbs 34%, fat the rest, saturated fat under 7%, and the total-fat rule is switched off so only saturated fat counts. A starting point, not medical advice.</div></details></div>
     <div class="card"><h2>Approved rules (per serving)</h2>
       <div class="small muted" style="margin-bottom:6px">A food is <b style="color:var(--ok)">Approved</b> only if one serving passes every rule that's switched on.</div>
       ${ruleRow('cal', 'Calories', '', 'at most')}${ruleRow('c', r.net ? 'Net carbs' : 'Carbs', 'g', 'at most')}${ruleRow('f', 'Fat', 'g', 'at most')}${ruleRow('sf', 'Saturated fat', 'g', 'at most')}${ruleRow('s', 'Sugar', 'g', 'at most')}${ruleRow('p', 'Protein', 'g', 'at least')}
@@ -925,7 +936,9 @@ function calcGoals() {
     f = Math.round(cal * 0.28 / 9); carbs = Math.max(50, Math.round((cal - p * 4 - f * 9) / 4));
   }
   const sf = Math.round(cal * (c.tg ? 0.07 : 0.1) / 9);
-  S.targets = { cal, p, c: carbs, f, sf }; S.targetsSet = true; autoRules(); save(); renderSettings();
+  S.targets = { cal, p, c: carbs, f, sf }; S.targetsSet = true; autoRules();
+  // High triglycerides: judge fat by saturated fat only, so salmon, nuts and olive oil aren't blocked by total fat.
+  if (c.tg) S.rules.f.on = false; save(); renderSettings();
   toast(`Goals set: ${cal} cal · P${p} C${carbs} F${f}`);
 }
 function autoRules() {
