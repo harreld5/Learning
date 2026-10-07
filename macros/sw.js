@@ -1,5 +1,5 @@
 /* Offline support: keeps the app itself on the phone. Food lookups still need internet. */
-const CACHE = 'macro-check-v2';
+const CACHE = 'macro-check-v3';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
   './apple-touch-icon.png', './vendor/zxing.min.js'];
 

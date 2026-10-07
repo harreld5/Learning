@@ -223,9 +223,20 @@ const CATALOG_RAW = [
   ['s3','SkinnyPop Popcorn','snack','3.75 cups',150,2,15,10,0,3],
   ['s4','Peanut Butter Filled Pretzels','snack','1 oz',140,5,15,7,3,1],
   ['s5','Kirkland Organic Salsa','other','2 tbsp',10,0,2,0,1,0],
+  ['k15','Kirkland Wild Alaskan Salmon (canned)','protein','3 oz drained',110,17,0,4.5,0,0],
+  ['k16','Sardines in Olive Oil (canned)','protein','1 can drained (85 g)',180,21,0,11,0,0,{whole:1}],
+  ['v8','Organic Shelled Edamame (frozen)','veg','1/2 cup',100,9,7,4.5,1,4],
+  ['a7','Kirkland Walnuts','fat','1 oz (14 halves)',190,4,4,18,1,2,{meals:'blds'}],
+  ['a8','Organic Chia Seeds','fat','2 tbsp (28 g)',140,5,12,10,0,10,{meals:'bs'}],
+  ['a9','Organic Ground Flaxseed','fat','2 tbsp (14 g)',70,3,4,5,0,4,{meals:'bs'}],
 ];
+// Saturated fat per serving (g), approximate.
+const SAT_FAT = { k1: 0.5, k2: 2, k3: 5, k4: 2.5, k5: 3, k6: 1, k7: 0.5, k8: 0.5, k9: 0, k10: 0.5, k11: 3, k12: 1.5, k13: 0.5, k14: 0,
+  k15: 1, k16: 2.5, b1: 3, b2: 0, b3: 0, b4: 1.5, b5: 3, b6: 1, b7: 3.5, b8: 3.5, b9: 0.5, b10: 1, c1: 0, c2: 0, c3: 0.5, c4: 0.5,
+  c5: 0, c6: 0.5, c7: 0, c8: 0, c9: 0, c10: 0, c11: 0, c12: 0.5, v8: 0.5, a1: 1, a2: 1, a3: 3, a4: 2, a5: 5, a6: 0.5, a7: 1.5,
+  a8: 1, a9: 0.5, s1: 0, s2: 4, s3: 1, s4: 1.5, s5: 0 };
 const CATALOG = CATALOG_RAW.map(([id, name, cat, serving, cal, p, c, f, s, fb, o = {}]) =>
-  ({ id, name, cat, serving, cal, p, c, f, s, fb, src: 'costco', meals: o.meals, whole: !!o.whole }));
+  ({ id, name, cat, serving, cal, p, c, f, s, fb, sf: SAT_FAT[id] ?? 0, src: 'costco', meals: o.meals, whole: !!o.whole }));
 const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
@@ -233,12 +244,12 @@ const KEY = 'macro-check-v1';
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
-    targets: { cal: 2000, p: 150, c: 200, f: 65 }, targetsSet: false,
+    targets: { cal: 2000, p: 150, c: 200, f: 65, sf: 22 }, targetsSet: false,
     servingsPerDay: 5,
-    rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
+    rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, sf: { on: true, v: 4.5 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
     foods: {}, list: {}, log: {}, plan: null,
     planOpts: { days: 1, onlyList: false, snacks: 1 },
-    calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose' },
+    calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose', tg: false },
   };
 }
 function load() {
@@ -266,6 +277,7 @@ const fmt = n => (n == null || isNaN(n)) ? '?' : String(r1(n));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
 const todayKey = () => dayKey(new Date());
+function sfTarget() { return S.targets.sf || Math.round(S.targets.cal * 0.1 / 9); }
 function getFood(id) { return S.foods[id] || CATALOG_BY_ID[id] || null; }
 function allFoods() {
   const out = CATALOG.map(f => S.foods[f.id] || f);
@@ -292,6 +304,8 @@ function verdict(f) {
   check(r.cal, f.cal, 'Calories', '', false);
   check(r.c, f.c == null ? null : carbsOf(f), carbLabel, ' g', false);
   check(r.f, f.f, 'Fat', ' g', false);
+  // Older saved foods may not have saturated fat; judge them on the other rules.
+  if (f.sf != null) check(r.sf, f.sf, 'Saturated fat', ' g', false);
   check(r.s, f.s, 'Sugar', ' g', false);
   check(r.p, f.p, 'Protein', ' g', true);
   return { ok: fails.length === 0, fails };
@@ -301,12 +315,12 @@ function badge(f) { const v = verdict(f); return `<span class="badge ${v.ok ? 'o
 /* ================= daily totals ================= */
 function entries(k) { return S.log[k] || []; }
 function totals(list) {
-  const t = { cal: 0, p: 0, c: 0, f: 0 };
-  for (const e of list) for (const m of ['cal', 'p', 'c', 'f']) t[m] += (e[m] || 0) * e.sv;
+  const t = { cal: 0, p: 0, c: 0, f: 0, sf: 0 };
+  for (const e of list) for (const m of ['cal', 'p', 'c', 'f', 'sf']) t[m] += (e[m] || 0) * e.sv;
   return t;
 }
 function logFood(f, sv, meal, k = viewDay) {
-  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0 });
+  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0, sf: f.sf || 0 });
   save();
 }
 function defaultMeal() { const h = new Date().getHours(); return h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 20 ? 'Dinner' : 'Snacks'; }
@@ -348,7 +362,8 @@ function renderToday() {
     <div class="small muted">calories ${left < 0 ? 'over' : 'left'}</div></div>
     <div class="small muted" style="text-align:right">P ${Math.round(T.p - t.p)} g left<br>C ${Math.round(T.c - t.c)} g left<br>F ${Math.round(T.f - t.f)} g left</div></div>
     ${macroBar('Calories', t.cal, T.cal, 'var(--cal)', '')}${macroBar('Protein', t.p, T.p, 'var(--p)', ' g')}
-    ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}</div>
+    ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}
+    <div class="small" style="margin-top:6px;color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</div></div>
     <div class="row" style="margin-bottom:12px"><button class="btn grow" data-act="tab" data-t="scan">Scan barcode</button>
     <button class="btn alt grow" data-act="find">Search food</button></div>`;
   for (const m of MEALS) {
@@ -500,7 +515,7 @@ function fromOFF(code, p) {
     name: (p.product_name || '').trim() || 'Unnamed product', brand: (p.brands || '').split(',')[0].trim(),
     serving: hasServing ? (p.serving_size || (sq + ' g')) : '100 g', noServing: !hasServing,
     cal: cal == null ? null : r1(cal), p: r1n(per('proteins')), c: r1n(per('carbohydrates')), f: r1n(per('fat')),
-    s: r1n(per('sugars')), fb: r1n(per('fiber')), img: p.image_front_small_url || '',
+    sf: r1n(per('saturated-fat')), s: r1n(per('sugars')), fb: r1n(per('fiber')), img: p.image_front_small_url || '',
   };
 }
 function r1n(v) { return v == null ? null : r1(v); }
@@ -527,7 +542,7 @@ function openFood(id, opts = {}) {
     <div class="small" style="margin-top:12px"><b>Serving:</b> ${esc(f.serving)}${f.noServing ? ' <span class="muted">(no serving size listed — values are per 100 g; tap Edit to fix)</span>' : ''}</div>
     <div class="nut"><div><b>${fmt(f.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${fmt(f.p)}</b><span>protein g</span></div>
       <div><b style="color:var(--c)">${fmt(f.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${fmt(f.f)}</b><span>fat g</span></div></div>
-    <div class="small muted">Sugar ${fmt(f.s)} g · Fiber ${fmt(f.fb)} g${S.rules.net ? ` · Net carbs ${fmt(carbsOf(f))} g` : ''}</div>
+    <div class="small muted">Saturated fat ${f.sf == null ? 'not listed' : fmt(f.sf) + ' g'} · Sugar ${fmt(f.s)} g · Fiber ${fmt(f.fb)} g${S.rules.net ? ` · Net carbs ${fmt(carbsOf(f))} g` : ''}</div>
     <div class="small" style="margin:8px 0 12px;color:${fits ? 'var(--ok)' : 'var(--warn)'}">${fits ? '✓ One serving fits in what you have left today.' : '⚠ One serving goes past what you have left today.'}</div>
     <div class="row wrap" style="margin-bottom:10px"><span class="small muted">Servings</span>
       <div class="stepper"><button data-act="sv" data-d="-0.5">−</button><input type="number" id="sv" value="${sv}" step="0.25" min="0.25" inputmode="decimal"><button data-act="sv" data-d="0.5">+</button></div>
@@ -538,7 +553,7 @@ function openFood(id, opts = {}) {
       ${f.src !== 'costco' ? `<button class="btn danger sm" data-act="delfood">Delete</button>` : ''}</div>`);
 }
 function foodForm(f, code) {
-  f = f || { name: '', brand: '', serving: '', cal: '', p: '', c: '', f: '', s: '', fb: '', cat: 'other' };
+  f = f || { name: '', brand: '', serving: '', cal: '', p: '', c: '', f: '', sf: '', s: '', fb: '', cat: 'other' };
   const n = v => v == null ? '' : v;
   sheet(`<div class="sheet-head"><h2>${f.id ? 'Edit food' : 'Enter label'}</h2><button class="icon-btn" data-act="close">✕</button></div>
     <div class="small muted" style="margin-bottom:10px">Copy the numbers from the Nutrition Facts label for <b>one serving</b>.</div>
@@ -549,6 +564,7 @@ function foodForm(f, code) {
       <label class="field">Protein g<input type="number" step="any" inputmode="decimal" name="p" value="${n(f.p)}"></label>
       <label class="field">Total carbs g<input type="number" step="any" inputmode="decimal" name="c" value="${n(f.c)}"></label>
       <label class="field">Fat g<input type="number" step="any" inputmode="decimal" name="f" value="${n(f.f)}"></label>
+      <label class="field">Saturated fat g<input type="number" step="any" inputmode="decimal" name="sf" value="${n(f.sf)}"></label>
       <label class="field">Sugars g<input type="number" step="any" inputmode="decimal" name="s" value="${n(f.s)}"></label>
       <label class="field">Fiber g<input type="number" step="any" inputmode="decimal" name="fb" value="${n(f.fb)}"></label></div>
     <label class="field" style="margin-top:10px">Type (used for meal plans)<select name="cat">${Object.entries(CATS).map(([k, c]) => `<option value="${k}" ${f.cat === k ? 'selected' : ''}>${c.label}</option>`).join('')}</select></label>
@@ -560,7 +576,7 @@ function foodForm(f, code) {
     const num = v => v === '' ? null : +v;
     const id = f.id || (code ? 'b' + code : 'u' + uid());
     const nf = { ...f, id, name: d.name.trim() || 'Food', brand: d.brand.trim(), serving: d.serving.trim() || '1 serving', noServing: false,
-      cal: num(d.cal), p: num(d.p), c: num(d.c), f: num(d.f), s: num(d.s), fb: num(d.fb), cat: d.cat,
+      cal: num(d.cal), p: num(d.p), c: num(d.c), f: num(d.f), sf: num(d.sf), s: num(d.s), fb: num(d.fb), cat: d.cat,
       src: f.src || (code ? 'scan' : 'custom'), barcode: f.barcode || code || '' };
     S.foods[id] = nf; save(); toast('Saved'); openFood(id);
   });
@@ -738,7 +754,8 @@ function renderSettings() {
       <div class="grid2"><label class="field">Calories<input type="number" inputmode="numeric" data-t="cal" value="${T.cal}"></label>
       <label class="field">Protein g<input type="number" inputmode="numeric" data-t="p" value="${T.p}"></label>
       <label class="field">Carbs g<input type="number" inputmode="numeric" data-t="c" value="${T.c}"></label>
-      <label class="field">Fat g<input type="number" inputmode="numeric" data-t="f" value="${T.f}"></label></div>
+      <label class="field">Fat g<input type="number" inputmode="numeric" data-t="f" value="${T.f}"></label>
+      <label class="field">Saturated fat g<input type="number" inputmode="numeric" data-t="sf" value="${sfTarget()}"></label></div>
       <details style="margin-top:12px"><summary>Don't know your numbers? Calculate them</summary>
         <div class="grid2" style="margin-top:10px">
           <label class="field">Sex<select data-c="sex"><option value="m" ${c.sex === 'm' ? 'selected' : ''}>Male</option><option value="f" ${c.sex === 'f' ? 'selected' : ''}>Female</option></select></label>
@@ -747,11 +764,12 @@ function renderSettings() {
           <div class="row"><label class="field grow">Height ft<input type="number" inputmode="numeric" data-c="ft" value="${c.ft}"></label><label class="field grow">in<input type="number" inputmode="numeric" data-c="inch" value="${c.inch}"></label></div>
           <label class="field">Activity<select data-c="act">${[[1.2, 'Mostly sitting'], [1.375, 'Light (1–3 workouts/wk)'], [1.55, 'Moderate (3–5/wk)'], [1.725, 'Very active (6–7/wk)']].map(([v, l]) => `<option value="${v}" ${+c.act === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
           <label class="field">Goal<select data-c="goal">${[['lose', 'Lose fat'], ['keep', 'Maintain'], ['gain', 'Build muscle']].map(([v, l]) => `<option value="${v}" ${c.goal === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+        <label class="switch" style="margin-top:8px"><input type="checkbox" data-c="tg" ${c.tg ? 'checked' : ''}><span class="grow">High triglycerides or low HDL<br><span class="small muted">Fewer carbs, more healthy fat, tighter saturated fat limit</span></span></label>
         <button class="btn alt block" style="margin-top:10px" data-act="calc">Use calculated goals</button>
-        <div class="small muted" style="margin-top:6px">Mifflin–St Jeor estimate. Protein 0.9 g per lb (0.8 g when maintaining), using adjusted weight if BMI is 30+; fat 28% of calories; carbs the rest. A starting point, not medical advice.</div></details></div>
+        <div class="small muted" style="margin-top:6px">Mifflin–St Jeor estimate. Protein 0.9 g per lb (0.8 g when maintaining), using adjusted weight if BMI is 30+; fat 28% of calories, carbs the rest, saturated fat under 10%. With high triglycerides: carbs 34%, fat the rest, saturated fat under 7%. A starting point, not medical advice.</div></details></div>
     <div class="card"><h2>Approved rules (per serving)</h2>
       <div class="small muted" style="margin-bottom:6px">A food is <b style="color:var(--ok)">Approved</b> only if one serving passes every rule that's switched on.</div>
-      ${ruleRow('cal', 'Calories', '', 'at most')}${ruleRow('c', r.net ? 'Net carbs' : 'Carbs', 'g', 'at most')}${ruleRow('f', 'Fat', 'g', 'at most')}${ruleRow('s', 'Sugar', 'g', 'at most')}${ruleRow('p', 'Protein', 'g', 'at least')}
+      ${ruleRow('cal', 'Calories', '', 'at most')}${ruleRow('c', r.net ? 'Net carbs' : 'Carbs', 'g', 'at most')}${ruleRow('f', 'Fat', 'g', 'at most')}${ruleRow('sf', 'Saturated fat', 'g', 'at most')}${ruleRow('s', 'Sugar', 'g', 'at most')}${ruleRow('p', 'Protein', 'g', 'at least')}
       <label class="switch"><input type="checkbox" id="netcarbs" ${r.net ? 'checked' : ''}><span class="grow">Count net carbs (carbs minus fiber)</span></label>
       <div class="row" style="margin-top:8px"><span class="small grow">Set limits from my daily goals ÷</span>
         <input type="number" inputmode="numeric" id="spd" value="${S.servingsPerDay}" style="width:64px"><span class="small muted">servings</span>
@@ -763,7 +781,7 @@ function renderSettings() {
     <div class="small muted" style="text-align:center;margin:8px 0 20px">Barcode data: Open Food Facts (openfoodfacts.org). Costco values are approximate.</div>`;
   const v = $('#view');
   v.querySelectorAll('[data-t]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (n > 0) { S.targets[i.dataset.t] = Math.round(n); S.targetsSet = true; save(); } }));
-  v.querySelectorAll('[data-c]').forEach(i => i.addEventListener('change', () => { S.calc[i.dataset.c] = i.tagName === 'SELECT' && i.dataset.c !== 'act' ? i.value : +i.value; save(); }));
+  v.querySelectorAll('[data-c]').forEach(i => i.addEventListener('change', () => { S.calc[i.dataset.c] = i.type === 'checkbox' ? i.checked : i.tagName === 'SELECT' && i.dataset.c !== 'act' ? i.value : +i.value; save(); }));
   v.querySelectorAll('[data-rule]').forEach(i => i.addEventListener('change', () => { S.rules[i.dataset.rule].on = i.checked; save(); }));
   v.querySelectorAll('[data-rulev]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (n >= 0) { S.rules[i.dataset.rulev].v = n; save(); } }));
   $('#netcarbs').addEventListener('change', e => { S.rules.net = e.target.checked; save(); renderSettings(); });
@@ -778,14 +796,21 @@ function calcGoals() {
   const inches = c.ft * 12 + +c.inch, bmi = kg / (cm / 100) ** 2;
   const ibw = (c.sex === 'm' ? 50 : 45.5) + 2.3 * Math.max(0, inches - 60);
   const refLb = (bmi >= 30 ? ibw + 0.4 * (kg - ibw) : kg) * 2.2046;
-  const p = Math.round(refLb * (c.goal === 'keep' ? 0.8 : 0.9)), f = Math.round(cal * 0.28 / 9);
-  const carbs = Math.max(50, Math.round((cal - p * 4 - f * 9) / 4));
-  S.targets = { cal, p, c: carbs, f }; S.targetsSet = true; autoRules(); save(); renderSettings();
+  const p = Math.round(refLb * (c.goal === 'keep' ? 0.8 : 0.9));
+  let f, carbs;
+  if (c.tg) { // high triglycerides / low HDL: cut carbs, make up the rest with (mostly unsaturated) fat
+    carbs = Math.round(cal * 0.34 / 4 / 5) * 5; f = Math.round((cal - p * 4 - carbs * 4) / 9);
+  } else {
+    f = Math.round(cal * 0.28 / 9); carbs = Math.max(50, Math.round((cal - p * 4 - f * 9) / 4));
+  }
+  const sf = Math.round(cal * (c.tg ? 0.07 : 0.1) / 9);
+  S.targets = { cal, p, c: carbs, f, sf }; S.targetsSet = true; autoRules(); save(); renderSettings();
   toast(`Goals set: ${cal} cal · P${p} C${carbs} F${f}`);
 }
 function autoRules() {
   const n = Math.max(1, S.servingsPerDay), T = S.targets;
   S.rules.cal.v = Math.round(T.cal / n); S.rules.c.v = Math.round(T.c / n); S.rules.f.v = Math.round(T.f / n);
+  S.rules.sf.v = Math.round(sfTarget() / n * 2) / 2;
 }
 function exportBackup() {
   const blob = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' });
