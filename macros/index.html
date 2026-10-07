@@ -728,7 +728,7 @@ const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '2.7 (reasons & swaps)';
+const APP_VERSION = '2.8 (protein minimum skips sides)';
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -848,7 +848,8 @@ function verdict(f, scale = 1) {
   // Whole fruit's natural sugar comes with fiber; only count it if the person switches that on.
   if (f.cat !== 'fruit' || r.fruitSugar) check(r.s, f.s, 'Sugar', ' g', false, 'Too much sugar',
     'Sugar — especially added sugar and sugary drinks — raises triglycerides more than almost anything else you eat.');
-  check(r.p, f.p, 'Protein', ' g', true, 'Not enough protein', 'Below the protein minimum you set for one serving.');
+  // The protein minimum is for protein foods and snacks; vegetables, fruit, carbs and fats are sides.
+  if (['protein', 'bprotein', 'snack'].includes(f.cat)) check(r.p, f.p, 'Protein', ' g', true, 'Not enough protein', 'Below the protein minimum you set for protein foods and snacks.');
   return { ok: fails.length === 0, fails, why };
 }
 // Largest smaller portion that passes every rule, or 0 if none (or the problem isn't portion size).
@@ -1401,7 +1402,7 @@ function renderSettings() {
         <div class="small muted" style="margin-top:6px">Mifflin–St Jeor estimate. Protein 0.9 g per lb (0.8 g when maintaining), using adjusted weight if BMI is 30+; fat 28% of calories, carbs the rest, saturated fat under 10%. Protein-forward: protein at least 35% of calories. With high triglycerides: carbs 34%, fat the rest, saturated fat under 7%, and the total-fat rule is switched off so only saturated fat counts. A starting point, not medical advice.</div></details></div>
     <div class="card"><h2>Approved rules (per serving)</h2>
       <div class="small muted" style="margin-bottom:6px">A food is <b style="color:var(--ok)">Approved</b> only if one serving passes every rule that's switched on.</div>
-      ${ruleRow('cal', 'Calories', '', 'at most')}${ruleRow('c', r.net ? 'Net carbs' : 'Carbs', 'g', 'at most')}${ruleRow('f', 'Fat', 'g', 'at most')}${ruleRow('sf', 'Saturated fat', 'g', 'at most')}${ruleRow('s', 'Sugar', 'g', 'at most')}${ruleRow('p', 'Protein', 'g', 'at least')}
+      ${ruleRow('cal', 'Calories', '', 'at most')}${ruleRow('c', r.net ? 'Net carbs' : 'Carbs', 'g', 'at most')}${ruleRow('f', 'Fat', 'g', 'at most')}${ruleRow('sf', 'Saturated fat', 'g', 'at most')}${ruleRow('s', 'Sugar', 'g', 'at most')}${ruleRow('p', 'Protein', 'g', 'at least (protein foods & snacks only)')}
       <label class="switch"><input type="checkbox" id="fruitsugar" ${r.fruitSugar ? 'checked' : ''}><span class="grow">Count natural sugar in whole fruit<br><span class="small muted">Off: fresh and frozen fruit skip the sugar rule. Juice, dried fruit and dates always count.</span></span></label>
       <label class="switch"><input type="checkbox" id="netcarbs" ${r.net ? 'checked' : ''}><span class="grow">Count net carbs (carbs minus fiber)</span></label>
       <div class="row" style="margin-top:8px"><span class="small grow">Set limits from my daily goals ÷</span>
