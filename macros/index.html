@@ -732,7 +732,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '3.6 (weights & package servings)';
+const APP_VERSION = '3.7 (meat in oz, rest in g)';
 const PLANNER_VERSION = 5; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -740,7 +740,7 @@ function defaults() {
     targets: { cal: 2000, p: 150, c: 200, f: 65, sf: 22 }, targetsSet: false,
     servingsPerDay: 5,
     rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, sf: { on: true, v: 4.5 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
-    foods: {}, list: {}, log: {}, plan: null, prices: {}, pkg: {}, units: 'g',
+    foods: {}, list: {}, log: {}, plan: null, prices: {}, pkg: {}, units: 'mixed',
     planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5 },
     avoid: ['chickpea', 'garbanzo', 'hummus', 'falafel'], excluded: {},
     calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose', tg: false, pf: true },
@@ -757,6 +757,7 @@ function load() {
   return defaults();
 }
 let S = load();
+if (!S.unitsChosen && S.units === 'g') S.units = 'mixed'; // ounces for meat, grams for the rest unless picked otherwise
 for (const f of Object.values(S.foods)) if (f.src === 'scan' && f.cat === 'other' && !f.catChecked) { f.cat = guessCategory(f); f.catAuto = true; f.catChecked = true; }
 // Drop plan items whose food no longer exists (e.g. removed from the catalog).
 if (S.plan) for (const d of S.plan.days) for (const m of d.meals) m.items = m.items.filter(x => getFoodSafe(x.id));
@@ -1150,13 +1151,13 @@ function openFood(id, opts = {}) {
     ${f.ppl || priceOf(f.id) != null ? `<div class="small muted" style="margin-top:8px">💲 ${priceOf(f.id) != null ? `${money(priceOf(f.id))}${PRICES[f.id] ? ' · ' + esc(PRICES[f.id][1]) : ''}` : ''}${f.ppl ? `${priceOf(f.id) != null ? ' · ' : ''}${priceText(f)}` : ''} <span class="small">(Lodi Costco estimate)</span></div>` : ''}
     ${f.src !== 'costco' ? `<div class="small muted" style="margin-top:8px">${f.src === 'scan' ? '📷 In your Costco inventory · ' : ''}Type: <b>${esc((CATS[f.cat] || CATS.other).label)}</b>${f.catAuto ? ' (guessed — tap Edit to change)' : ''}</div>` : ''}
     ${(() => { const pi = packageInfo(f), unit = /raw/.test(f.serving || '') ? ' raw' : '';
-      const per = S.units !== 'servings' && servingGrams(f) && !/\d\s*g\)/.test(f.serving || '') ? ` (${S.units === 'oz' ? r1(servingGrams(f) / 28.35) + ' oz' : Math.round(servingGrams(f)) + ' g'}${unit})` : '';
+      const per = S.units !== 'servings' && servingGrams(f) && !/\d\s*g\)/.test(f.serving || '') ? ` (${fmtWeight(f, servingGrams(f))}${unit})` : '';
       return `<div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)"><b class="small">📦 What one package makes</b>
         ${pi.servings ? `<div class="small" style="margin-top:4px">${pi.text ? esc(pi.text) + ' → ' : ''}<b>≈ ${Math.floor(pi.servings)} servings</b> of ${esc(f.serving)}${per}${pi.portion && Math.abs(pi.portion - 1) > 0.05 ? ` · <b>≈ ${Math.floor(pi.meals)} meals</b> at your usual ${esc(amountText(f, pi.portion))}` : ''}.</div>` : `<div class="small muted" style="margin-top:4px">Enter the package size from the label to see how many servings and meals it makes.</div>`}
         <div class="row" style="margin-top:6px;gap:6px"><input type="number" id="pkgnum" inputmode="decimal" step="any" min="0" placeholder="size" style="width:96px;padding:7px 8px">
           <select id="pkgunit" style="width:auto;padding:7px 8px"><option value="lb">lb</option><option value="oz">oz</option><option value="g">g</option><option value="count">count</option></select>
           <button class="btn alt sm" data-act="setpkg">Save</button>${pi.own ? `<button class="btn ghost sm" data-act="clearpkg">Reset</button>` : ''}</div></div>`; })()}
-    <div class="small" style="margin-top:12px"><b>Serving:</b> ${esc(f.serving)}${S.units !== 'servings' && servingGrams(f) && !/\d\s*g\)/.test(f.serving || '') ? ` = ${S.units === 'oz' ? r1(servingGrams(f) / 28.35) + ' oz' : Math.round(servingGrams(f)) + ' g'}` : ''}${f.noServing ? ' <span class="muted">(no serving size listed — values are per 100 g; tap Edit to fix)</span>' : ''}</div>
+    <div class="small" style="margin-top:12px"><b>Serving:</b> ${esc(f.serving)}${S.units !== 'servings' && servingGrams(f) && !/\d\s*g\)/.test(f.serving || '') ? ` = ${fmtWeight(f, servingGrams(f))}` : ''}${f.noServing ? ' <span class="muted">(no serving size listed — values are per 100 g; tap Edit to fix)</span>' : ''}</div>
     <div class="nut"><div><b>${fmt(f.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${fmt(f.p)}</b><span>protein g</span></div>
       <div><b style="color:var(--c)">${fmt(f.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${fmt(f.f)}</b><span>fat g</span></div></div>
     <div class="small muted">Saturated fat ${f.sf == null ? 'not listed' : fmt(f.sf) + ' g'} · Sugar ${fmt(f.s)} g · Fiber ${fmt(f.fb)} g${S.rules.net ? ` · Net carbs ${fmt(carbsOf(f))} g` : ''}</div>
@@ -1611,12 +1612,15 @@ function servingGrams(f) {
   if (each) { const c = /^(\d+)/.exec(sv); return (c ? +c[1] : 1) * each[1]; }
   return null;
 }
+// Ounces for meat and fish in "mixed" mode, grams for everything else.
+const usesOz = f => S.units === 'oz' || (S.units === 'mixed' && f.cat === 'protein');
+const fmtWeight = (f, x) => usesOz(f) ? (x >= 453.6 ? `${r1(x / 453.6)} lb` : `${r1(x / 28.35)} oz`) : (x >= 900 ? `${r1(x / 1000)} kg (${r1(x / 453.6)} lb)` : `${Math.round(x)} g`);
 const COOKED_YIELD = f => /salmon|steelhead|fish|tilapia|halibut|rockfish|shrimp|bass|ahi/.test(nm(f)) ? 0.8 : 0.75;
 // Amount in the chosen unit: grams/ounces for weighable foods (vegetables stay in cups), raw meat with its cooked weight.
 function weightText(f, sv) {
   if (S.units === 'servings' || f.cat === 'veg' || f.cat === 'other') return null; // vegetables and sauces stay in cups/tbsp
   const g = servingGrams(f); if (!g) return null;
-  const w = x => S.units === 'oz' ? (x >= 453.6 ? `${r1(x / 453.6)} lb` : `${r1(x / 28.35)} oz`) : (x >= 900 ? `${r1(x / 1000)} kg (${r1(x / 453.6)} lb)` : `${Math.round(x)} g`);
+  const w = x => fmtWeight(f, x);
   const tot = g * sv;
   if (/raw/.test(f.serving || '') && f.cat === 'protein') return `${w(tot)} raw (≈ ${w(tot * COOKED_YIELD(f))} cooked)`;
   return w(tot);
@@ -1869,7 +1873,7 @@ function renderSettings() {
       <input type="text" id="avoid" value="${esc((S.avoid || []).join(', '))}" placeholder="e.g. chickpea, hummus">
       ${Object.keys(S.excluded).length ? `<div class="small" style="margin-top:8px">Marked “Never use”: ${Object.keys(S.excluded).map(id => getFoodSafe(id)).filter(Boolean).map(f => `<button class="chip" data-act="open" data-id="${esc(f.id)}">${esc(f.name)}</button>`).join(' ')}</div>` : ''}</div>
     <div class="card"><h2>Measurements</h2><div class="small muted" style="margin-bottom:8px">How plans, recipes and the prep guide show amounts. Weights are the most accurate with a kitchen scale; vegetables stay in cups.</div>
-      <div class="chips">${[['g', '⚖️ Grams'], ['oz', 'Ounces'], ['servings', 'Cups & pieces']].map(([k, l]) => `<button class="chip ${S.units === k ? 'on' : ''}" data-act="units" data-v="${k}">${l}</button>`).join('')}</div></div>
+      <div class="chips">${[['mixed', '⚖️ Meat in oz, rest in g'], ['g', 'Grams'], ['oz', 'Ounces'], ['servings', 'Cups & pieces']].map(([k, l]) => `<button class="chip ${S.units === k ? 'on' : ''}" data-act="units" data-v="${k}">${l}</button>`).join('')}</div></div>
     <div class="card"><h2>Your data</h2><div class="small muted" style="margin-bottom:10px">Everything is saved only on this phone. Nothing is uploaded or shared. Save a backup now and then in case you change phones.</div>
       <div class="row wrap"><button class="btn alt grow sm" data-act="export">Save backup</button>
       <label class="btn alt grow sm" style="text-align:center">Restore backup<input type="file" id="importfile" accept="application/json,.json" hidden></label>
@@ -2017,7 +2021,7 @@ document.addEventListener('click', e => {
       $('#sheet').hidden = true; sheetFood = null;
       save(); toast(`${Object.keys(need).length} items on your shopping list`); go('list'); break;
     }
-    case 'units': S.units = el.dataset.v; save(); renderSettings(); toast(el.dataset.v === 'servings' ? 'Showing cups and pieces' : `Showing ${el.dataset.v === 'g' ? 'grams' : 'ounces'}`); break;
+    case 'units': S.units = el.dataset.v; S.unitsChosen = true; save(); renderSettings(); toast({ servings: 'Showing cups and pieces', g: 'Showing grams', oz: 'Showing ounces', mixed: 'Meat in ounces, everything else in grams' }[el.dataset.v]); break;
     case 'calc': calcGoals(); break;
     case 'setupcode': applySetupCode($('#setupcode').value); break;
     case 'autorules': { S.servingsPerDay = Math.max(1, Math.round(+$('#spd').value || 5)); autoRules(); save(); renderSettings(); toast('Per-serving limits updated'); break; }
