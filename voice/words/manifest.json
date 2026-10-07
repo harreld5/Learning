@@ -1,0 +1,352 @@
+[
+ {
+  "key": "find-the",
+  "phrase": "find the",
+  "auto": true
+ },
+ {
+  "key": "find",
+  "phrase": "find",
+  "auto": true
+ },
+ {
+  "key": "who-says",
+  "phrase": "who says",
+  "auto": true
+ },
+ {
+  "key": "how-many",
+  "phrase": "how many",
+  "auto": true
+ },
+ {
+  "key": "thats",
+  "phrase": "that's",
+  "auto": false
+ },
+ {
+  "key": "thats-a",
+  "phrase": "that's a",
+  "auto": true
+ },
+ {
+  "key": "find-the-big",
+  "phrase": "find the big",
+  "auto": true
+ },
+ {
+  "key": "find-the-little",
+  "phrase": "find the little",
+  "auto": true
+ },
+ {
+  "key": "that-one-is-big",
+  "phrase": "that one is big",
+  "auto": true
+ },
+ {
+  "key": "that-one-is-little",
+  "phrase": "that one is little",
+  "auto": true
+ },
+ {
+  "key": "red",
+  "phrase": "red",
+  "auto": true
+ },
+ {
+  "key": "blue",
+  "phrase": "blue",
+  "auto": true
+ },
+ {
+  "key": "yellow",
+  "phrase": "yellow",
+  "auto": true
+ },
+ {
+  "key": "green",
+  "phrase": "green",
+  "auto": true
+ },
+ {
+  "key": "orange",
+  "phrase": "orange",
+  "auto": true
+ },
+ {
+  "key": "purple",
+  "phrase": "purple",
+  "auto": true
+ },
+ {
+  "key": "pink",
+  "phrase": "pink",
+  "auto": true
+ },
+ {
+  "key": "brown",
+  "phrase": "brown",
+  "auto": true
+ },
+ {
+  "key": "circle",
+  "phrase": "circle",
+  "auto": true
+ },
+ {
+  "key": "square",
+  "phrase": "square",
+  "auto": true
+ },
+ {
+  "key": "triangle",
+  "phrase": "triangle",
+  "auto": false
+ },
+ {
+  "key": "star",
+  "phrase": "star",
+  "auto": false
+ },
+ {
+  "key": "heart",
+  "phrase": "heart",
+  "auto": true
+ },
+ {
+  "key": "rectangle",
+  "phrase": "rectangle",
+  "auto": false
+ },
+ {
+  "key": "oval",
+  "phrase": "oval",
+  "auto": false
+ },
+ {
+  "key": "diamond",
+  "phrase": "diamond",
+  "auto": true
+ },
+ {
+  "key": "hexagon",
+  "phrase": "hexagon",
+  "auto": false
+ },
+ {
+  "key": "cow",
+  "phrase": "cow",
+  "auto": false
+ },
+ {
+  "key": "dog",
+  "phrase": "dog",
+  "auto": false
+ },
+ {
+  "key": "cat",
+  "phrase": "cat",
+  "auto": true
+ },
+ {
+  "key": "duck",
+  "phrase": "duck",
+  "auto": false
+ },
+ {
+  "key": "pig",
+  "phrase": "pig",
+  "auto": true
+ },
+ {
+  "key": "sheep",
+  "phrase": "sheep",
+  "auto": true
+ },
+ {
+  "key": "lion",
+  "phrase": "lion",
+  "auto": true
+ },
+ {
+  "key": "frog",
+  "phrase": "frog",
+  "auto": true
+ },
+ {
+  "key": "horse",
+  "phrase": "horse",
+  "auto": false
+ },
+ {
+  "key": "chicken",
+  "phrase": "chicken",
+  "auto": true
+ },
+ {
+  "key": "bee",
+  "phrase": "bee",
+  "auto": true
+ },
+ {
+  "key": "owl",
+  "phrase": "owl",
+  "auto": false
+ },
+ {
+  "key": "moo",
+  "phrase": "moo",
+  "auto": false
+ },
+ {
+  "key": "woof",
+  "phrase": "woof woof",
+  "auto": false
+ },
+ {
+  "key": "meow",
+  "phrase": "meow",
+  "auto": true
+ },
+ {
+  "key": "quack",
+  "phrase": "quack quack",
+  "auto": true
+ },
+ {
+  "key": "oink",
+  "phrase": "oink oink",
+  "auto": true
+ },
+ {
+  "key": "baa",
+  "phrase": "baa",
+  "auto": false
+ },
+ {
+  "key": "roar",
+  "phrase": "roar",
+  "auto": true
+ },
+ {
+  "key": "ribbit",
+  "phrase": "ribbit",
+  "auto": true
+ },
+ {
+  "key": "neigh",
+  "phrase": "neigh",
+  "auto": true
+ },
+ {
+  "key": "cluck",
+  "phrase": "cluck cluck",
+  "auto": false
+ },
+ {
+  "key": "buzz",
+  "phrase": "buzz",
+  "auto": false
+ },
+ {
+  "key": "hoo",
+  "phrase": "hoo hoo",
+  "auto": false
+ },
+ {
+  "key": "apples",
+  "phrase": "apples",
+  "auto": true
+ },
+ {
+  "key": "bananas",
+  "phrase": "bananas",
+  "auto": true
+ },
+ {
+  "key": "stars",
+  "phrase": "stars",
+  "auto": true
+ },
+ {
+  "key": "fish",
+  "phrase": "fish",
+  "auto": false
+ },
+ {
+  "key": "balloons",
+  "phrase": "balloons",
+  "auto": true
+ },
+ {
+  "key": "cars",
+  "phrase": "cars",
+  "auto": true
+ },
+ {
+  "key": "flowers",
+  "phrase": "flowers",
+  "auto": true
+ },
+ {
+  "key": "cookies",
+  "phrase": "cookies",
+  "auto": true
+ },
+ {
+  "key": "ducks",
+  "phrase": "ducks",
+  "auto": false
+ },
+ {
+  "key": "one",
+  "phrase": "one",
+  "auto": false
+ },
+ {
+  "key": "two",
+  "phrase": "two",
+  "auto": true
+ },
+ {
+  "key": "three",
+  "phrase": "three",
+  "auto": true
+ },
+ {
+  "key": "four",
+  "phrase": "four",
+  "auto": false
+ },
+ {
+  "key": "five",
+  "phrase": "five",
+  "auto": false
+ },
+ {
+  "key": "six",
+  "phrase": "six",
+  "auto": false
+ },
+ {
+  "key": "seven",
+  "phrase": "seven",
+  "auto": false
+ },
+ {
+  "key": "eight",
+  "phrase": "eight",
+  "auto": false
+ },
+ {
+  "key": "nine",
+  "phrase": "nine",
+  "auto": true
+ },
+ {
+  "key": "ten",
+  "phrase": "ten",
+  "auto": true
+ }
+]
