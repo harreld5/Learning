@@ -732,7 +732,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '3.2 (shopping list & prices)';
+const APP_VERSION = '3.3 (scan to list with price)';
 const PLANNER_VERSION = 3; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -818,6 +818,8 @@ function mealsFor(f) { return f.meals || (CATS[f.cat] || CATS.other).meals; }
 let toastTimer;
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  // With a food page open, show the message at the top so it doesn't cover the buttons.
+  const sheetOpen = !$('#sheet').hidden; t.style.top = sheetOpen ? 'calc(12px + env(safe-area-inset-top))' : ''; t.style.bottom = sheetOpen ? 'auto' : '';
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600);
 }
 function carbsOf(f) { return S.rules.net ? Math.max(0, (f.c || 0) - (f.fb || 0)) : f.c; }
@@ -978,10 +980,13 @@ function renderScan() {
       <button class="btn" data-act="startscan">Start camera</button></div></div>
     <div class="row" style="margin:10px 0 14px"><button class="btn ghost sm" data-act="stopscan" id="stopbtn" hidden>Stop camera</button>
       <span class="small muted grow" id="scan-status"></span></div>
+    <div class="card" style="padding:10px 14px"><label class="switch" style="border:0;padding:0"><input type="checkbox" id="scantolist" ${S.scanToList ? 'checked' : ''}>
+      <span class="grow"><b>🛒 Shopping mode</b><br><span class="small muted">Add everything I scan to my shopping list, then type the shelf price.</span></span></label></div>
     <div class="card"><h2>Type the barcode</h2><div class="row"><input type="text" inputmode="numeric" id="manual-code" placeholder="e.g. 096619123456" autocomplete="off">
       <button class="btn" data-act="lookup">Look up</button></div>
       <div class="small muted" style="margin-top:6px">Nutrition comes from Open Food Facts, a free public food database. Only the barcode number is sent.</div></div>
     <div class="card"><h2>No barcode?</h2><div class="row"><button class="btn alt grow" data-act="find">Search by name</button><button class="btn alt grow" data-act="newfood">Enter label</button></div></div>`;
+  $('#scantolist').addEventListener('change', e => { S.scanToList = e.target.checked; save(); });
   if (S.camOk) startScan();
 }
 async function startScan() {
@@ -1069,7 +1074,7 @@ async function lookupBarcode(raw) {
   const code = String(raw || '').replace(/\D/g, '');
   if (code.length < 6) { toast('That barcode looks too short'); return; }
   const saved = S.foods['b' + code] || allFoods().find(f => f.barcode === code);
-  if (saved) return openFood(saved.id);
+  if (saved) { addScanToList(saved.id); return openFood(saved.id, { focusPrice: S.scanToList }); }
   sheet(`<div class="sheet-head"><h2>Looking up ${esc(code)}…</h2></div><div class="empty">Checking the food database.</div>`);
   try {
     for (const c of codeVariants(code)) {
@@ -1077,7 +1082,8 @@ async function lookupBarcode(raw) {
       if (d && d.status === 1 && d.product) {
         const f = fromOFF(code, d.product);
         S.foods[f.id] = f; save();
-        return openFood(f.id);
+        addScanToList(f.id);
+        return openFood(f.id, { focusPrice: S.scanToList });
       }
     }
     sheet(`<div class="sheet-head"><h2>Not in the database</h2><button class="icon-btn" data-act="close">✕</button></div>
@@ -1117,7 +1123,7 @@ function r1n(v) { return v == null ? null : r1(v); }
 /* ---------- food sheet ---------- */
 let sheetFood = null;
 function sheet(html) { $('#sheet-card').innerHTML = html; $('#sheet').hidden = false; }
-function closeSheet() { $('#sheet').hidden = true; sheetFood = null; if (tab === 'scan') { scan.busy = false; if (S.camOk) startScan(); } else render(); }
+function closeSheet() { if (sheetFood && $('#pprice')) { savePriceFrom(sheetFood.id); save(); } $('#sheet').hidden = true; sheetFood = null; if (tab === 'scan') { scan.busy = false; if (S.camOk) startScan(); } else render(); }
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
 
 function openFood(id, opts = {}) {
@@ -1152,10 +1158,34 @@ function openFood(id, opts = {}) {
       <div class="stepper"><button data-act="sv" data-d="-0.5">−</button><input type="number" id="sv" value="${sv}" step="0.25" min="0.25" inputmode="decimal"><button data-act="sv" data-d="0.5">+</button></div>
       <select id="meal" style="width:auto;flex:1">${MEALS.map(m => `<option ${m === (opts.meal || defaultMeal()) ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
     <button class="btn block" data-act="log">Log it</button>
-    <div class="row" style="margin-top:8px"><button class="btn alt grow sm" data-act="togglelist">${onList ? '✓ On shopping list' : '+ Shopping list'}</button>
+    <div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)">
+      <div class="row"><b class="small grow">🛒 Shopping list</b>${onList ? `<span class="small" style="color:var(--ok)">✓ On your list</span>` : ''}</div>
+      <div class="row" style="margin-top:6px;gap:6px">
+        <label class="row" style="gap:2px">$<input type="number" id="pprice" inputmode="decimal" step="0.01" min="0" value="${priceOf(f.id) == null ? '' : priceOf(f.id).toFixed(2)}" placeholder="price" style="width:90px;padding:7px 8px"></label>
+        <div class="stepper"><button data-act="sqty" data-d="-1" aria-label="Fewer">−</button><span id="sqty" style="min-width:22px;text-align:center;font-weight:700">${onList ? (S.list[f.id].qty || 1) : 1}</span><button data-act="sqty" data-d="1" aria-label="More">+</button></div>
+        <button class="btn sm grow" data-act="addlist">${onList ? 'Update' : 'Add to list'}</button></div>
+      ${priceOf(f.id) == null ? `<div class="small muted" style="margin-top:4px">Type the shelf price so your list total includes it.</div>` : (PRICES[f.id] && S.prices[f.id] == null ? `<div class="small muted" style="margin-top:4px">Listed price — change it if the shelf tag is different.</div>` : '')}
+    </div>
+    <div class="row" style="margin-top:8px">${onList ? `<button class="btn alt grow sm" data-act="togglelist">Remove from list</button>` : ''}
       <button class="btn alt grow sm" data-act="edit">Edit</button>
       <button class="btn ${S.excluded[f.id] ? 'danger' : 'alt'} sm" data-act="exclude">${S.excluded[f.id] ? '🚫 Never use' : '🚫'}</button>
       ${f.src !== 'costco' ? `<button class="btn danger sm" data-act="delfood">Delete</button>` : ''}</div>`);
+  if (opts.focusPrice && priceOf(f.id) == null) setTimeout(() => { const i = $('#pprice'); if (i) i.focus(); }, 150);
+}
+// Save the price typed on a food page (blank keeps the listed price).
+function savePriceFrom(id) {
+  const i = $('#pprice'); if (!i) return;
+  const v = i.value.trim();
+  if (v === '') { delete S.prices[id]; return; }
+  const n = Math.round(+v * 100) / 100;
+  if (!(n >= 0)) return;
+  if (PRICES[id] && PRICES[id][0] === n) delete S.prices[id]; else S.prices[id] = n;
+}
+// Shopping mode: put a scanned food on the list right away.
+function addScanToList(id) {
+  if (!S.scanToList) return;
+  const L = S.list[id];
+  if (!(L && L.on)) { S.list[id] = { on: true, got: false, qty: 1 }; save(); toast('Added to your shopping list'); }
 }
 function foodForm(f, code) {
   f = f || { name: '', brand: '', serving: '', cal: '', p: '', c: '', f: '', sf: '', s: '', fb: '', cat: 'other' };
@@ -1183,7 +1213,7 @@ function foodForm(f, code) {
     const nf = { ...f, id, name: d.name.trim() || 'Food', brand: d.brand.trim(), serving: d.serving.trim() || '1 serving', noServing: false,
       cal: num(d.cal), p: num(d.p), c: num(d.c), f: num(d.f), sf: num(d.sf), s: num(d.s), fb: num(d.fb), cat: d.cat,
       src: f.src === 'search' ? 'scan' : (f.src || (code ? 'scan' : 'custom')), barcode: f.barcode || code || '', catAuto: false };
-    S.foods[id] = nf; save(); toast('Saved'); openFood(id);
+    S.foods[id] = nf; save(); toast('Saved'); if (code) addScanToList(id); openFood(id, { focusPrice: !!code && S.scanToList });
   });
 }
 function findSheet(q = '') {
@@ -1683,8 +1713,18 @@ document.addEventListener('click', e => {
     case 'togglelist': {
       const f = sheetFood, L = S.list[f.id];
       if (L && L.on) delete S.list[f.id];
-      else { S.list[f.id] = { on: true, got: false };  }
+      else { S.list[f.id] = { on: true, got: false, qty: 1 }; }
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
+    }
+    case 'sqty': { const q = $('#sqty'); q.textContent = Math.max(1, (+q.textContent || 1) + +el.dataset.d); break; }
+    case 'addlist': {
+      const f = sheetFood, had = S.list[f.id] && S.list[f.id].on;
+      savePriceFrom(f.id);
+      S.list[f.id] = { ...(S.list[f.id] || {}), on: true, got: false, qty: +$('#sqty').textContent || 1 };
+      save();
+      const pr = priceOf(f.id), q = S.list[f.id].qty;
+      toast(`${had ? 'Updated' : 'Added'}: ${q} × ${f.name.slice(0, 28)}${pr != null ? ' · ' + money(pr * q) : ''}`);
+      openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
     case 'edit': foodForm(sheetFood); break;
     case 'exclude': {
