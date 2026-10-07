@@ -732,7 +732,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '3.5 (potatoes & clearer recipes)';
+const APP_VERSION = '3.6 (weights & package servings)';
 const PLANNER_VERSION = 5; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -740,7 +740,7 @@ function defaults() {
     targets: { cal: 2000, p: 150, c: 200, f: 65, sf: 22 }, targetsSet: false,
     servingsPerDay: 5,
     rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, sf: { on: true, v: 4.5 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
-    foods: {}, list: {}, log: {}, plan: null, prices: {},
+    foods: {}, list: {}, log: {}, plan: null, prices: {}, pkg: {}, units: 'g',
     planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5 },
     avoid: ['chickpea', 'garbanzo', 'hummus', 'falafel'], excluded: {},
     calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose', tg: false, pf: true },
@@ -1058,7 +1058,7 @@ function onCode(code) {
 }
 
 /* ---------- Open Food Facts lookup ---------- */
-const OFF_FIELDS = 'code,product_name,brands,serving_size,serving_quantity,nutriments,image_front_small_url';
+const OFF_FIELDS = 'code,product_name,brands,serving_size,serving_quantity,nutriments,image_front_small_url,quantity,product_quantity,product_quantity_unit';
 async function offFetch(url) {
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 12000);
   try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok && r.status !== 404) throw new Error('http ' + r.status); return await r.json(); }
@@ -1114,6 +1114,7 @@ function fromOFF(code, p) {
     serving: hasServing ? (p.serving_size || (sq + ' g')) : '100 g', noServing: !hasServing,
     cal: cal == null ? null : r1(cal), p: r1n(per('proteins')), c: r1n(per('carbohydrates')), f: r1n(per('fat')),
     sf: r1n(per('saturated-fat')), s: r1n(per('sugars')), fb: r1n(per('fiber')), img: p.image_front_small_url || '',
+    pkgText: p.quantity || '', pkgG: (+p.product_quantity > 0 && /^(g|ml)?$/i.test(p.product_quantity_unit || 'g')) ? +p.product_quantity : null,
   };
   food.cat = guessCategory(food);
   return food;
@@ -1148,7 +1149,14 @@ function openFood(id, opts = {}) {
     })()}
     ${f.ppl || priceOf(f.id) != null ? `<div class="small muted" style="margin-top:8px">💲 ${priceOf(f.id) != null ? `${money(priceOf(f.id))}${PRICES[f.id] ? ' · ' + esc(PRICES[f.id][1]) : ''}` : ''}${f.ppl ? `${priceOf(f.id) != null ? ' · ' : ''}${priceText(f)}` : ''} <span class="small">(Lodi Costco estimate)</span></div>` : ''}
     ${f.src !== 'costco' ? `<div class="small muted" style="margin-top:8px">${f.src === 'scan' ? '📷 In your Costco inventory · ' : ''}Type: <b>${esc((CATS[f.cat] || CATS.other).label)}</b>${f.catAuto ? ' (guessed — tap Edit to change)' : ''}</div>` : ''}
-    <div class="small" style="margin-top:12px"><b>Serving:</b> ${esc(f.serving)}${f.noServing ? ' <span class="muted">(no serving size listed — values are per 100 g; tap Edit to fix)</span>' : ''}</div>
+    ${(() => { const pi = packageInfo(f), unit = /raw/.test(f.serving || '') ? ' raw' : '';
+      const per = S.units !== 'servings' && servingGrams(f) && !/\d\s*g\)/.test(f.serving || '') ? ` (${S.units === 'oz' ? r1(servingGrams(f) / 28.35) + ' oz' : Math.round(servingGrams(f)) + ' g'}${unit})` : '';
+      return `<div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)"><b class="small">📦 What one package makes</b>
+        ${pi.servings ? `<div class="small" style="margin-top:4px">${pi.text ? esc(pi.text) + ' → ' : ''}<b>≈ ${Math.floor(pi.servings)} servings</b> of ${esc(f.serving)}${per}${pi.portion && Math.abs(pi.portion - 1) > 0.05 ? ` · <b>≈ ${Math.floor(pi.meals)} meals</b> at your usual ${esc(amountText(f, pi.portion))}` : ''}.</div>` : `<div class="small muted" style="margin-top:4px">Enter the package size from the label to see how many servings and meals it makes.</div>`}
+        <div class="row" style="margin-top:6px;gap:6px"><input type="number" id="pkgnum" inputmode="decimal" step="any" min="0" placeholder="size" style="width:96px;padding:7px 8px">
+          <select id="pkgunit" style="width:auto;padding:7px 8px"><option value="lb">lb</option><option value="oz">oz</option><option value="g">g</option><option value="count">count</option></select>
+          <button class="btn alt sm" data-act="setpkg">Save</button>${pi.own ? `<button class="btn ghost sm" data-act="clearpkg">Reset</button>` : ''}</div></div>`; })()}
+    <div class="small" style="margin-top:12px"><b>Serving:</b> ${esc(f.serving)}${S.units !== 'servings' && servingGrams(f) && !/\d\s*g\)/.test(f.serving || '') ? ` = ${S.units === 'oz' ? r1(servingGrams(f) / 28.35) + ' oz' : Math.round(servingGrams(f)) + ' g'}` : ''}${f.noServing ? ' <span class="muted">(no serving size listed — values are per 100 g; tap Edit to fix)</span>' : ''}</div>
     <div class="nut"><div><b>${fmt(f.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${fmt(f.p)}</b><span>protein g</span></div>
       <div><b style="color:var(--c)">${fmt(f.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${fmt(f.f)}</b><span>fat g</span></div></div>
     <div class="small muted">Saturated fat ${f.sf == null ? 'not listed' : fmt(f.sf) + ' g'} · Sugar ${fmt(f.s)} g · Fiber ${fmt(f.fb)} g${S.rules.net ? ` · Net carbs ${fmt(carbsOf(f))} g` : ''}</div>
@@ -1305,7 +1313,7 @@ function renderList() {
         const L = S.list[f.id], pr = priceOf(f.id), qty = L.qty || 1, pkg = PRICES[f.id] ? PRICES[f.id][1] : '';
         return `<div class="item" style="align-items:flex-start"><input type="checkbox" data-act="got" data-id="${esc(f.id)}" ${L.got ? 'checked' : ''} aria-label="Got it" style="margin-top:3px">
           <div class="grow"><div class="name tap" data-act="open" data-id="${esc(f.id)}" style="${L.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(f.name)}</div>
-            <div class="meta">${pkg ? esc(pkg) : ''}${L.need ? `${pkg ? ' · ' : ''}≈ ${r1(L.need)} servings for your plan` : ''}</div>
+            <div class="meta">${pkg ? esc(pkg) : ''}${(() => { const pi = packageInfo(f); return pi.servings ? ` · ≈ ${Math.floor(pi.servings)} servings${pi.portion && Math.abs(pi.portion - 1) > 0.05 ? ` / ${Math.floor(pi.meals)} meals` : ''} per package` : ''; })()}${L.need ? ` · plan needs ≈ ${r1(L.need)} servings` : ''}</div>
             <div class="row" style="margin-top:6px;gap:6px">
               <div class="stepper"><button data-act="qty" data-id="${esc(f.id)}" data-d="-1" aria-label="Fewer">−</button><span style="min-width:22px;text-align:center"><b>${qty}</b></span><button data-act="qty" data-id="${esc(f.id)}" data-d="1" aria-label="More">+</button></div>
               <span class="small muted">×</span>
@@ -1582,6 +1590,67 @@ function generatePrepPlan() {
   S.plan = { made: Date.now(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION, prep: n }; planDay = 0; save();
 }
 
+
+/* ---------- Weights & packages ---------- */
+// Typical gram weights for servings that don't list grams on the label.
+const GRAMS_EACH = [[/hard-boiled|\beggs?\b(?! whites)/, 50, 'egg'], [/carb balance/, 45, 'tortilla'], [/corn tortilla/, 23, 'tortilla'], [/siete/, 28, 'tortilla'],
+  [/10" flour/, 70, 'tortilla'], [/8" flour|flour tortilla/, 40, 'tortilla'], [/bimbo/, 28, 'slice'], [/\bbread\b|sourdough/, 45, 'slice'],
+  [/banana/, 118], [/apple pear/, 122], [/apples?\b/, 182], [/pears?\b/, 178], [/gold kiwi/, 81], [/kiwi/, 75], [/mandarin/, 76], [/orange/, 140], [/peach/, 150], [/plums?\b/, 66, 'plum']];
+const GRAMS_PER_CUP = [[/strawberr/, 152], [/raspberr/, 123], [/blackberr/, 144], [/blueberr/, 148], [/three-berry|berry blend/, 140], [/grapes/, 151],
+  [/watermelon/, 152], [/cantaloupe|melon/, 160], [/pineapple/, 165], [/mango/, 140], [/fruit bowl/, 150], [/cottage cheese/, 226], [/marinara|pasta sauce/, 250]];
+const GRAMS_PER_TBSP = [[/peanut butter|almond butter/, 16], [/olive oil/, 13.5], [/mayo/, 14], [/salsa|picante/, 16], [/balsamic|vinegar/, 16], [/teriyaki|yoshida|bachan|sauce/, 18], [/honey|syrup|agave/, 21]];
+const toNum = t => t.includes('/') ? t.split('/').reduce((a, b) => a / b) : +t;
+function servingGrams(f) {
+  const sv = f.serving || '', n = nm(f);
+  let m = /\((\d+(?:\.\d+)?)\s*g\)/.exec(sv); if (m) return +m[1];
+  m = /(\d+(?:\.\d+)?)\s*g\b/.exec(sv); if (m && !/\d\s*g\s*protein/.test(sv)) return +m[1];
+  m = /(\d+\/\d+|\d+(?:\.\d+)?)\s*(oz|lb)\b/.exec(sv); if (m && !/fl oz/.test(sv)) return toNum(m[1]) * (m[2] === 'lb' ? 453.6 : 28.35);
+  m = /^(\d+\/\d+|\d+(?:\.\d+)?)\s*(cups?|tbsp)\b/.exec(sv);
+  if (m) { const tbl = m[2] === 'tbsp' ? GRAMS_PER_TBSP : GRAMS_PER_CUP, hit = tbl.find(([re]) => re.test(n)); if (hit) return toNum(m[1]) * hit[1]; }
+  const each = GRAMS_EACH.find(([re]) => re.test(n));
+  if (each) { const c = /^(\d+)/.exec(sv); return (c ? +c[1] : 1) * each[1]; }
+  return null;
+}
+const COOKED_YIELD = f => /salmon|steelhead|fish|tilapia|halibut|rockfish|shrimp|bass|ahi/.test(nm(f)) ? 0.8 : 0.75;
+// Amount in the chosen unit: grams/ounces for weighable foods (vegetables stay in cups), raw meat with its cooked weight.
+function weightText(f, sv) {
+  if (S.units === 'servings' || f.cat === 'veg' || f.cat === 'other') return null; // vegetables and sauces stay in cups/tbsp
+  const g = servingGrams(f); if (!g) return null;
+  const w = x => S.units === 'oz' ? (x >= 453.6 ? `${r1(x / 453.6)} lb` : `${r1(x / 28.35)} oz`) : (x >= 900 ? `${r1(x / 1000)} kg (${r1(x / 453.6)} lb)` : `${Math.round(x)} g`);
+  const tot = g * sv;
+  if (/raw/.test(f.serving || '') && f.cat === 'protein') return `${w(tot)} raw (≈ ${w(tot * COOKED_YIELD(f))} cooked)`;
+  return w(tot);
+}
+// Package size from a label like "about 8.52 lb package", "2.5 lbs, 2-count", "5.3 oz, 20-count" or "24-count".
+function parsePkg(t) {
+  t = (t || '').toLowerCase().replace(/ﬂ/g, 'fl');
+  const multi = /(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(lbs?|oz)\b/.exec(t);
+  const wt = /(\d+(?:\.\d+)?)\s*(lbs?|oz)\b/.exec(t), fl = /fl\.?\s*oz/.test(t);
+  const cnt = /(\d+)\s*-?\s*(count|ct|pack|pk)\b/.exec(t);
+  const toG = (n, u) => n * (/lb/.test(u) ? 453.6 : 28.35);
+  if (multi) return { g: +multi[1] * toG(+multi[2], multi[3]) };
+  if (wt && !fl) return { g: toG(+wt[1], wt[2]) * (cnt ? +cnt[1] : 1) };
+  if (cnt) return { count: +cnt[1] };
+  return {};
+}
+function usualPortion(f) {
+  const xs = S.plan ? S.plan.days.flatMap(d => d.meals.flatMap(m => m.items.filter(x => x.id === f.id))) : [];
+  if (xs.length) return xs.reduce((a, x) => a + x.sv, 0) / xs.length;
+  return f.cat === 'protein' ? (S.planOpts.pf ? 2 : 1.5) : 1;
+}
+function packageInfo(f) {
+  const own = S.pkg[f.id];
+  const text = own ? (own.g ? `${r1(own.g / 453.6)} lb` : `${own.count} count`) : f.pkgText || (PRICES[f.id] ? PRICES[f.id][1] : '');
+  const pk = own || (f.pkgG ? { g: f.pkgG } : parsePkg(text));
+  let servings = null;
+  const sg = servingGrams(f);
+  if (pk.g && sg) servings = pk.g / sg;
+  else if (pk.count) { const per = /^(\d+)\s*(eggs?|bars?|tortillas?|slices?|links?|sticks?|pieces?|bagels?|rolls?|pouch|shakes?|patty|bottles?|cans?|wedges?|cups?\s*\()/.exec(f.serving || ''); servings = pk.count / (per ? +per[1] : 1); }
+  if (!servings || !isFinite(servings)) return { text, servings: null };
+  const portion = usualPortion(f);
+  return { text, servings, portion, meals: servings / portion, own: !!own };
+}
+
 /* ---------- Recipes ---------- */
 const shortName = f => (f.name || '').replace(/\s*\((?![^)]*(canned|frozen|sliced))[^)]*\)/g, '').replace(/^Kirkland (Signature )?/, '').trim();
 function niceNum(q) {
@@ -1593,6 +1662,8 @@ function niceNum(q) {
 }
 // "2.5 × 4 oz raw" → "10 oz raw"; "1.5 × 1/4 cup dry (45 g)" → "⅜ cup dry"; "3 × 2 eggs" → "6 eggs"
 function amountText(f, sv) {
+  const wt = weightText(f, sv);
+  if (wt) return isUnit(f) && !/raw/.test(wt) ? `${amountText({ ...f, cat: 'veg' }, sv)} (${wt})` : wt;
   const m = /^(\d+\/\d+|\d+(?:\.\d+)?)\s*(.*)$/.exec(f.serving || '');
   if (!m) return `${r1(sv)} × ${f.serving}`;
   const base = m[1].includes('/') ? m[1].split('/').reduce((a, b) => a / b) : +m[1];
@@ -1700,7 +1771,7 @@ function prepGuide() {
   const boxes = day.meals.filter(m => m.meal === 'Lunch' || m.meal === 'Dinner');
   steps.push(`Let everything cool for 15–20 min, then set out ${boxes.length * n} containers (${n} for lunch, ${n} for dinner). Into each, put one day's amount: ` +
     boxes.map(m => `${m.meal.toLowerCase()} — ${m.items.map(x => { const f = getFood(x.id), a = amountText(f, x.sv), raw = /^([\d.]+) (oz|lb) raw/.exec(a);
-      const cooked = raw ? ` (about ${r1((raw[2] === 'lb' ? +raw[1] * 16 : +raw[1]) * 0.75)} oz cooked)` : '';
+      const cooked = raw && !/cooked/.test(a) ? ` (about ${r1((raw[2] === 'lb' ? +raw[1] * 16 : +raw[1]) * 0.75)} oz cooked)` : '';
       return `${a}${cooked} ${shortName(f).toLowerCase()}`; }).join(', ')}`).join('; ') + '.');
   steps.push('Keep salsa, sauces, dressing, avocado and salad greens in separate small containers and add them when you eat, so nothing gets soggy.');
   steps.push(`Refrigerate within 2 hours of cooking. Cooked meals are best within 3–4 days, so ${n >= 5 ? 'freeze the day 4 and day 5 containers' : 'freeze the day 4 containers'} and move each to the fridge the night before. Reheat until steaming hot (165°F).`);
@@ -1749,7 +1820,7 @@ function renderPlan() {
       const mt = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
       h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal}${m.title ? ` · ${esc(m.title)}` : ''} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
         ${m.items.map(x => { const f = getFood(x.id); return `<div class="item tap" data-act="open" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div>
-          <div class="meta">${r1(x.sv)} × ${esc(f.serving)} · ${Math.round(f.cal * x.sv)} cal</div></div></div>`; }).join('')}
+          <div class="meta">${esc(amountText(f, x.sv))} · ${Math.round(f.cal * x.sv)} cal</div></div></div>`; }).join('')}
         <div class="row" style="margin-top:6px"><button class="btn sm" data-act="recipe" data-m="${mi}">📖 Recipe</button><button class="btn alt sm" data-act="logmeal" data-m="${mi}">Log this meal today</button>${S.plan.prep && m.meal !== 'Snacks' ? `<span class="small muted grow" style="text-align:right">× ${S.plan.prep} ${m.meal === 'Breakfast' ? 'days' : 'containers'}</span>` : ''}</div></div>`;
     });
     h += `<button class="btn block" data-act="plan2list">Add ${days.length > 1 ? 'all ' + days.length + ' days' : 'this plan'} to my shopping list</button>`;
@@ -1797,6 +1868,8 @@ function renderSettings() {
       <div class="small muted" style="margin-bottom:6px">Any food whose name contains one of these words is <b>Not approved</b> and never used in meal plans. Separate words with commas.</div>
       <input type="text" id="avoid" value="${esc((S.avoid || []).join(', '))}" placeholder="e.g. chickpea, hummus">
       ${Object.keys(S.excluded).length ? `<div class="small" style="margin-top:8px">Marked “Never use”: ${Object.keys(S.excluded).map(id => getFoodSafe(id)).filter(Boolean).map(f => `<button class="chip" data-act="open" data-id="${esc(f.id)}">${esc(f.name)}</button>`).join(' ')}</div>` : ''}</div>
+    <div class="card"><h2>Measurements</h2><div class="small muted" style="margin-bottom:8px">How plans, recipes and the prep guide show amounts. Weights are the most accurate with a kitchen scale; vegetables stay in cups.</div>
+      <div class="chips">${[['g', '⚖️ Grams'], ['oz', 'Ounces'], ['servings', 'Cups & pieces']].map(([k, l]) => `<button class="chip ${S.units === k ? 'on' : ''}" data-act="units" data-v="${k}">${l}</button>`).join('')}</div></div>
     <div class="card"><h2>Your data</h2><div class="small muted" style="margin-bottom:10px">Everything is saved only on this phone. Nothing is uploaded or shared. Save a backup now and then in case you change phones.</div>
       <div class="row wrap"><button class="btn alt grow sm" data-act="export">Save backup</button>
       <label class="btn alt grow sm" style="text-align:center">Restore backup<input type="file" id="importfile" accept="application/json,.json" hidden></label>
@@ -1906,6 +1979,12 @@ document.addEventListener('click', e => {
       openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
     case 'edit': foodForm(sheetFood); break;
+    case 'setpkg': {
+      const v = +$('#pkgnum').value, u = $('#pkgunit').value; if (!(v > 0)) { toast('Type the package size first'); break; }
+      S.pkg[sheetFood.id] = u === 'count' ? { count: v } : { g: v * (u === 'lb' ? 453.6 : u === 'oz' ? 28.35 : 1) };
+      save(); openFood(sheetFood.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
+    }
+    case 'clearpkg': delete S.pkg[sheetFood.id]; save(); openFood(sheetFood.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     case 'exclude': {
       const f = sheetFood;
       if (S.excluded[f.id]) { delete S.excluded[f.id]; toast('Allowed again'); } else { S.excluded[f.id] = true; toast('Won’t be used in plans'); }
@@ -1934,10 +2013,11 @@ document.addEventListener('click', e => {
     case 'plan2list': {
       const need = {};
       for (const d of S.plan.days) for (const m of d.meals) for (const x of m.items) need[x.id] = (need[x.id] || 0) + x.sv;
-      for (const [fid, n] of Object.entries(need)) S.list[fid] = { ...(S.list[fid] || {}), on: true, got: false, need: n, qty: (S.list[fid] && S.list[fid].qty) || 1 };
+      for (const [fid, n] of Object.entries(need)) { const pi = packageInfo(getFood(fid)); S.list[fid] = { ...(S.list[fid] || {}), on: true, got: false, need: n, qty: pi.servings ? Math.max(1, Math.ceil(n / pi.servings - 0.05)) : ((S.list[fid] && S.list[fid].qty) || 1) }; }
       $('#sheet').hidden = true; sheetFood = null;
       save(); toast(`${Object.keys(need).length} items on your shopping list`); go('list'); break;
     }
+    case 'units': S.units = el.dataset.v; save(); renderSettings(); toast(el.dataset.v === 'servings' ? 'Showing cups and pieces' : `Showing ${el.dataset.v === 'g' ? 'grams' : 'ounces'}`); break;
     case 'calc': calcGoals(); break;
     case 'setupcode': applySetupCode($('#setupcode').value); break;
     case 'autorules': { S.servingsPerDay = Math.max(1, Math.round(+$('#spd').value || 5)); autoRules(); save(); renderSettings(); toast('Per-serving limits updated'); break; }
