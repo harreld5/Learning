@@ -166,7 +166,7 @@ const CATS = {
 const CATALOG_RAW = [
   ['k1','Kirkland Boneless Skinless Chicken Breast','protein','4 oz raw',120,26,0,1.5,0,0],
   ['k2','Costco Rotisserie Chicken (meat, no skin)','protein','3 oz',140,19,0,7,0,0],
-  ['k3','Kirkland Lean Ground Beef 88/12','protein','4 oz raw',200,21,0,12,0,0],
+  ['k3','Kirkland Lean Ground Beef 88/12','protein','4 oz raw',200,21,0,12,0,0,{ppl:6.80}],
   ['k4','Kirkland Ground Turkey 93/7','protein','4 oz raw',170,21,0,9,0,0],
   ['k5','Kirkland Atlantic Salmon Fillet','protein','4 oz raw',230,23,0,15,0,0],
   ['k6','Kirkland Wild Sockeye Salmon','protein','4 oz raw',150,24,0,6,0,0],
@@ -227,6 +227,42 @@ const CATALOG_RAW = [
   ['a7','Kirkland Walnuts','fat','1 oz (14 halves)',190,4,4,18,1,2,{meals:'blds'}],
   ['a8','Organic Chia Seeds','fat','2 tbsp (28 g)',140,5,12,10,0,10,{meals:'bs'}],
   ['a9','Organic Ground Flaxseed','fat','2 tbsp (14 g)',70,3,4,5,0,4,{meals:'bs'}],
+  // Beef from the Lodi Costco (Instacart list, Oct 2026). USDA values for 4 oz raw; $/lb is Instacart's estimate.
+  ['m1','Kirkland Choice Filet Mignon (Tenderloin Steak)','protein','4 oz raw',200,23.5,0,11.5,0,0,{sf:4.5,ppl:28.36}],
+  ['m2','Kirkland Choice Flank Steak','protein','4 oz raw',175,24,0,8,0,0,{sf:3.4,ppl:17.01}],
+  ['m3','Kirkland Prime Bone-In Chuck Short Ribs','protein','4 oz raw',440,16,0,41,0,0,{sf:17,ppl:14.74}],
+  ['m4','Kirkland Choice Beef Back Ribs','protein','4 oz raw',350,19,0,30,0,0,{sf:12,ppl:6.8}],
+  ['m5','Kirkland Prime New York Steak','protein','4 oz raw',270,22,0,20,0,0,{sf:8,ppl:23.82}],
+  ['m6','Kirkland Choice Chuck Pot Roast (boneless)','protein','4 oz raw',225,21.5,0,15,0,0,{sf:6,ppl:11.34}],
+  ['m7','Kirkland Choice Whole Ribeye (boneless)','protein','4 oz raw',280,21,0,21.5,0,0,{sf:8.5,ppl:17.83}],
+  ['m8','Kirkland Choice Chuck Steak (boneless)','protein','4 oz raw',225,21.5,0,15,0,0,{sf:6,ppl:11.34}],
+  ['m9','Kirkland New York Shabu Shabu (thin sliced)','protein','4 oz raw',215,23,0,13,0,0,{sf:5,ppl:18.15}],
+  ['m10','Kirkland Choice Peeled Tenderloin (whole)','protein','4 oz raw',200,23.5,0,11.5,0,0,{sf:4.5,ppl:35.7}],
+  ['m11','Kirkland Beef Tongue','protein','4 oz raw',255,17,4,18,0,0,{sf:7,ppl:10.2}],
+  ['m12','Kirkland Prime Ribeye Cap Steak','protein','4 oz raw',330,20,0,28,0,0,{sf:11,ppl:32.9}],
+  ['m13','Kirkland Prime Top Sirloin Steak (cap off)','protein','4 oz raw',200,24,0,11,0,0,{sf:4.5,ppl:17.01}],
+  ['m14','Kirkland Choice Beef for Stew','protein','4 oz raw',200,22,0,12,0,0,{sf:5,ppl:10.2}],
+  ['m15','Kirkland Choice Ribeye Roast (boneless)','protein','4 oz raw',280,21,0,21.5,0,0,{sf:8.5,ppl:22.44}],
+  ['m16','Kirkland Choice Boneless Chuck Short Ribs','protein','4 oz raw',380,17,0,34,0,0,{sf:14,ppl:19.28}],
+  ['m17','Kirkland Beef Oxtail','protein','4 oz raw',300,22,0,23,0,0,{sf:9,ppl:10.2}],
+  ['m18','Kirkland Choice Flap Meat (Loin Tip Steak)','protein','4 oz raw',190,22.5,0,10.5,0,0,{sf:4,ppl:18.15}],
+  ['m19','Great Range Ground Bison 90% Lean','protein','4 oz raw',200,20,0,12,0,0,{sf:5,ppl:12.25}],
+  ['m20','Kirkland Choice New York Steak (boneless)','protein','4 oz raw',230,23,0,15,0,0,{sf:6,ppl:18.15}],
+  ['m21','Kirkland Choice Ribeye Steak, Thin Cut','protein','4 oz raw',280,21,0,21.5,0,0,{sf:8.5,ppl:22.69}],
+  ['m22','Kirkland Choice Eye Round Roast','protein','4 oz raw',140,25,0,4,0,0,{sf:1.5,ppl:9.07}],
+  ['m23','Kirkland Whole Beef Brisket','protein','4 oz raw',285,19.5,0,22.5,0,0,{sf:9,ppl:7.27}],
+  ['m24','Kirkland Prime Tri-Tip','protein','4 oz raw',230,22,0,15,0,0,{sf:6,ppl:17.01}],
+  ['m25','Kirkland Choice Tri-Tip Roast','protein','4 oz raw',200,23,0,11,0,0,{sf:4.5,ppl:15.88}],
+  ['m26','Kirkland Choice Seasoned Tri-Tip','protein','4 oz raw',210,22,2,11,1,0,{sf:4.5,ppl:18.15}],
+  ['m27','American Wagyu Ground Beef','protein','4 oz raw',290,19,0,23,0,0,{sf:9,ppl:8.32}],
+  ['m28','Kirkland Choice Ribeye Steak (boneless)','protein','4 oz raw',280,21,0,21.5,0,0,{sf:8.5,ppl:22.69}],
+  ['m29','Kirkland Top Sirloin Cap (Picanha, whole)','protein','4 oz raw',250,21,0,18,0,0,{sf:7,ppl:11.34}],
+  ['m30','Kirkland Organic Ground Beef 85/15','protein','4 oz raw',240,21,0,17,0,0,{sf:6.5,ppl:8.18}],
+  ['m31','Kirkland Prime Boneless Chuck Short Ribs','protein','4 oz raw',400,16,0,37,0,0,{sf:15,ppl:20.42}],
+  ['m32','Kirkland Choice Top Sirloin Cap Steak','protein','4 oz raw',250,21,0,18,0,0,{sf:7,ppl:14.74}],
+  ['m33','Kirkland Prime Ribeye Steak (boneless)','protein','4 oz raw',320,20,0,27,0,0,{sf:11,ppl:30.63}],
+  ['m34','Kirkland Top Sirloin Steak (boneless)','protein','4 oz raw',180,25,0,8,0,0,{sf:3,ppl:14.74}],
+  ['m35','Ruprecht Chinese BBQ-Style Beef Short Ribs','protein','4 oz raw',380,16,10,30,8,0,{sf:12,ppl:11.34}],
 ];
 // Saturated fat per serving (g), approximate.
 const SAT_FAT = { k1: 0.5, k2: 2, k3: 5, k4: 2.5, k5: 3, k6: 1, k7: 0.5, k8: 0.5, k9: 0, k10: 0.5, k11: 3, k12: 1.5, k13: 0.5, k14: 0,
@@ -234,12 +270,12 @@ const SAT_FAT = { k1: 0.5, k2: 2, k3: 5, k4: 2.5, k5: 3, k6: 1, k7: 0.5, k8: 0.5
   c5: 0, c6: 0.5, c7: 0, c8: 0, c9: 0, c11: 0, c12: 0.5, v8: 0.5, a1: 1, a2: 1, a3: 3, a4: 2, a5: 5, a7: 1.5,
   a8: 1, a9: 0.5, s1: 0, s2: 4, s3: 1, s4: 1.5, s5: 0 };
 const CATALOG = CATALOG_RAW.map(([id, name, cat, serving, cal, p, c, f, s, fb, o = {}]) =>
-  ({ id, name, cat, serving, cal, p, c, f, s, fb, sf: SAT_FAT[id] ?? 0, src: 'costco', meals: o.meals, whole: !!o.whole }));
+  ({ id, name, cat, serving, cal, p, c, f, s, fb, sf: o.sf ?? SAT_FAT[id] ?? 0, ppl: o.ppl, src: 'costco', meals: o.meals, whole: !!o.whole }));
 const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '1.5 (protein-forward)';
+const APP_VERSION = '1.6 (Lodi beef)';
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -281,6 +317,13 @@ const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${String
 const todayKey = () => dayKey(new Date());
 const proteinRatio = f => f.cal ? (f.p || 0) * 4 / f.cal : 0;
 const isHighProtein = f => proteinRatio(f) >= 0.3 && (f.p || 0) >= 8;
+// Cost of one serving when we know the price per pound and the serving is in ounces.
+function servingCost(f) {
+  const m = /([\d.]+)\s*oz/i.exec(f.serving || '');
+  return f.ppl && m ? f.ppl * parseFloat(m[1]) / 16 : null;
+}
+const money = n => '$' + n.toFixed(2);
+function priceText(f) { const c = servingCost(f); return f.ppl ? `${money(f.ppl)}/lb${c ? ` · ≈${money(c)} per serving` : ''}` : ''; }
 function sfTarget() { return S.targets.sf || Math.round(S.targets.cal * 0.1 / 9); }
 function getFoodSafe(id) { return (S && S.foods[id]) || CATALOG_BY_ID[id] || null; }
 function avoidedWord(f) {
@@ -551,6 +594,7 @@ function openFood(id, opts = {}) {
       <button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">per serving</span></div>
     ${v.fails.length ? `<ul class="reasons">${v.fails.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : `<div class="small muted" style="margin-top:6px">Within all your per-serving limits.</div>`}
+    ${f.ppl ? `<div class="small muted" style="margin-top:8px">💲 ${priceText(f)} <span class="small">(Lodi Costco estimate)</span></div>` : ''}
     <div class="small" style="margin-top:12px"><b>Serving:</b> ${esc(f.serving)}${f.noServing ? ' <span class="muted">(no serving size listed — values are per 100 g; tap Edit to fix)</span>' : ''}</div>
     <div class="nut"><div><b>${fmt(f.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${fmt(f.p)}</b><span>protein g</span></div>
       <div><b style="color:var(--c)">${fmt(f.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${fmt(f.f)}</b><span>fat g</span></div></div>
@@ -655,7 +699,7 @@ function renderCostco() {
         <select id="ccat" style="width:auto;border-radius:999px;padding:5px 10px;font-size:14px"><option value="">All types</option>${Object.entries(CATS).map(([k, c]) => `<option value="${k}" ${costcoCat === k ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
       <div class="card">${items.length ? items.map(f => `<div class="item"><input type="checkbox" data-act="listtoggle" data-id="${esc(f.id)}" ${S.list[f.id] && S.list[f.id].on ? 'checked' : ''} aria-label="On my list">
         <div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
-        <div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}</div></div>${badge(f)}</div>`).join('') : `<div class="empty">No items match.</div>`}</div>
+        <div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}${f.ppl ? ' · ' + money(f.ppl) + '/lb' : ''}</div></div>${badge(f)}</div>`).join('') : `<div class="empty">No items match.</div>`}</div>
       <button class="btn alt block" data-act="newfood">+ Add your own Costco item</button>
       <div class="small muted" style="margin-top:8px">Tick the box to put an item on your shopping list. Meal plans can use only ticked items (switch that on in Plan).</div>`;
   }
