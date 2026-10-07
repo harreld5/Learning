@@ -319,8 +319,8 @@ const CATALOG_RAW = [
   ['d16','Petite Cuisine Breaded Mozzarella Sticks','snack','3 sticks (84 g)',240,10,20,13,1,1,{sf:5}],
   ['d17','Kirkland Reduced Sodium Dry Salame','snack','1 oz',100,7,1,8,0,0,{sf:3}],
   ['d18','Greenridge Naturals Beef Snack Sticks','snack','1 stick (1 oz)',90,6,1,7,0,0,{sf:3}],
-  ['d19','Kirkland Organic Chunky Guacamole (single cup)','fat','1 cup (2.5 oz)',100,1,5,9,0,4,{sf:1.5,meals:'lds'}],
-  ['d20','Wholly Organic Smashed Avocado (single cup)','fat','1 cup (2 oz)',90,1,5,8,0,4,{sf:1,meals:'lds'}],
+  ['d19','Kirkland Organic Chunky Guacamole (single cup)','fat','1 snack cup (2.5 oz)',100,1,5,9,0,4,{sf:1.5,meals:'lds'}],
+  ['d20','Wholly Organic Smashed Avocado (single cup)','fat','1 snack cup (2 oz)',90,1,5,8,0,4,{sf:1,meals:'lds'}],
   ['d21','Jongga Sliced Napa Cabbage Kimchi','veg','1/2 cup',15,1,3,0,1,1,{sf:0}],
   ['d22','Wildbrine Raw Organic Sauerkraut','other','1/4 cup',5,0,1,0,0,1,{sf:0}],
   ['d23','Philadelphia Original Cream Cheese','other','2 tbsp',90,2,1,9,1,0,{sf:5}],
@@ -732,8 +732,8 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '3.4 (recipes & meal prep)';
-const PLANNER_VERSION = 4; // bump when the planner changes so old saved plans get rebuilt
+const APP_VERSION = '3.5 (potatoes & clearer recipes)';
+const PLANNER_VERSION = 5; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -1414,9 +1414,10 @@ function optimize(meals, pf) {
 const nm = f => (f.name || '').toLowerCase();
 const ROLES = {
   eggs: f => /\beggs?\b|egg whites/.test(nm(f)) && !/bites|burrito|scramble/.test(nm(f)),
+  rawEggs: f => /\beggs?\b|egg whites/.test(nm(f)) && !/bites|burrito|scramble|hard-boiled/.test(nm(f)),
   dairyP: f => f.cat === 'bprotein' && /yogurt|cottage/.test(nm(f)),
   bfMeat: f => /breakfast sausage/.test(nm(f)),
-  toast: f => f.cat === 'carb' && /\bbread\b|sourdough/.test(nm(f)) && !/cinnamon|cherry|white|bimbo|flatbread|pita|naan|roll/.test(nm(f)),
+  toast: f => f.cat === 'carb' && /\bbread\b|sourdough/.test(nm(f)) && !/cinnamon|cherry|cranberry|white|bimbo|flatbread|pita|naan|roll/.test(nm(f)),
   tortilla: f => f.cat === 'carb' && /tortilla/.test(nm(f)) && !/corn/.test(nm(f)),
   cornTort: f => /corn tortilla/.test(nm(f)),
   oats: f => f.cat === 'carb' && /\boats?\b|oatmeal/.test(nm(f)) && !/instant|honey bunches|flavored/.test(nm(f)),
@@ -1425,20 +1426,22 @@ const ROLES = {
   starch: f => f.cat === 'carb' && /potato|squash|corn on the cob/.test(nm(f)) && !/hashbrown|fries|scalloped|flatbread/.test(nm(f)),
   greens: f => f.cat === 'veg' && /romaine|spinach|spring mix|power greens/.test(nm(f)),
   rawVeg: f => f.cat === 'veg' && /tomato|cucumber|bell pepper|mini sweet pepper|carrot|celery/.test(nm(f)) && !/canned/.test(nm(f)),
+  hashVeg: f => f.cat === 'veg' && /bell pepper|mini sweet pepper|onion|mushroom|spinach/.test(nm(f)),
   tacoVeg: f => f.cat === 'veg' && /bell pepper|mini sweet pepper|tomato|onion|romaine/.test(nm(f)) && !/canned/.test(nm(f)),
-  cookVeg: f => f.cat === 'veg' && /broccoli|green beans|asparagus|brussels|zucchini|vegetable blend|mushroom|edamame|bell pepper/.test(nm(f)),
+  cookVeg: f => f.cat === 'veg' && /broccoli|green beans|asparagus|brussels|zucchini|squash|vegetable blend|mushroom|edamame|bell pepper/.test(nm(f)) && !/canned|butternut/.test(nm(f)),
   fruit: f => f.cat === 'fruit',
   berries: f => f.cat === 'fruit' && /berr/.test(nm(f)),
   avocado: f => f.cat === 'fat' && /avocado|guacamole/.test(nm(f)),
   oil: f => f.cat === 'fat' && /olive oil/.test(nm(f)),
   nuts: f => f.cat === 'fat' && /almond|walnut|pistachio|cashew|pecan|mixed nuts|peanuts/.test(nm(f)) && !/butter|milk/.test(nm(f)),
   seeds: f => /chia|flax/.test(nm(f)),
-  nutButter: f => /peanut butter|almond butter/.test(nm(f)),
+  nutButter: f => f.cat === 'fat' && /peanut butter|almond butter/.test(nm(f)),
   salsa: f => f.cat === 'other' && /salsa|picante/.test(nm(f)),
   stirSauce: f => f.cat === 'other' && /teriyaki|bachan|yoshida/.test(nm(f)),
   marinara: f => f.cat === 'other' && /marinara|pasta sauce/.test(nm(f)),
   vinegar: f => /balsamic/.test(nm(f)),
-  poultry: f => f.cat === 'protein' && /chicken|turkey/.test(nm(f)) && !/ground|turkey breast|sausage|burger|meatball|canned|breaded|skewer|kevin|sabatino|wings|whole young|of the sea|tuna|albacore/.test(nm(f)),
+  poultry: f => f.cat === 'protein' && /chicken|turkey/.test(nm(f)) && !/ground|turkey breast|sausage|burger|meatball|canned|breaded|skewer|kevin|sabatino|wings|whole young|of the sea|tuna|albacore|drumstick/.test(nm(f)),
+  bonein: f => f.cat === 'protein' && /drumstick/.test(nm(f)),
   fish: f => f.cat === 'protein' && /salmon|steelhead|tilapia|rockfish|halibut|sea bass|ahi tuna|shrimp|sockeye/.test(nm(f)) && !/canned/.test(nm(f)),
   oilyFish: f => f.cat === 'protein' && /salmon|steelhead|sockeye/.test(nm(f)) && !/canned/.test(nm(f)),
   ground: f => f.cat === 'protein' && /ground (turkey|beef)|bison/.test(nm(f)),
@@ -1453,19 +1456,21 @@ const ROLES = {
 const MEAL_TEMPLATES = {
   Breakfast: [
     { key: 'eggs', name: () => 'Eggs & toast', slots: [['eggs', 1, 2, 'P'], ['toast', 1, 2], ['fruit', 0.5, 1.5]] },
-    { key: 'yogurt', name: () => 'Greek yogurt bowl', slots: [['dairyP', 1, 2, 'P'], ['berries', 0.5, 1.5], ['nuts|seeds', 0.5, 1, 'opt']] },
+    { key: 'yogurt', name: (p, main) => main && /cottage/.test(nm(main)) ? 'Cottage cheese & berries' : 'Greek yogurt bowl', slots: [['dairyP', 1, 2, 'P'], ['berries', 0.5, 1.5], ['nuts|seeds', 0.5, 1, 'opt']] },
     { key: 'oats', name: () => 'Protein oats', slots: [['oats', 0.5, 1.5], ['dairyP|eggs', 1, 2, 'P'], ['berries', 0.5, 1], ['nutButter|seeds', 0.5, 0.5, 'opt']] },
     { key: 'cakes', name: () => 'Power cakes & eggs', slots: [['cakes', 0.5, 1.5], ['eggs', 1, 2, 'P'], ['berries', 0.5, 1]] },
-    { key: 'btacos', name: () => 'Breakfast tacos', slots: [['tortilla', 1, 2], ['eggs', 1, 2, 'P'], ['bfMeat', 1, 1, 'opt'], ['salsa', 1, 1]] },
+    { key: 'hash', w: 1.5, name: () => 'Potato & egg hash', slots: [['rawEggs', 1, 2, 'P'], ['starch', 0.5, 1.5], ['hashVeg', 1, 1.5], ['salsa', 1, 1, 'opt']] },
+    { key: 'btacos', name: () => 'Breakfast tacos', slots: [['tortilla', 1, 2], ['rawEggs', 1, 2, 'P'], ['bfMeat', 1, 1, 'opt'], ['salsa', 1, 1]] },
   ],
   Lunch: [
     { key: 'salad', name: p => `${p} salad`, slots: [['poultry|fish|canned', 1, 2, 'P'], ['greens', 1, 2], ['rawVeg', 1, 2], ['avocado|oil|nuts', 0.5, 1], ['grain', 0.5, 1, 'opt'], ['vinegar', 1, 1, 'opt']] },
     { key: 'wrap', name: p => `${p} wrap`, slots: [['deli|poultry', 1, 3, 'P'], ['tortilla', 1, 2], ['greens', 0.5, 1], ['rawVeg', 1, 1.5], ['avocado', 0.5, 1, 'opt']] },
     { key: 'bowl', name: p => `${p} rice bowl`, slots: [['poultry|fish|ground|tofu|red', 1, 2, 'P'], ['grain', 1, 2], ['cookVeg', 1, 2], ['salsa|stirSauce', 1, 1]] },
+    { key: 'pbowl', w: 2, name: p => `${p} & potato bowl`, slots: [['poultry|red|ground', 1, 2, 'P'], ['starch', 1, 2], ['cookVeg', 1, 2], ['salsa', 1, 1, 'opt']] },
     { key: 'sandwich', name: p => `${p} sandwich`, slots: [['canned|deli', 1.5, 3, 'P'], ['toast', 2, 2], ['rawVeg', 1, 1.5], ['greens', 0.5, 1, 'opt']] },
   ],
   Dinner: [
-    { key: 'roast', name: p => `${p} with roasted veggies`, slots: [['poultry|red|fish', 1, 2, 'P'], ['starch|grain', 0.5, 2], ['cookVeg', 1, 2.5], ['oil', 0.5, 1, 'opt']] },
+    { key: 'roast', w: 1.5, name: p => `${p} with roasted veggies`, slots: [['poultry|red|fish|bonein', 1, 2, 'P'], ['starch|grain', 0.5, 2], ['cookVeg', 1, 2.5], ['oil', 0.5, 1, 'opt']] },
     { key: 'tacos', name: p => `${p} tacos`, slots: [['ground|red|poultry|fish', 1, 2, 'P'], ['cornTort', 1, 2], ['tacoVeg', 1, 1.5], ['salsa', 1, 1], ['avocado', 0.5, 1, 'opt']] },
     { key: 'stirfry', name: p => `${p} stir-fry`, slots: [['poultry|red|fish|tofu', 1, 2, 'P'], ['grain', 1, 2], ['cookVeg', 1, 2], ['cookVeg', 1, 1.5], ['stirSauce', 1, 2]] },
     { key: 'plate', name: p => `${p} plate`, fish: true, slots: [['oilyFish|fish', 1, 2, 'P'], ['grain|starch', 0.5, 2], ['cookVeg', 1, 2.5], ['greens', 1, 1, 'opt']] },
@@ -1506,6 +1511,8 @@ function buildMeal(meal, tmpl, pool, used, preferFish, avoidLabels = [], preferL
     if (opt && Math.random() < 0.35) continue;
     // Costco-style shopping: reuse foods already in this week's basket most of the time (proteins rotate more).
     const inBasket = cand.filter(f => used[f.id]);
+    // Potatoes are a favorite: when a slot can take a potato, usually use one.
+    if (roles.includes('starch')) { const spuds = cand.filter(f => /potato/.test(nm(f))); if (spuds.length && Math.random() < 0.85) cand = spuds; }
     const isP = flag.includes('P'), reuse = inBasket.length && Math.random() < (isP ? 0.55 : 0.85);
     const f = isP ? proteinPick(reuse ? inBasket : cand, used) : (reuse ? inBasket[Math.floor(Math.random() * inBasket.length)] : weightedPick(cand, used));
     if (isP) used['L:' + proteinLabel(f)] = (used['L:' + proteinLabel(f)] || 0) + 1;
@@ -1516,7 +1523,7 @@ function buildMeal(meal, tmpl, pool, used, preferFish, avoidLabels = [], preferL
     items.push({ id: f.id, sv: Math.round(((min + max) / 2) / step) * step, step, min, max, role: roles.find(r => ROLES[r](f)) || roles[0] });
     if (flag.includes('P')) main = f;
   }
-  return { meal, key: tmpl.key, title: tmpl.name(main ? proteinLabel(main) : ''), label: main ? proteinLabel(main) : '', items };
+  return { meal, key: tmpl.key, title: tmpl.name(main ? proteinLabel(main) : '', main), label: main ? proteinLabel(main) : '', items };
 }
 function makeDay(pool, used, opts = {}) {
   const meals = [], prev = opts.prev || {};
@@ -1524,7 +1531,7 @@ function makeDay(pool, used, opts = {}) {
   order.forEach((meal, idx) => {
     const wantFish = meal === 'Dinner' && opts.fishDinner;
     const list = MEAL_TEMPLATES[meal].filter(t => wantFish ? t.fish : !t.fish)
-      .sort(() => Math.random() - 0.5)
+      .map(t => [t, Math.random() * (t.w || 1)]).sort((a, b) => b[1] - a[1]).map(x => x[0]) // favorites (w) come up more often
       .sort((a, b) => (prev[meal + idx] === a ? 1 : 0) - (prev[meal + idx] === b ? 1 : 0));
     // Don't repeat today's main protein, or yesterday's protein at the same meal.
     const usedLabels = [...meals.filter(m => m.meal !== 'Breakfast' && m.meal !== 'Snacks').map(m => m.label), prev['label' + meal]].filter(Boolean);
@@ -1556,7 +1563,7 @@ function generatePlan() {
 }
 
 /* ---------- Meal prep: the same lunch and dinner for 4-5 days ---------- */
-const PREP_TEMPLATES = { Breakfast: ['eggs', 'yogurt', 'oats'], Lunch: ['bowl', 'salad'], Dinner: ['roast', 'stirfry', 'marinara', 'tacos'], Snacks: ['psnack', 'splate'] };
+const PREP_TEMPLATES = { Breakfast: ['eggs', 'yogurt', 'oats', 'hash'], Lunch: ['bowl', 'pbowl', 'salad'], Dinner: ['roast', 'stirfry', 'marinara', 'tacos'], Snacks: ['psnack', 'splate'] };
 function generatePrepPlan() {
   const pool = planPool(), used = {}, n = S.planOpts.prepDays || 5, meals = [];
   const want = { Lunch: 'Chicken', Dinner: 'Beef' };
@@ -1576,13 +1583,13 @@ function generatePrepPlan() {
 }
 
 /* ---------- Recipes ---------- */
-const shortName = f => (f.name || '').replace(/\s*\(.*?\)/g, '').replace(/^Kirkland (Signature )?/, '').trim();
+const shortName = f => (f.name || '').replace(/\s*\((?![^)]*(canned|frozen|sliced))[^)]*\)/g, '').replace(/^Kirkland (Signature )?/, '').trim();
 function niceNum(q) {
   const w = Math.floor(q + 1e-9), fr = q - w;
   const F = [[0, ''], [0.25, '¼'], [1 / 3, '⅓'], [0.5, '½'], [2 / 3, '⅔'], [0.75, '¾'], [1, '']];
   let best = F[0]; for (const e of F) if (Math.abs(fr - e[0]) < Math.abs(fr - best[0])) best = e;
   const whole = best[0] === 1 ? w + 1 : w;
-  return (whole ? String(whole) : '') + best[1] || '0';
+  return (whole ? String(whole) : '') + best[1] || (q > 0 ? '⅛' : '0');
 }
 // "2.5 × 4 oz raw" → "10 oz raw"; "1.5 × 1/4 cup dry (45 g)" → "⅜ cup dry"; "3 × 2 eggs" → "6 eggs"
 function amountText(f, sv) {
@@ -1593,8 +1600,9 @@ function amountText(f, sv) {
   if (/^oz\b/.test(rest)) return qty >= 16 ? `${r1(qty / 16)} lb${rest.slice(2)}` : `${r1(qty)} ${rest}`;
   if (/^(g|ml|fl oz)\b/.test(rest)) return `${r1(qty)} ${rest}`;
   if (/^cups?\b/.test(rest) && qty > 0.3 && qty < 0.4) return `⅜ ${rest}`;
-  const plural = qty > 1 ? rest.replace(/^(cup|slice|ear|link|stick|bar|piece|patty|can|pouch|bagel|roll|tortilla|kiwi|mandarin|plum|pita|wedge|shake|bite|bottle|clove|spear|tray|bowl|packet|scoop)\b/, '$1s').replace(/^(peach|squash)\b/, '$1es') : rest;
-  return `${niceNum(qty)} ${plural}`.trim();
+  const num = niceNum(qty);
+  const plural = qty > 1 && num !== '1' ? rest.replace(/^(cup|slice|ear|link|stick|bar|bag|piece|patty|can|pouch|bagel|roll|tortilla|kiwi|mandarin|plum|pita|wedge|shake|bite|bottle|clove|spear|tray|bowl|packet|scoop|fillet|snack cup)\b/, '$1s').replace(/^(peach|squash)\b/, '$1es') : rest;
+  return `${num} ${plural}`.trim();
 }
 // How to cook one food; returns null when it needs no cooking.
 function cookStep(f, amt) {
@@ -1612,6 +1620,7 @@ function cookStep(f, amt) {
   if (/tofu/.test(n)) return `Press ${what} for 10 min, cube, and pan-fry 8–10 min until golden.`;
   if (/egg whites/.test(n)) return `Scramble ${what} in a nonstick pan, 2–3 min.`;
   if (/\beggs?\b/.test(n)) return `Scramble or fry ${what} over medium heat, 3–4 min.`;
+  if (/pouch|seeds of change|tasty bite|bibigo|cooked/.test(n)) return `Heat ${what} in the microwave per the package, about 90 seconds.`;
   if (/brown rice/.test(n)) return `Simmer ${what} with 2½× its volume of water, covered, about 40 min.`;
   if (/rice/.test(n)) return `Rinse ${what}, then simmer with 1½× its volume of water, covered, 15 min. Rest 5 min.`;
   if (/quinoa/.test(n)) return `Rinse ${what}, then simmer with 2× its volume of water, covered, 15 min.`;
@@ -1632,13 +1641,15 @@ const ASSEMBLY = {
   oats: 'Top the warm oats with the berries; eat the yogurt or eggs alongside (or stir the yogurt in).',
   cakes: 'Serve the power cakes topped with the berries, with the eggs on the side.',
   btacos: 'Fill the warm tortillas with the eggs (and sausage), then top with salsa.',
-  salad: 'Toss the greens and chopped veggies, top with the protein and the avocado, oil or nuts, and finish with balsamic or a squeeze of lemon.',
+  salad: 'Toss the greens and chopped veggies and top with the sliced protein. Whisk the balsamic (and olive oil, if listed) with a pinch of salt and pepper and drizzle it over; add the avocado or nuts on top.',
   wrap: 'Lay the tortilla flat, layer greens, protein and veggies (and avocado), roll up tightly and cut in half.',
   bowl: 'Layer the rice or quinoa, the protein and the vegetables in a bowl and top with the salsa or sauce.',
   sandwich: 'Build the sandwich on the bread with the protein, veggies and greens.',
   roast: 'Plate the protein with the starch and roasted vegetables; drizzle the olive oil over the vegetables if listed.',
   tacos: 'Fill the warm tortillas with the protein and veggies, then top with salsa (and avocado).',
   stirfry: 'Stir-fry the vegetables in a hot pan 4–5 min, add the sliced protein and the sauce, toss 1 min, and serve over the rice.',
+  hash: 'Cook the potatoes first: dice small and pan-fry in oil spray 10–12 min (or microwave 4 min, then crisp in the pan). Add the peppers and onions for 3–4 min, push to the side, and scramble the eggs in the same pan. Top with salsa.',
+  pbowl: 'Layer the roasted potatoes, the protein and the vegetables in a bowl; top with salsa if listed.',
   plate: 'Plate the fish with the grain or potato and the vegetables, with greens on the side.',
   marinara: 'Stir the marinara into the browned meat and simmer 5 min; spoon over the grain or potatoes with the vegetables.',
   psnack: 'Grab and go.', splate: 'Arrange on a plate or pack in a container.',
@@ -1646,7 +1657,9 @@ const ASSEMBLY = {
 const COOK_ORDER = { grain: 0, starch: 0, oats: 1, cakes: 1, poultry: 2, red: 2, fish: 3, oilyFish: 3, ground: 2, tofu: 2, eggs: 3, cookVeg: 4 };
 function recipeFor(m, mult = 1) {
   const items = m.items.map(x => { const f = getFood(x.id); return { x, f, amt: amountText(f, x.sv * mult) }; });
-  const ingredients = items.map(i => `${i.amt} — ${shortName(i.f)}`);
+  const USE = { vinegar: 'for the dressing — drizzle over the salad', oil: m.key === 'salad' ? 'for the dressing' : 'to roast the vegetables or drizzle on top',
+    salsa: 'on top', stirSauce: 'stir-fry sauce', marinara: 'sauce', nuts: m.key === 'salad' || m.key === 'yogurt' ? 'sprinkled on top' : '', seeds: 'sprinkled on top', avocado: 'on top' };
+  const ingredients = items.map(i => `${i.amt} — ${shortName(i.f)}${USE[i.x.role] ? ` (${USE[i.x.role]})` : ''}`);
   const steps = items.slice().sort((a, b) => (COOK_ORDER[a.x.role] ?? 5) - (COOK_ORDER[b.x.role] ?? 5)).map(i => cookStep(i.f, i.amt)).filter(Boolean);
   if (ASSEMBLY[m.key]) steps.push(ASSEMBLY[m.key]);
   const slow = items.some(i => /brown rice|eye round/.test(nm(i.f))), oven = steps.some(s => /425°F|400°F|325°F/.test(s));
