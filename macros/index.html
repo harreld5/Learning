@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '4.1 (three more receipts)';
+const APP_VERSION = '4.2 (meal pictures)';
 const PLANNER_VERSION = 5; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1802,11 +1802,19 @@ function recipeFor(m, mult = 1) {
 function showRecipe(mi) {
   const m = S.plan.days[planDay].meals[mi], r = recipeFor(m), t = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))), n = S.plan.prep;
   sheet(`<div class="sheet-head"><div class="grow"><h2>${esc(m.title || m.meal)}</h2><div class="small muted">${m.meal} · ⏱ ${r.time} · ${Math.round(t.cal)} cal · P${Math.round(t.p)} C${Math.round(t.c)} F${Math.round(t.f)}</div></div><button class="icon-btn" data-act="close">✕</button></div>
+    <div style="margin:8px 0 6px">${mealVisual(m, 'big')}${mealPhoto(m) ? '' : mealLegend(m)}</div>
+    <div class="row wrap" style="gap:6px;margin-bottom:4px">${mealPhoto(m) ? '' : `<span class="small muted grow">Drawing sized to your portions — tap 📷 after you make it to use your own photo.</span>`}
+      <label class="btn alt sm">📷 ${mealPhoto(m) ? 'Retake photo' : 'Add my photo'}<input type="file" id="mealphoto" accept="image/*" capture="environment" hidden></label>
+      <a class="btn ghost sm" href="${photoSearchUrl(m)}" target="_blank" rel="noopener">🔎 See real photos</a>
+      ${mealPhoto(m) ? `<button class="btn ghost sm" data-act="rmphoto" data-m="${mi}">Use drawing</button>` : ''}</div>
     <h3 style="margin:10px 0 4px;font-size:15px">Ingredients${n ? ' (1 serving)' : ''}</h3><ul class="reasons" style="font-size:15px">${r.ingredients.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
     ${n ? `<div class="small muted" style="margin-top:6px">For ${n} days, multiply by ${n}: ${recipeFor(m, n).ingredients.map(esc).join(' · ')}</div>` : ''}
     <h3 style="margin:14px 0 4px;font-size:15px">Steps</h3><ol class="reasons" style="font-size:15px">${r.steps.map(x => `<li style="margin-bottom:6px">${esc(x)}</li>`).join('')}</ol>
     <button class="btn block" style="margin-top:12px" data-act="logmeal" data-m="${mi}">Log this meal today</button>`);
+  $('#mealphoto').addEventListener('change', e => { const file = e.target.files[0]; if (file) savePhotoFromFile(file, m, () => { showRecipe(mi); renderPlanKeepSheet(); }); });
 }
+// Refresh the plan behind an open sheet without closing it.
+function renderPlanKeepSheet() { const open = !$('#sheet').hidden, html = $('#sheet-card').innerHTML; renderPlan(); if (open) { $('#sheet').hidden = false; $('#sheet-card').innerHTML = html; } }
 function prepGuide() {
   const n = S.plan.prep, day = S.plan.days[0];
   const tot = {};
@@ -1843,6 +1851,172 @@ function prepGuide() {
     <ul class="reasons" style="font-size:14px">${shop.map(t => `<li>${esc(t.amt)} — ${esc(shortName(t.f))}</li>`).join('')}</ul>
     <h3 style="margin:14px 0 4px;font-size:15px">Steps</h3><ol class="reasons" style="font-size:15px">${steps.map(x => `<li style="margin-bottom:8px">${esc(x)}</li>`).join('')}</ol>
     <button class="btn block" style="margin-top:12px" data-act="plan2list">Add all of it to my shopping list</button>`);
+}
+
+/* ---------- Meal pictures: drawn plates sized to the portions, or your own photo ---------- */
+function seeded(seed) { let a = 0; for (const ch of String(seed)) a = (a * 31 + ch.charCodeAt(0)) | 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+// What a food looks like on the plate.
+function foodKind(f) {
+  const n = nm(f);
+  const K = [[/salsa|picante/, 'salsa'], [/marinara|pasta sauce/, 'marinara'], [/teriyaki|bachan|yoshida|sauce/, 'sauce'], [/balsamic|vinegar|olive oil/, 'drizzle'],
+    [/hard-boiled/, 'hbegg'], [/egg whites|\beggs?\b/, 'egg'], [/ground (turkey|beef)|bison/, 'ground'], [/shrimp/, 'shrimp'], [/salmon|steelhead|sockeye/, 'salmon'],
+    [/tilapia|rockfish|halibut|sea bass|ahi|tuna|fish/, 'whitefish'], [/sirloin|eye round|flank|steak|ribeye|beef|tri-tip/, 'beef'], [/pork|\bham\b/, 'pork'],
+    [/bacon/, 'bacon'], [/sausage|meatball|bites|dippers/, 'sausage'], [/chicken|turkey/, 'chicken'], [/tofu/, 'tofu'],
+    [/sweet potato|butternut/, 'sweetpotato'], [/wedges|fries|hash/, 'wedges'], [/potato/, 'potato'], [/corn on the cob|sweet corn/, 'corn'], [/quinoa/, 'quinoa'], [/rice/, 'rice'],
+    [/tortilla/, 'tortilla'], [/bagel|\bbread\b|sourdough|toast/, 'bread'], [/power cakes|pancake/, 'pancake'], [/\boats?\b|oatmeal/, 'oats'],
+    [/yogurt|skyr/, 'yogurt'], [/cottage/, 'cottage'], [/broccoli/, 'broccoli'], [/green beans/, 'greenbean'], [/asparagus/, 'asparagus'], [/brussels/, 'brussels'],
+    [/cauliflower/, 'cauliflower'], [/cabbage/, 'cabbage'], [/edamame/, 'edamame'], [/zucchini|squash/, 'zucchini'], [/mushroom/, 'mushroom'], [/carrot/, 'carrot'],
+    [/bell pepper|sweet pepper/, 'pepper'], [/tomato/, 'tomato'], [/cucumber|celery/, 'cucumber'], [/onion/, 'onion'], [/romaine|spinach|spring mix|greens|salad/, 'greens'],
+    [/vegetable blend|normandy/, 'mixveg'], [/blueberr|blackberr/, 'blueberry'], [/strawberr|raspberr|cherr/, 'redberry'], [/three-berry|berry/, 'mixberry'], [/banana/, 'banana'],
+    [/kiwi/, 'kiwi'], [/mandarin|orange/, 'orange'], [/apple|pear/, 'apple'], [/peach|mango/, 'peach'], [/grape/, 'grape'], [/avocado|guacamole/, 'avocado'],
+    [/peanut butter|almond butter/, 'pb'], [/almond|walnut|pistachio|cashew|pecan|peanut|nuts/, 'nuts'], [/chia|flax|granola/, 'seeds'],
+    [/cheese|mozzarella|babybel|parmigiano/, 'cheese'], [/jerky|sticks?\b/, 'jerky'], [/shake|milk/, 'shake'], [/\bbar\b|bars/, 'bar']];
+  return (K.find(([re]) => re.test(n)) || [0, f.cat === 'veg' ? 'greens' : f.cat === 'fruit' ? 'mixberry' : 'generic'])[1];
+}
+const KIND_LABEL_COLOR = { chicken: '#d9a35f', beef: '#8a4a33', pork: '#e0b088', salmon: '#f2875c', whitefish: '#efe0c4', shrimp: '#f4a07a', ground: '#7a4b33', egg: '#f6d84c', hbegg: '#f6d84c',
+  bacon: '#c0563f', sausage: '#b06a45', tofu: '#efe6c8', rice: '#f4f1e6', quinoa: '#e5d4a6', potato: '#e8c35a', sweetpotato: '#e98b3a', wedges: '#d9a440', corn: '#f2cf3c',
+  bread: '#d8a965', tortilla: '#ecd29c', pancake: '#d9a058', oats: '#d9c39a', yogurt: '#f7f5ee', cottage: '#f7f5ee', broccoli: '#3f8f3a', greenbean: '#4a9a3f', asparagus: '#5f9e45',
+  brussels: '#6aa84f', cauliflower: '#efe9d6', cabbage: '#8e5aa8', edamame: '#7cc06a', zucchini: '#9cc96b', mushroom: '#a07850', carrot: '#f08a24', pepper: '#e2453a',
+  tomato: '#e2463b', cucumber: '#bfe0a0', onion: '#e6d3ee', greens: '#5fae4f', mixveg: '#e8a33a', blueberry: '#3d4fa0', redberry: '#d93b3b', mixberry: '#7a3a8f', banana: '#f6e7a1',
+  kiwi: '#8cbf3f', orange: '#f5a623', apple: '#e9e3b0', peach: '#f7b267', grape: '#7fb03f', avocado: '#9cc94f', pb: '#b07a40', nuts: '#b98a5a', seeds: '#8b6b4a', cheese: '#f6d36b',
+  jerky: '#5a2e1f', shake: '#c9a27c', bar: '#7a4e2d', salsa: '#d8432f', marinara: '#c8342a', sauce: '#6b3a1e', drizzle: '#5a2a1a', generic: '#bbb' };
+// One piece of food at (x, y).
+function piece(kind, x, y, r, rnd) {
+  const c = KIND_LABEL_COLOR[kind] || '#bbb', rot = Math.round(rnd() * 180), t = `transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot}) scale(${r.toFixed(2)})"`;
+  switch (kind) {
+    case 'chicken': case 'pork': case 'tofu': return `<g ${t}><rect x="-13" y="-6" width="26" height="12" rx="5" fill="${c}"/><path d="M-8 -3l4 6M-1 -3l4 6M6 -3l4 6" stroke="#a8743a" stroke-width="1.4" opacity=".6"/></g>`;
+    case 'beef': return `<g ${t}><rect x="-14" y="-6" width="28" height="12" rx="4" fill="#7a3f2a"/><rect x="-10" y="-3" width="20" height="6" rx="3" fill="#c9705e"/></g>`;
+    case 'salmon': return `<g ${t}><rect x="-16" y="-8" width="32" height="16" rx="6" fill="${c}"/><path d="M-10 -8v16M-3 -8v16M4 -8v16M11 -8v16" stroke="#fde1cf" stroke-width="1.6"/></g>`;
+    case 'whitefish': return `<g ${t}><rect x="-16" y="-8" width="32" height="16" rx="7" fill="${c}" stroke="#d9c39a"/><path d="M-6 -8c3 5 3 11 0 16M4 -8c3 5 3 11 0 16" stroke="#d9c39a" fill="none"/></g>`;
+    case 'shrimp': return `<g ${t}><path d="M-8 4a9 9 0 1 1 12 -10" stroke="${c}" stroke-width="6" fill="none" stroke-linecap="round"/></g>`;
+    case 'ground': return `<g ${t}>${[[-5, -3], [4, -4], [0, 4], [7, 3], [-7, 5]].map(([a, b]) => `<circle cx="${a}" cy="${b}" r="3.6" fill="${c}"/>`).join('')}</g>`;
+    case 'sausage': case 'bacon': return `<g ${t}><rect x="-12" y="-4" width="24" height="8" rx="4" fill="${c}"/></g>`;
+    case 'egg': return `<g ${t}><path d="M-12 0c0-7 8-9 12-6c5-4 13 0 11 6c2 6-6 9-11 6c-5 4-13 1-12-6z" fill="${c}"/><circle cx="-3" cy="-1" r="2" fill="#fbe98a"/></g>`;
+    case 'hbegg': return `<g ${t}><ellipse rx="10" ry="7.5" fill="#fbfaf4" stroke="#e6e0cf"/><circle r="4.5" fill="#f2c230"/></g>`;
+    case 'rice': return `<g ${t}>${[[-6, -2], [-1, -5], [4, -2], [-3, 3], [3, 4], [8, 1], [-8, 3]].map(([a, b]) => `<ellipse cx="${a}" cy="${b}" rx="2.6" ry="1.3" fill="#fffdf6" stroke="#e3dccb" stroke-width=".5"/>`).join('')}</g>`;
+    case 'quinoa': case 'seeds': return `<g ${t}>${[[-5, -2], [0, -4], [5, -1], [-2, 3], [3, 4], [7, 3], [-7, 3]].map(([a, b]) => `<circle cx="${a}" cy="${b}" r="1.8" fill="${c}"/>`).join('')}</g>`;
+    case 'potato': case 'sweetpotato': return `<g ${t}><rect x="-7" y="-7" width="14" height="14" rx="4" fill="${c}"/><rect x="-7" y="-7" width="14" height="5" rx="3" fill="#000" opacity=".12"/></g>`;
+    case 'wedges': return `<g ${t}><path d="M-10 6L0 -9L10 6z" fill="${c}" stroke="#b8822a"/></g>`;
+    case 'corn': return `<g ${t}><rect x="-16" y="-6" width="32" height="12" rx="6" fill="${c}"/><path d="M-10 -6v12M-4 -6v12M2 -6v12M8 -6v12M-16 0h32" stroke="#d6a91f" stroke-width=".8"/></g>`;
+    case 'bread': return `<g ${t}><path d="M-12 12v-16a8 8 0 0 1 8-8h8a8 8 0 0 1 8 8v16z" fill="#c98f4c"/><path d="M-9 10v-13a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v13z" fill="#f1dcae"/></g>`;
+    case 'tortilla': return `<g ${t}><circle r="15" fill="${c}"/><circle cx="-5" cy="-3" r="1.6" fill="#c9a060"/><circle cx="6" cy="4" r="1.6" fill="#c9a060"/></g>`;
+    case 'pancake': return `<g ${t}><circle r="13" fill="${c}"/><circle r="10" fill="#e8b46e"/></g>`;
+    case 'oats': return `<g ${t}><circle r="11" fill="${c}"/>${[[-4, -3], [3, -4], [0, 3], [5, 3]].map(([a, b]) => `<ellipse cx="${a}" cy="${b}" rx="2.4" ry="1.4" fill="#bfa070"/>`).join('')}</g>`;
+    case 'yogurt': case 'cottage': return `<g ${t}><circle r="12" fill="${c}" stroke="#e5e0d0"/>${kind === 'cottage' ? '<circle cx="-4" cy="-2" r="2.5" fill="#fff"/><circle cx="3" cy="3" r="2.5" fill="#fff"/>' : ''}</g>`;
+    case 'broccoli': return `<g ${t}><rect x="-2" y="2" width="4" height="9" fill="#8fbf6a"/><circle cx="-5" cy="-1" r="5" fill="${c}"/><circle cx="4" cy="-1" r="5" fill="${c}"/><circle cx="0" cy="-6" r="5" fill="#357a30"/></g>`;
+    case 'cauliflower': return `<g ${t}><rect x="-2" y="2" width="4" height="8" fill="#d9e5b8"/><circle cx="-5" cy="-1" r="5" fill="${c}"/><circle cx="4" cy="-1" r="5" fill="${c}"/><circle cx="0" cy="-6" r="5" fill="#f7f3e8"/></g>`;
+    case 'greenbean': case 'asparagus': return `<g ${t}><path d="M-15 0h30" stroke="${c}" stroke-width="${kind === 'asparagus' ? 4 : 3}" stroke-linecap="round"/>${kind === 'asparagus' ? '<path d="M13 -3l5 3l-5 3z" fill="#4d8636"/>' : ''}</g>`;
+    case 'brussels': case 'edamame': return `<g ${t}><ellipse rx="${kind === 'edamame' ? 9 : 7}" ry="${kind === 'edamame' ? 4 : 7}" fill="${c}"/><path d="M-4 0h8" stroke="#3f7a32" opacity=".5"/></g>`;
+    case 'zucchini': case 'cucumber': return `<g ${t}><circle r="7" fill="${c}" stroke="${kind === 'zucchini' ? '#4f8a3a' : '#5a9a3a'}" stroke-width="2"/></g>`;
+    case 'mushroom': return `<g ${t}><path d="M-8 1a8 7 0 0 1 16 0z" fill="${c}"/><rect x="-2" y="1" width="4" height="5" fill="#e9dcc4"/></g>`;
+    case 'carrot': return `<g ${t}><rect x="-12" y="-2.5" width="24" height="5" rx="2.5" fill="${c}"/></g>`;
+    case 'pepper': { const pc = ['#e2453a', '#f2c230', '#f08a24'][Math.floor(rnd() * 3)]; return `<g ${t}><path d="M-12 0q12 -8 24 0" stroke="${pc}" stroke-width="4.5" fill="none" stroke-linecap="round"/></g>`; }
+    case 'tomato': return `<g ${t}><circle r="6.5" fill="${c}"/><circle cx="-2" cy="-2" r="1.6" fill="#f7a39a"/></g>`;
+    case 'onion': return `<g ${t}><path d="M-9 0a9 9 0 0 1 18 0" stroke="#c9a8d8" stroke-width="2.5" fill="none"/></g>`;
+    case 'greens': return `<g ${t}><path d="M0 -10c8 4 8 16 0 20c-8 -4 -8 -16 0 -20z" fill="${rnd() < 0.5 ? c : '#4b9a3f'}"/><path d="M0 -8v16" stroke="#9fd38e" stroke-width="1"/></g>`;
+    case 'cabbage': return `<g ${t}><path d="M-10 0q10 -7 20 0" stroke="${rnd() < 0.5 ? c : '#9fcf7a'}" stroke-width="3" fill="none"/></g>`;
+    case 'mixveg': { const k = ['broccoli', 'carrot', 'greenbean', 'cauliflower'][Math.floor(rnd() * 4)]; return piece(k, x, y, r * 0.8, rnd); }
+    case 'blueberry': return `<circle cx="${x}" cy="${y}" r="${(4.5 * r).toFixed(1)}" fill="${c}"/>`;
+    case 'redberry': return `<g ${t}><path d="M0 7c-7-4-8-11-3-12c2 0 3 1 3 2c0-1 1-2 3-2c5 1 4 8-3 12z" fill="${c}"/></g>`;
+    case 'mixberry': return piece(['blueberry', 'redberry'][Math.floor(rnd() * 2)], x, y, r, rnd);
+    case 'banana': return `<g ${t}><circle r="7" fill="${c}" stroke="#e8d27a"/><circle r="1.5" fill="#d9c070"/></g>`;
+    case 'kiwi': return `<g ${t}><circle r="8" fill="${c}" stroke="#6b4f2a" stroke-width="1.5"/><circle r="3" fill="#f4f1d0"/></g>`;
+    case 'orange': case 'peach': return `<g ${t}><path d="M-9 3a9 9 0 0 1 18 0z" fill="${c}"/></g>`;
+    case 'apple': return `<g ${t}><path d="M-9 3a9 9 0 0 1 18 0z" fill="${c}" stroke="#c0392b" stroke-width="1.5"/></g>`;
+    case 'grape': return `<circle cx="${x}" cy="${y}" r="${(5 * r).toFixed(1)}" fill="${c}"/>`;
+    case 'avocado': return `<g ${t}><path d="M-11 4q11 -14 22 0z" fill="#c9dd77" stroke="#3f6b2a" stroke-width="2"/></g>`;
+    case 'nuts': return `<g ${t}><ellipse rx="5" ry="3.2" fill="${c}"/></g>`;
+    case 'pb': return `<g ${t}><circle r="9" fill="${c}"/><path d="M-5 -2q5 -4 10 0" stroke="#d6a56a" fill="none"/></g>`;
+    case 'cheese': return `<g ${t}><rect x="-5" y="-5" width="10" height="10" rx="1.5" fill="${c}"/></g>`;
+    case 'jerky': return `<g ${t}><rect x="-14" y="-3.5" width="28" height="7" rx="2" fill="${c}"/></g>`;
+    case 'bar': return `<g ${t}><rect x="-16" y="-6" width="32" height="12" rx="3" fill="${c}"/><rect x="-16" y="-6" width="32" height="4" rx="2" fill="#a46b3f"/></g>`;
+    case 'shake': return `<g transform="translate(${x} ${y}) scale(${r.toFixed(2)})"><rect x="-8" y="-16" width="16" height="30" rx="5" fill="${c}"/><rect x="-5" y="-21" width="10" height="6" rx="2" fill="#555"/></g>`;
+    default: return `<g ${t}><circle r="8" fill="${c}"/></g>`;
+  }
+}
+const SAUCY = new Set(['salsa', 'marinara', 'sauce', 'drizzle']);
+const VEG_G = 90; // a cup of vegetables weighs about 90 g
+function itemGrams(x) { const f = getFood(x.id); return (servingGrams(f) || (f.cat === 'veg' ? VEG_G : 60)) * x.sv; }
+function mealPicture(m, size = 'card') {
+  const W = 320, H = 200, rnd = seeded((m.title || m.meal) + m.items.map(x => x.id).join()), parts = [];
+  const items = m.items.map(x => ({ x, f: getFood(x.id), k: foodKind(getFood(x.id)), g: itemGrams(x) }));
+  const solids = items.filter(i => !SAUCY.has(i.k)), sauces = items.filter(i => SAUCY.has(i.k));
+  const key = m.key || '';
+  const scatter = (it, cx, cy, rad, a0, a1, count, sc = 1) => {
+    for (let i = 0; i < count; i++) { const a = a0 + (a1 - a0) * (i + 0.5 + (rnd() - 0.5) * 0.7) / count, d = rad * (0.25 + 0.7 * Math.sqrt(rnd()));
+      parts.push(piece(it.k, cx + Math.cos(a) * d, cy + Math.sin(a) * d, sc * (0.85 + rnd() * 0.3), rnd)); } };
+  const BIG = /^(salmon|whitefish|corn|bread|tortilla|pancake|shake|bar|pb|avocado)$/, TINY = /^(rice|quinoa|seeds|blueberry|nuts|ground|edamame|grape|greens|cabbage|cheese)$/;
+  const countFor = it => BIG.test(it.k) ? Math.max(1, Math.min(3, Math.round(it.g / 130))) : Math.max(3, Math.min(TINY.test(it.k) ? 34 : 18, Math.round(Math.sqrt(it.g) * (TINY.test(it.k) ? 2 : 1.1))));
+  const MOUND = { rice: '#fbf8ee', quinoa: '#eadcb6', greens: '#7cc06a', cabbage: '#c9a8dc', oats: '#e3cfa6', ground: '#8a5a3e', potato: '#f3dd96', sweetpotato: '#f4a65e', mixveg: '#f1d79a' };
+  const bowlBase = items.find(i => i.k === 'yogurt' || i.k === 'cottage' || i.k === 'oats');
+  if (key === 'tacos' || key === 'btacos') {
+    const shells = Math.max(1, Math.min(4, Math.round(items.filter(i => i.k === 'tortilla').reduce((a, i) => a + (/^2 /.test(i.f.serving) ? 2 : 1) * i.x.sv, 0)) || 2));
+    parts.push(`<ellipse cx="160" cy="112" rx="150" ry="80" fill="#fff" stroke="#e3e3e3" stroke-width="3"/>`);
+    const rr = shells > 2 ? 34 : 46, gap = shells > 2 ? 72 : 100, fill = solids.filter(i => i.k !== 'tortilla');
+    for (let s = 0; s < shells; s++) { const cx = 160 + (s - (shells - 1) / 2) * gap, cy = 104;
+      parts.push(`<path d="M${cx - rr} ${cy}a${rr} ${rr} 0 0 0 ${2 * rr} 0z" fill="#ecd29c" stroke="#c9a060" stroke-width="2.5"/>`);
+      fill.forEach((it, j) => { const n = Math.max(4, Math.round(countFor(it) / shells) + 2); for (let q = 0; q < n; q++) parts.push(piece(it.k, cx - rr * 0.8 + rnd() * rr * 1.6, cy - 2 - j * 6 - rnd() * 9, rr / 60, rnd)); });
+      sauces.forEach(sc => { for (let q = 0; q < 9; q++) parts.push(`<circle cx="${(cx - rr * 0.8 + rnd() * rr * 1.6).toFixed(1)}" cy="${(cy - 12 - fill.length * 6 - rnd() * 6).toFixed(1)}" r="${(2 + rnd() * 1.5).toFixed(1)}" fill="${KIND_LABEL_COLOR[sc.k]}"/>`); });
+      parts.push(`<path d="M${cx - rr} ${cy}a${rr} ${rr} 0 0 0 ${2 * rr} 0" fill="none" stroke="#c9a060" stroke-width="2.5"/><path d="M${cx - rr * 0.7} ${cy + rr * 0.45}q${rr * 0.7} ${rr * 0.3} ${rr * 1.4} 0" stroke="#d9b877" fill="none"/>`); }
+  } else if (key === 'yogurt' || key === 'oats' || (bowlBase && /snack/.test(key))) {
+    const base = bowlBase || solids[0];
+    parts.push(`<ellipse cx="160" cy="104" rx="118" ry="86" fill="#e9eef2" stroke="#cfd8df" stroke-width="4"/><ellipse cx="160" cy="104" rx="104" ry="74" fill="${KIND_LABEL_COLOR[base.k] || '#f7f5ee'}"/>`);
+    if (base.k === 'cottage') for (let q = 0; q < 26; q++) parts.push(`<circle cx="${(160 + (rnd() - 0.5) * 180).toFixed(1)}" cy="${(104 + (rnd() - 0.5) * 120).toFixed(1)}" r="${(3 + rnd() * 3).toFixed(1)}" fill="#fff" stroke="#ebe6d6"/>`);
+    const tops = solids.filter(i => i !== base), span = 2 * Math.PI / Math.max(1, tops.length);
+    tops.forEach((it, j) => scatter(it, 160, 104, 66, j * span, (j + 1) * span, countFor(it), BIG.test(it.k) ? 0.8 : 1));
+  } else if (key === 'wrap' || key === 'sandwich') {
+    parts.push(`<circle cx="160" cy="100" r="96" fill="#fff" stroke="#e3e3e3" stroke-width="4"/>`);
+    const fill = solids.filter(i => !/tortilla|bread/.test(i.k));
+    [[118, 100], [202, 100]].forEach(([cx, cy]) => {
+      if (key === 'wrap') { parts.push(`<circle cx="${cx}" cy="${cy}" r="38" fill="#ecd29c" stroke="#c9a060" stroke-width="3"/>`); fill.forEach((it, j) => { for (let q = 0; q < 4; q++) parts.push(piece(it.k, cx + (rnd() - 0.5) * 40, cy + (rnd() - 0.5) * 40, 0.55, rnd)); }); }
+      else { parts.push(`<path d="M${cx - 38} ${cy + 34}L${cx} ${cy - 40}L${cx + 38} ${cy + 34}z" fill="#d8a965"/>`); fill.forEach((it, j) => parts.push(`<path d="M${cx - 30 + j * 5} ${cy + 22 - j * 10}h${60 - j * 6}" stroke="${KIND_LABEL_COLOR[it.k]}" stroke-width="8"/>`)); parts.push(`<path d="M${cx - 34} ${cy + 30}L${cx} ${cy - 34}L${cx + 34} ${cy + 30}z" fill="#f1dcae" opacity=".55"/>`); }
+    });
+  } else {
+    // A plate: each food gets a slice of the plate sized to how much of it there is.
+    parts.push(`<circle cx="160" cy="100" r="96" fill="#fff" stroke="#e3e3e3" stroke-width="4"/><circle cx="160" cy="100" r="82" fill="none" stroke="#f0f0f0" stroke-width="2"/>`);
+    const total = solids.reduce((a, i) => a + Math.pow(i.g, 0.8), 0) || 1; let a = -Math.PI / 2;
+    solids.forEach(it => { const span = 2 * Math.PI * Math.pow(it.g, 0.8) / total, mid = a + span / 2;
+      if (MOUND[it.k]) { const cx = 160 + Math.cos(mid) * 40, cy = 100 + Math.sin(mid) * 40, rr = Math.min(40, 14 + Math.sqrt(it.g) * 1.6);
+        parts.push(`<ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rr.toFixed(1)}" ry="${(rr * 0.82).toFixed(1)}" fill="${MOUND[it.k]}" opacity=".9"/>`); }
+      if (BIG.test(it.k)) { const n = countFor(it), solo = solids.length === 1; for (let q = 0; q < n; q++) { const d = solo ? (n - 1) * 18 * (q - (n - 1) / 2) : 44 + (q - (n - 1) / 2) * 6, aa = mid + (q - (n - 1) / 2) * Math.min(0.6, span / (n + 1));
+          parts.push(piece(it.k, 160 + Math.cos(aa) * d, 100 + Math.sin(aa) * d, solo ? 2.6 : Math.min(2.1, 0.9 + Math.sqrt(it.g / n) / 14), rnd)); } }
+      else scatter(it, 160, 100, 76, a + 0.08, a + span - 0.08, countFor(it), (TINY.test(it.k) ? 1.1 : 1.25)); a += span; });
+    sauces.forEach((s, j) => { if (s.k === 'drizzle') parts.push(`<path d="M110 70q25 -18 50 0t50 0" stroke="${KIND_LABEL_COLOR.drizzle}" stroke-width="3" fill="none" opacity=".7"/>`);
+      else parts.push(`<circle cx="${278 - j * 4}" cy="${168 - j * 34}" r="20" fill="#fff" stroke="#ddd" stroke-width="2"/><circle cx="${278 - j * 4}" cy="${168 - j * 34}" r="15" fill="${KIND_LABEL_COLOR[s.k]}"/>`); });
+  }
+  const svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Drawing of ${esc(m.title || m.meal)}" style="width:100%;height:auto;display:block;background:#efe7da;border-radius:12px">
+    <rect width="${W}" height="${H}" fill="#efe7da"/><path d="M0 ${H - 26}h${W}" stroke="#e2d8c6" stroke-width="2"/>${parts.join('')}</svg>`;
+  return svg;
+}
+// Real photos of similar meals: an image search for the dish and its main foods (needs internet).
+function photoSearchUrl(m) {
+  const words = [...new Set(m.items.map(x => ({ k: foodKind(getFood(x.id)), g: itemGrams(x) })).filter(i => !/generic|drizzle/.test(i.k)).sort((a, b) => b.g - a.g).slice(0, 4)
+    .map(i => ({ hbegg: 'hard boiled egg', ground: 'ground beef', pb: 'peanut butter', mixveg: 'vegetables', mixberry: 'berries', redberry: 'strawberries', whitefish: 'white fish', wedges: 'potato wedges', sweetpotato: 'sweet potato', greenbean: 'green beans' }[i.k] || i.k)))];
+  return 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(`${m.title || m.meal} ${words.join(' ')} healthy meal`);
+}
+// Your own photo of a meal, kept on this phone and shown for that meal from then on.
+const photoKey = m => 'mc-photo:' + (m.title || m.meal).toLowerCase();
+function mealPhoto(m) { try { return localStorage.getItem(photoKey(m)); } catch (e) { return null; } }
+function mealLegend(m) {
+  return `<div class="row wrap small" style="gap:4px 12px;margin-top:6px">${m.items.map(x => { const f = getFood(x.id), k = foodKind(f);
+    return `<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${KIND_LABEL_COLOR[k]};border:1px solid #0002;vertical-align:-1px"></span> ${esc(shortName(f))}</span>`; }).join('')}</div>`;
+}
+function mealVisual(m, size) {
+  const ph = mealPhoto(m);
+  return ph ? `<img src="${ph}" alt="Your photo of ${esc(m.title || m.meal)}" style="width:100%;border-radius:12px;display:block;aspect-ratio:16/10;object-fit:cover">` : mealPicture(m, size);
+}
+function savePhotoFromFile(file, m, done) {
+  const img = new Image(), url = URL.createObjectURL(file);
+  img.onload = () => {
+    const sc = Math.min(1, 720 / Math.max(img.width, img.height)), cv = document.createElement('canvas');
+    cv.width = Math.round(img.width * sc); cv.height = Math.round(img.height * sc);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
+    try { localStorage.setItem(photoKey(m), cv.toDataURL('image/jpeg', 0.72)); toast('Photo saved for ' + (m.title || m.meal)); }
+    catch (e) { toast('Not enough space on this phone to save the photo'); }
+    done();
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast("Couldn't read that photo"); };
+  img.src = url;
 }
 
 /* ---------- Swapping a food in a planned meal ---------- */
@@ -1924,6 +2098,7 @@ function renderPlan() {
     day.meals.forEach((m, mi) => {
       const mt = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
       h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal}${m.title ? ` · ${esc(m.title)}` : ''} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
+        <div class="tap" data-act="recipe" data-m="${mi}" style="margin:8px auto 4px;max-width:230px">${mealVisual(m, 'card')}</div>
         ${m.items.map((x, ii) => { const f = getFood(x.id); return `<div class="item"><div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
           <div class="meta">${esc(amountText(f, x.sv))} · ${Math.round(f.cal * x.sv)} cal</div></div><button class="btn alt sm" data-act="swap" data-m="${mi}" data-i="${ii}" aria-label="Swap ${esc(f.name)}">🔁 Swap</button></div>`; }).join('')}
         <div class="row" style="margin-top:6px"><button class="btn sm" data-act="recipe" data-m="${mi}">📖 Recipe</button><button class="btn alt sm" data-act="logmeal" data-m="${mi}">Log this meal today</button>${S.plan.prep && m.meal !== 'Snacks' ? `<span class="small muted grow" style="text-align:right">× ${S.plan.prep} ${m.meal === 'Breakfast' ? 'days' : 'containers'}</span>` : ''}</div></div>`;
@@ -2106,6 +2281,7 @@ document.addEventListener('click', e => {
     case 'pmode': S.planOpts.mode = el.dataset.v; save(); renderPlan(); break;
     case 'pprepdays': S.planOpts.prepDays = +el.dataset.v; save(); renderPlan(); break;
     case 'recipe': showRecipe(+el.dataset.m); break;
+    case 'rmphoto': { const m = S.plan.days[planDay].meals[+el.dataset.m]; try { localStorage.removeItem(photoKey(m)); } catch (e) {} showRecipe(+el.dataset.m); break; }
     case 'prepguide': prepGuide(); break;
     case 'psnacks': S.planOpts.snacks = +el.dataset.v; save(); renderPlan(); break;
     case 'genplan': generatePlan(); renderPlan(); break;
