@@ -182,7 +182,7 @@ const CATALOG_RAW = [
   ['b2','Kirkland Liquid Egg Whites','bprotein','1/2 cup (120 g)',60,12,1,0,0,0],
   ['b3','Kirkland Nonfat Greek Yogurt (plain)','bprotein','3/4 cup (170 g)',100,18,6,0,5,0],
   ['b4','Daisy 2% Low Fat Cottage Cheese','bprotein','1/2 cup',90,13,4,2.5,3,0],
-  ['b5','Fairlife 2% Ultra-Filtered Milk','bprotein','1 cup',120,13,6,4.5,6,0],
+  ['b5','Fairlife 2% Ultra-Filtered Milk','other','1 cup',120,13,6,4.5,6,0],
   ['b6','Premier Protein Shake','snack','1 shake (11 oz)',160,30,5,3,1,1,{whole:1,meals:'bs'}],
   ['b7','Kirkland Protein Bar (Chocolate Chip Cookie Dough)','snack','1 bar (60 g)',190,21,22,7,1,15,{whole:1}],
   ['b8','Kirkland Mozzarella String Cheese','snack','1 stick',80,7,1,6,0,0,{whole:1}],
@@ -457,7 +457,7 @@ const CATALOG_RAW = [
   ['yg4','Kirkland Organic Greek Yogurt (plain)','bprotein','3/4 cup (170 g)',130,17,6,4,5,0,{sf:2.5}],
   ['yg5','Chobani Greek Yogurt (fruit flavors)','snack','1 cup (5.3 oz)',110,11,15,0,12,0,{sf:0}],
   ['yg6',"Yasso Greek Yogurt Bars, Cookies n' Cream",'snack','1 bar',100,5,15,2.5,13,0,{sf:1.5}],
-  ['yg7','Kirkland Ultra-Filtered 2% Lactose-Free Milk','bprotein','1 cup',120,13,6,4.5,6,0,{sf:3}],
+  ['yg7','Kirkland Ultra-Filtered 2% Lactose-Free Milk','other','1 cup',120,13,6,4.5,6,0,{sf:3}],
   ['yg8','Nesquik Low Fat Milk (chocolate or strawberry)','other','14 fl oz bottle',260,13,41,4.5,40,1,{sf:3}],
   ['dr40','Diet Coke / Coke Zero Sugar','other','12 fl oz',0,0,0,0,0,0,{sf:0}],
   ['dr41','Coca-Cola Classic (incl. Mexican Coke)','other','12 fl oz',140,0,39,0,39,0,{sf:0}],
@@ -728,7 +728,7 @@ const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '2.5 (snacks, bars, bread & dairy)';
+const APP_VERSION = '2.6 (scans join inventory)';
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -752,6 +752,7 @@ function load() {
   return defaults();
 }
 let S = load();
+for (const f of Object.values(S.foods)) if (f.src === 'scan' && f.cat === 'other' && !f.catChecked) { f.cat = guessCategory(f); f.catAuto = true; f.catChecked = true; }
 // Drop plan items whose food no longer exists (e.g. removed from the catalog).
 if (S.plan) for (const d of S.plan.days) for (const m of d.meals) m.items = m.items.filter(x => getFoodSafe(x.id));
 function save() {
@@ -780,6 +781,22 @@ function servingCost(f) {
 }
 const money = n => '$' + n.toFixed(2);
 function priceText(f) { const c = servingCost(f); return f.ppl ? `${money(f.ppl)}/lb${c ? ` · ≈${money(c)} per serving` : ''}` : ''; }
+// Best guess at a food's type from its name and macros, so scanned foods can go straight into meal plans.
+function guessCategory(f) {
+  const n = ((f.name || '') + ' ' + (f.brand || '')).toLowerCase(), cal = f.cal || 0;
+  if (/\b(bar|bars|chips|crisps|jerky|sticks?|crackers?|cookies?|popcorn|pretzels?|snacks?|trail mix|bites|puffs)\b/.test(n)) return 'snack';
+  if (/\b(water|soda|juice|drink|coffee|tea|latte|milk|beverage|kombucha|lemonade|shake|sauce|dressing|ketchup|mustard|mayo|mayonnaise|syrup|seasoning|spice|oil|vinegar|creamer|broth|stock|salsa)\b/.test(n)) return 'other';
+  if (/yogurt|cottage|\beggs?\b|skyr/.test(n)) return 'bprotein';
+  if (/broccoli|spinach|lettuce|salad|kale|green beans?|carrots?|peppers?|cauliflower|zucchini|asparagus|vegetables?|veggies?|cabbage|mushrooms?|tomato/.test(n)) return 'veg';
+  if (/apples?|banana|berr|grapes?|oranges?|mango|peach|pears?|melon|kiwi|cherr|pineapple|plums?/.test(n) && cal < 150) return 'fruit';
+  if (!cal) return 'other';
+  const pr = (f.p || 0) * 4 / cal, fr = (f.f || 0) * 9 / cal, cr = (f.c || 0) * 4 / cal;
+  if (pr >= 0.4) return 'protein';
+  if (fr >= 0.6) return 'fat';
+  if (cr >= 0.5) return 'carb';
+  return 'snack';
+}
+const isDairy = f => /yogurt|cottage|\bmilk\b|kefir|skyr/i.test(f.name || '');
 function sfTarget() { return S.targets.sf || Math.round(S.targets.cal * 0.1 / 9); }
 function getFoodSafe(id) { return (S && S.foods[id]) || CATALOG_BY_ID[id] || null; }
 function avoidedWord(f) {
@@ -1022,13 +1039,15 @@ function fromOFF(code, p) {
   };
   let cal = per('energy-kcal');
   if (cal == null) { const kj = per('energy'); if (kj != null) cal = kj / 4.184; }
-  return {
-    id: 'b' + code, barcode: code, src: 'scan', cat: 'other',
+  const food = {
+    id: 'b' + code, barcode: code, src: 'scan', catAuto: true,
     name: (p.product_name || '').trim() || 'Unnamed product', brand: (p.brands || '').split(',')[0].trim(),
     serving: hasServing ? (p.serving_size || (sq + ' g')) : '100 g', noServing: !hasServing,
     cal: cal == null ? null : r1(cal), p: r1n(per('proteins')), c: r1n(per('carbohydrates')), f: r1n(per('fat')),
     sf: r1n(per('saturated-fat')), s: r1n(per('sugars')), fb: r1n(per('fiber')), img: p.image_front_small_url || '',
   };
+  food.cat = guessCategory(food);
+  return food;
 }
 function r1n(v) { return v == null ? null : r1(v); }
 
@@ -1052,6 +1071,7 @@ function openFood(id, opts = {}) {
     <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">per serving</span></div>
     ${v.fails.length ? `<ul class="reasons">${v.fails.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : `<div class="small muted" style="margin-top:6px">Within all your per-serving limits.</div>`}
     ${f.ppl ? `<div class="small muted" style="margin-top:8px">💲 ${priceText(f)} <span class="small">(Lodi Costco estimate)</span></div>` : ''}
+    ${f.src !== 'costco' ? `<div class="small muted" style="margin-top:8px">${f.src === 'scan' ? '📷 In your Costco inventory · ' : ''}Type: <b>${esc((CATS[f.cat] || CATS.other).label)}</b>${f.catAuto ? ' (guessed — tap Edit to change)' : ''}</div>` : ''}
     <div class="small" style="margin-top:12px"><b>Serving:</b> ${esc(f.serving)}${f.noServing ? ' <span class="muted">(no serving size listed — values are per 100 g; tap Edit to fix)</span>' : ''}</div>
     <div class="nut"><div><b>${fmt(f.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${fmt(f.p)}</b><span>protein g</span></div>
       <div><b style="color:var(--c)">${fmt(f.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${fmt(f.f)}</b><span>fat g</span></div></div>
@@ -1092,7 +1112,7 @@ function foodForm(f, code) {
     const id = f.id || (code ? 'b' + code : 'u' + uid());
     const nf = { ...f, id, name: d.name.trim() || 'Food', brand: d.brand.trim(), serving: d.serving.trim() || '1 serving', noServing: false,
       cal: num(d.cal), p: num(d.p), c: num(d.c), f: num(d.f), sf: num(d.sf), s: num(d.s), fb: num(d.fb), cat: d.cat,
-      src: f.src || (code ? 'scan' : 'custom'), barcode: f.barcode || code || '' };
+      src: f.src === 'search' ? 'scan' : (f.src || (code ? 'scan' : 'custom')), barcode: f.barcode || code || '', catAuto: false };
     S.foods[id] = nf; save(); toast('Saved'); openFood(id);
   });
 }
@@ -1144,7 +1164,7 @@ function renderCostco() {
     ${items.length ? `<div class="row"><button class="btn ghost grow sm" data-act="cleargot">Remove checked</button><button class="btn danger grow sm" data-act="clearlist">Clear list</button></div>` : ''}`;
   } else {
     const q = costcoQ.toLowerCase();
-    const items = allFoods().filter(f => f.src === 'costco' || (S.list[f.id] && S.list[f.id].on) || f.src === 'custom')
+    const items = allFoods().filter(f => f.src === 'costco' || f.src === 'scan' || (S.list[f.id] && S.list[f.id].on) || f.src === 'custom')
       .filter(f => !costcoCat || f.cat === costcoCat)
       .filter(f => !q || (f.name + ' ' + (f.brand || '')).toLowerCase().includes(q))
       .filter(f => costcoFilter === 'all' || (costcoFilter === 'pro' ? isHighProtein(f) && verdict(f).ok : verdict(f).ok === (costcoFilter === 'ok')));
@@ -1156,7 +1176,7 @@ function renderCostco() {
         <select id="ccat" style="width:auto;border-radius:999px;padding:5px 10px;font-size:14px"><option value="">All types</option>${Object.entries(CATS).map(([k, c]) => `<option value="${k}" ${costcoCat === k ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
       <div class="card">${items.length ? items.map(f => `<div class="item"><input type="checkbox" data-act="listtoggle" data-id="${esc(f.id)}" ${S.list[f.id] && S.list[f.id].on ? 'checked' : ''} aria-label="On my list">
         <div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
-        <div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}${f.ppl ? ' · ' + money(f.ppl) + '/lb' : ''}</div></div>${badge(f)}</div>`).join('') : `<div class="empty">No items match.</div>`}</div>
+        <div class="meta">${f.src === 'scan' ? '📷 Scanned · ' : ''}${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}${f.ppl ? ' · ' + money(f.ppl) + '/lb' : ''}</div></div>${badge(f)}</div>`).join('') : `<div class="empty">No items match.</div>`}</div>
       <button class="btn alt block" data-act="newfood">+ Add your own Costco item</button>
       <div class="small muted" style="margin-top:8px">Tick the box to put an item on your shopping list. Meal plans can use only ticked items (switch that on in Plan).</div>`;
   }
@@ -1191,7 +1211,8 @@ function makeDay(pool, used) {
     const items = [];
     for (const cats of parts) {
       const optional = cats.includes('optional');
-      const options = by(cats, code).filter(f => !items.some(x => x.id === f.id) && (!cats.includes('highprotein') || isHighProtein(f)));
+      const hasDairy = items.some(x => isDairy(getFood(x.id)));
+      const options = by(cats, code).filter(f => !items.some(x => x.id === f.id) && !(hasDairy && isDairy(f)) && (!cats.includes('highprotein') || isHighProtein(f)));
       const choice = weightedPick(options, used);
       if (!choice) continue;
       used[choice.id] = (used[choice.id] || 0) + 1;
@@ -1415,13 +1436,13 @@ document.addEventListener('click', e => {
     case 'close': closeSheet(); break;
     case 'open': openFood(id); break;
     case 'online': searchOnline(el.dataset.q); break;
-    case 'pickonline': { const f = onlineResults[id]; if (f) { S.foods[f.id] = S.foods[f.id] || f; save(); openFood(f.id); } break; }
+    case 'pickonline': { const f = onlineResults[id]; if (f) { if (!S.foods[f.id]) S.foods[f.id] = { ...f, src: 'search' }; save(); openFood(f.id); } break; }
     case 'sv': { const i = $('#sv'); i.value = Math.max(0.25, r1((+i.value || 1) + +el.dataset.d)); break; }
     case 'log': { const sv = +$('#sv').value || 1; logFood(sheetFood, sv, $('#meal').value); toast(`Logged ${r1(sv)} × ${sheetFood.name}`); closeSheet(); if (tab === 'scan') go('today'); break; }
     case 'togglelist': {
       const f = sheetFood, L = S.list[f.id];
       if (L && L.on) delete S.list[f.id];
-      else { S.list[f.id] = { on: true, got: false }; if (f.cat === 'other' && f.src !== 'costco') { save(); toast('Added — pick a type so meal plans can use it'); return foodForm(f); } }
+      else { S.list[f.id] = { on: true, got: false };  }
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
     case 'edit': foodForm(sheetFood); break;
