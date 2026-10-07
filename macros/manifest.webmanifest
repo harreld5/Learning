@@ -1,0 +1,14 @@
+{
+  "name": "Macro Check",
+  "short_name": "Macros",
+  "description": "Scan food, see if it fits your macros, and plan meals from Costco groceries.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F4F7F5",
+  "theme_color": "#1F8A4C",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

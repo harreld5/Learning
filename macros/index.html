@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Macro Check</title>
+<meta name="description" content="Scan food, see if it fits your macros, and plan meals from Costco groceries.">
+<meta name="theme-color" content="#1F8A4C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Macro Check">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root {
+  --bg: #F4F7F5; --card: #FFFFFF; --ink: #17211B; --muted: #5E6B63; --line: #DCE4DF;
+  --brand: #1F8A4C; --brand-ink: #FFFFFF; --soft: #E7F3EC;
+  --ok: #1F8A4C; --ok-bg: #E3F4EA; --bad: #C0362C; --bad-bg: #FBE7E5; --warn: #A86A00;
+  --p: #3A6FD8; --c: #D98B1E; --f: #9B4DC9; --cal: #1F8A4C;
+  --radius: 14px; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 2px 10px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1512; --card: #18201C; --ink: #E8EFEA; --muted: #9AA8A0; --line: #2A3530;
+    --brand: #35B06A; --brand-ink: #06140C; --soft: #1C2E24;
+    --ok: #46C27C; --ok-bg: #16301F; --bad: #FF7A6E; --bad-bg: #3A1B18; --warn: #F0B04A;
+    --p: #7AA2F7; --c: #F0B04A; --f: #C792EA; --cal: #46C27C; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1512; --card: #18201C; --ink: #E8EFEA; --muted: #9AA8A0; --line: #2A3530;
+  --brand: #35B06A; --brand-ink: #06140C; --soft: #1C2E24;
+  --ok: #46C27C; --ok-bg: #16301F; --bad: #FF7A6E; --bad-bg: #3A1B18; --warn: #F0B04A;
+  --p: #7AA2F7; --c: #F0B04A; --f: #C792EA; --cal: #46C27C; --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%;
+  padding: env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom)); }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 16px 8px; display: flex; align-items: center; gap: 8px; }
+header h1 { font-size: 22px; margin: 0; flex: 1; }
+main { padding: 0 16px 16px; max-width: 640px; margin: 0 auto; }
+.card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--line); padding: 14px; margin: 0 0 12px; }
+.card h2 { font-size: 17px; margin: 0 0 8px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.row.wrap { flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.btn { border: 0; border-radius: 12px; padding: 11px 14px; background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+.btn.alt { background: var(--soft); color: var(--ink); }
+.btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+.btn.danger { background: var(--bad-bg); color: var(--bad); }
+.btn.sm { padding: 7px 10px; font-size: 14px; border-radius: 10px; }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .5; }
+.icon-btn { border: 0; background: transparent; padding: 6px 8px; border-radius: 8px; color: var(--muted); font-size: 18px; }
+input[type=text], input[type=number], input[type=search], select {
+  width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); min-width: 0; }
+label.field { display: block; font-size: 13px; color: var(--muted); }
+label.field > input, label.field > select { margin-top: 4px; font-size: 16px; color: var(--ink); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+.chip { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; white-space: nowrap; font-size: 14px; }
+.chip.on { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+
+/* macro bars */
+.macro { margin: 8px 0; }
+.macro .top { display: flex; justify-content: space-between; font-size: 14px; }
+.bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 4px; }
+.bar > i { display: block; height: 100%; border-radius: 99px; }
+.bar > i.over { background: var(--bad) !important; }
+.big-left { font-size: 30px; font-weight: 700; }
+
+/* verdict */
+.verdict { border-radius: 12px; padding: 12px 14px; font-weight: 700; font-size: 20px; display: flex; align-items: center; gap: 10px; }
+.verdict.ok { background: var(--ok-bg); color: var(--ok); }
+.verdict.bad { background: var(--bad-bg); color: var(--bad); }
+.badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.badge.bad { background: var(--bad-bg); color: var(--bad); }
+.reasons { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }
+.nut { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; margin: 10px 0; }
+.nut div { background: var(--bg); border-radius: 10px; padding: 8px 4px; }
+.nut b { display: block; font-size: 18px; }
+.nut span { font-size: 12px; color: var(--muted); }
+
+/* lists */
+.item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.item:first-child { border-top: 0; }
+.item .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.item .meta { font-size: 13px; color: var(--muted); }
+.tap { cursor: pointer; }
+.item input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--brand); flex: none; }
+.empty { text-align: center; color: var(--muted); padding: 18px 8px; }
+
+/* scanner */
+.scanbox { position: relative; background: #000; border-radius: var(--radius); overflow: hidden; aspect-ratio: 4 / 3; }
+.scanbox video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scanbox .guide { position: absolute; left: 10%; right: 10%; top: 32%; bottom: 32%; border: 3px solid rgba(255,255,255,.85); border-radius: 12px; box-shadow: 0 0 0 999px rgba(0,0,0,.25); }
+.scanbox .idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #fff; text-align: center; padding: 20px; }
+
+/* nav */
+nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--card); border-top: 1px solid var(--line);
+  display: flex; padding-bottom: env(safe-area-inset-bottom); }
+nav button { flex: 1; border: 0; background: transparent; padding: 8px 0 7px; font-size: 11px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+nav button svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+nav button.on { color: var(--brand); font-weight: 700; }
+
+/* sheet */
+.sheet { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; }
+.sheet-card { background: var(--card); width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto; border-radius: 18px 18px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+.sheet-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.sheet-head h2 { margin: 0; font-size: 19px; flex: 1; }
+.stepper { display: flex; align-items: center; gap: 6px; }
+.stepper button { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 20px; }
+.stepper input { width: 64px; text-align: center; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 30;
+  background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-size: 14px; max-width: 90vw; }
+.meal h3 { margin: 0; font-size: 15px; }
+details summary { cursor: pointer; font-weight: 600; }
+.switch { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.switch:first-of-type { border-top: 0; }
+.switch input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--brand); }
+.switch input[type=number] { width: 90px; }
+</style>
+</head>
+<body>
+<header><h1 id="title">Today</h1><span id="hdr-extra"></span></header>
+<main id="view"></main>
+
+<nav id="nav">
+  <button data-tab="today"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Today</button>
+  <button data-tab="scan"><svg viewBox="0 0 24 24"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>Scan</button>
+  <button data-tab="costco"><svg viewBox="0 0 24 24"><path d="M3 4h2l2.4 11h11l2-8H6.2"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="17" cy="19.5" r="1.5"/></svg>Costco</button>
+  <button data-tab="plan"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Plan</button>
+  <button data-tab="settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Goals</button>
+</nav>
+
+<div class="sheet" id="sheet" hidden><div class="sheet-card" id="sheet-card"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+'use strict';
+/* ================= Costco catalog =================
+   Common Costco / Kirkland Signature groceries with approximate label values per serving.
+   Stock at the Lodi, CA warehouse changes; scanning the real package gives the exact label. */
+const CATS = {
+  protein:  { label: 'Protein (meals)',     meals: 'ld', max: 2.5 },
+  bprotein: { label: 'Breakfast & dairy',   meals: 'bs', max: 2 },
+  carb:     { label: 'Carbs',               meals: 'ld', max: 3 },
+  veg:      { label: 'Vegetables',          meals: 'ld', max: 3 },
+  fruit:    { label: 'Fruit',               meals: 'bs', max: 2 },
+  fat:      { label: 'Fats & nuts',         meals: 'ld', max: 1.5, min: 0 },
+  snack:    { label: 'Snacks & bars',       meals: 's',  max: 2 },
+  other:    { label: 'Other',               meals: '',   max: 2 },
+};
+// [id, name, cat, serving, kcal, protein, carbs, fat, sugar, fiber, opts]
+const CATALOG_RAW = [
+  ['k1','Kirkland Boneless Skinless Chicken Breast','protein','4 oz raw',120,26,0,1.5,0,0],
+  ['k2','Costco Rotisserie Chicken (meat, no skin)','protein','3 oz',140,19,0,7,0,0],
+  ['k3','Kirkland Lean Ground Beef 88/12','protein','4 oz raw',200,21,0,12,0,0],
+  ['k4','Kirkland Ground Turkey 93/7','protein','4 oz raw',170,21,0,9,0,0],
+  ['k5','Kirkland Atlantic Salmon Fillet','protein','4 oz raw',230,23,0,15,0,0],
+  ['k6','Kirkland Wild Sockeye Salmon','protein','4 oz raw',150,24,0,6,0,0],
+  ['k7','Kirkland Tilapia Loins (frozen)','protein','4 oz',110,23,0,2,0,0],
+  ['k8','Kirkland Cooked Shrimp (frozen)','protein','4 oz',120,24,0,2,0,0],
+  ['k9','Kirkland Albacore Tuna (canned)','protein','2 oz drained',60,13,0,1,0,0],
+  ['k10','Kirkland Chicken Breast (canned)','protein','2 oz',60,12,0,1,0,0],
+  ['k11','Kirkland Turkey Burgers (frozen)','protein','1 patty (4 oz)',180,22,0,10,0,0,{whole:1}],
+  ['k12','Kirkland Breaded Chicken Breast Chunks','protein','3 oz',160,16,7,8,1,0],
+  ['k13','Organic Firm Tofu','protein','3 oz',80,9,2,4.5,0,1],
+  ['k14','Kirkland Oven Roasted Turkey Breast (sliced)','protein','2 oz',60,11,1,1,1,0,{meals:'lds'}],
+  ['b1','Kirkland Large Eggs','bprotein','2 eggs',140,12,0,10,0,0,{whole:1}],
+  ['b2','Kirkland Liquid Egg Whites','bprotein','1/2 cup (120 g)',60,12,1,0,0,0],
+  ['b3','Kirkland Nonfat Greek Yogurt (plain)','bprotein','3/4 cup (170 g)',100,18,6,0,5,0],
+  ['b4','Daisy 2% Low Fat Cottage Cheese','bprotein','1/2 cup',90,13,4,2.5,3,0],
+  ['b5','Fairlife 2% Ultra-Filtered Milk','bprotein','1 cup',120,13,6,4.5,6,0],
+  ['b6','Premier Protein Shake','snack','1 shake (11 oz)',160,30,5,3,1,1,{whole:1,meals:'bs'}],
+  ['b7','Kirkland Protein Bar (Chocolate Chip Cookie Dough)','snack','1 bar (60 g)',190,21,22,7,1,15,{whole:1}],
+  ['b8','Kirkland Mozzarella String Cheese','snack','1 stick',80,7,1,6,0,0,{whole:1}],
+  ['b9','Kirkland Extra Thick Steak Strips (jerky)','snack','1 oz',80,13,4,1,3,0],
+  ['b10','Quest Protein Chips','snack','1 bag (32 g)',140,19,4,5,1,1,{whole:1}],
+  ['c1','Kirkland Organic Quinoa','carb','1/4 cup dry (45 g)',170,6,30,2.5,0,3],
+  ['c2','Kirkland Jasmine Rice','carb','1/4 cup dry (45 g)',160,3,36,0,0,0],
+  ['c3','Brown Rice','carb','1/4 cup dry (45 g)',170,4,35,1.5,0,2],
+  ['c4','Quaker Old Fashioned Oats','carb','1/2 cup dry (40 g)',150,5,27,3,1,4,{meals:'b'}],
+  ["c5","Dave's Killer Bread 21 Whole Grains",'carb','1 slice',120,5,22,1.5,5,5,{meals:'bl',whole:1}],
+  ['c6','Mission Carb Balance Whole Wheat Tortillas','carb','1 tortilla',70,5,19,2.5,0,15,{meals:'bld',whole:1}],
+  ['c7','Sweet Potatoes','carb','1 medium (130 g)',110,2,26,0,5,4],
+  ['c8','Russet Potatoes','carb','1 medium (170 g)',160,4,37,0,1,4],
+  ['c9','Garofalo Pasta','carb','2 oz dry',200,7,42,1,1,2],
+  ['c10','Banza Chickpea Pasta','carb','2 oz dry',190,11,35,3.5,5,5],
+  ['c11','Kirkland Organic Black Beans (canned)','carb','1/2 cup',110,7,20,0.5,0,7],
+  ['c12','Kirkland Bagels','carb','1 bagel',300,11,58,2,6,2,{meals:'b',whole:1}],
+  ['v1','Broccoli Florets','veg','1 cup',30,2.5,6,0,1.5,2.4],
+  ['v2','Kirkland Normandy Vegetable Blend (frozen)','veg','1 cup',30,2,6,0,2,2],
+  ['v3','Organic Baby Spinach','veg','3 cups',20,2,3,0,0,2],
+  ['v4','Green Beans','veg','1 cup',30,2,7,0,3,3],
+  ['v5','Asparagus','veg','1 cup',27,3,5,0,2,3],
+  ['v6','Mini Sweet Peppers','veg','3 peppers (85 g)',25,1,6,0,4,2],
+  ['v7','Organic Spring Mix','veg','3 cups',15,1,3,0,0,1],
+  ['f1','Bananas','fruit','1 medium',105,1,27,0,14,3,{whole:1}],
+  ['f2','Strawberries','fruit','1 cup',50,1,12,0,7,3],
+  ['f3','Kirkland Organic Blueberries (frozen)','fruit','1 cup',80,1,21,0.5,14,4],
+  ['f4','Honeycrisp Apples','fruit','1 medium',95,0.5,25,0,19,4,{whole:1}],
+  ['f5','Kirkland Three-Berry Blend (frozen)','fruit','1 cup',70,1,17,0,10,5],
+  ['a1','Avocados','fat','1/3 avocado (50 g)',80,1,4,7,0,3],
+  ['a2','Kirkland Supreme Whole Almonds','fat','1 oz (23 almonds)',160,6,6,14,1,3.5,{meals:'lds'}],
+  ['a3','Kirkland Organic Creamy Peanut Butter','fat','2 tbsp',190,7,7,16,2,3,{meals:'bs'}],
+  ['a4','Kirkland Extra Virgin Olive Oil','fat','1 tbsp',120,0,0,14,0,0],
+  ['a5','Kirkland Shredded Mexican-Style Cheese','fat','1/4 cup (28 g)',110,6,1,9,0,0],
+  ['a6','Sabra Classic Hummus','fat','2 tbsp',70,2,4,5,0,1,{meals:'lds'}],
+  ['s1','Kirkland Unsweetened Vanilla Almond Milk','other','1 cup',40,1,1,3,0,1],
+  ['s2','Kirkland Trail Mix','snack','1/4 cup (40 g)',210,6,18,14,12,2],
+  ['s3','SkinnyPop Popcorn','snack','3.75 cups',150,2,15,10,0,3],
+  ['s4','Peanut Butter Filled Pretzels','snack','1 oz',140,5,15,7,3,1],
+  ['s5','Kirkland Organic Salsa','other','2 tbsp',10,0,2,0,1,0],
+];
+const CATALOG = CATALOG_RAW.map(([id, name, cat, serving, cal, p, c, f, s, fb, o = {}]) =>
+  ({ id, name, cat, serving, cal, p, c, f, s, fb, src: 'costco', meals: o.meals, whole: !!o.whole }));
+const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
+
+/* ================= state (stored only on this phone) ================= */
+const KEY = 'macro-check-v1';
+const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
+function defaults() {
+  return {
+    targets: { cal: 2000, p: 150, c: 200, f: 65 }, targetsSet: false,
+    servingsPerDay: 5,
+    rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
+    foods: {}, list: {}, log: {}, plan: null,
+    planOpts: { days: 1, onlyList: false, snacks: 1 },
+    calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose' },
+  };
+}
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if (d && typeof d === 'object') {
+      const base = defaults();
+      return { ...base, ...d, rules: { ...base.rules, ...d.rules }, planOpts: { ...base.planOpts, ...d.planOpts }, calc: { ...base.calc, ...d.calc } };
+    }
+  } catch (e) {}
+  return defaults();
+}
+let S = load();
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { toast('Could not save — phone storage may be full'); }
+}
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const r1 = n => Math.round((+n || 0) * 10) / 10;
+const fmt = n => (n == null || isNaN(n)) ? '?' : String(r1(n));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+const todayKey = () => dayKey(new Date());
+function getFood(id) { return S.foods[id] || CATALOG_BY_ID[id] || null; }
+function allFoods() {
+  const out = CATALOG.map(f => S.foods[f.id] || f);
+  for (const f of Object.values(S.foods)) if (!CATALOG_BY_ID[f.id]) out.push(f);
+  return out;
+}
+function mealsFor(f) { return f.meals || (CATS[f.cat] || CATS.other).meals; }
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600);
+}
+function carbsOf(f) { return S.rules.net ? Math.max(0, (f.c || 0) - (f.fb || 0)) : f.c; }
+
+/* ================= approved / not approved ================= */
+function verdict(f) {
+  const r = S.rules, fails = [];
+  const carbLabel = r.net ? 'Net carbs' : 'Carbs';
+  const check = (rule, val, label, unit, isMin) => {
+    if (!rule.on) return;
+    if (val == null || isNaN(val)) { fails.push(`${label} not listed — tap Edit to enter it`); return; }
+    if (isMin ? val < rule.v : val > rule.v) fails.push(`${label} ${fmt(val)}${unit} ${isMin ? 'is under' : 'is over'} your ${rule.v}${unit} ${isMin ? 'minimum' : 'limit'}`);
+  };
+  check(r.cal, f.cal, 'Calories', '', false);
+  check(r.c, f.c == null ? null : carbsOf(f), carbLabel, ' g', false);
+  check(r.f, f.f, 'Fat', ' g', false);
+  check(r.s, f.s, 'Sugar', ' g', false);
+  check(r.p, f.p, 'Protein', ' g', true);
+  return { ok: fails.length === 0, fails };
+}
+function badge(f) { const v = verdict(f); return `<span class="badge ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ Approved' : '✕ Not approved'}</span>`; }
+
+/* ================= daily totals ================= */
+function entries(k) { return S.log[k] || []; }
+function totals(list) {
+  const t = { cal: 0, p: 0, c: 0, f: 0 };
+  for (const e of list) for (const m of ['cal', 'p', 'c', 'f']) t[m] += (e[m] || 0) * e.sv;
+  return t;
+}
+function logFood(f, sv, meal, k = viewDay) {
+  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0 });
+  save();
+}
+function defaultMeal() { const h = new Date().getHours(); return h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 20 ? 'Dinner' : 'Snacks'; }
+
+/* ================= tabs ================= */
+let tab = 'today', viewDay = todayKey(), costcoView = 'catalog', costcoFilter = 'all', costcoCat = '', costcoQ = '', planDay = 0;
+const TITLES = { today: 'Today', scan: 'Scan food', costco: 'Costco', plan: 'Meal plan', settings: 'Goals & rules' };
+function go(t) {
+  if (tab === 'scan' && t !== 'scan') stopScan();
+  tab = t; render(); window.scrollTo(0, 0);
+}
+function render() {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  $('#title').textContent = TITLES[tab];
+  $('#hdr-extra').innerHTML = '';
+  ({ today: renderToday, scan: renderScan, costco: renderCostco, plan: renderPlan, settings: renderSettings })[tab]();
+}
+$('#nav').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) go(b.dataset.tab); });
+
+/* ---------- Today ---------- */
+function macroBar(label, val, target, color, unit) {
+  const pct = target ? Math.min(100, val / target * 100) : 0;
+  return `<div class="macro"><div class="top"><span><b>${label}</b></span><span>${Math.round(val)} / ${target}${unit}</span></div>
+    <div class="bar"><i class="${label !== 'Protein' && val > target * 1.05 ? 'over' : ''}" style="width:${pct}%;background:${color}"></i></div></div>`;
+}
+function renderToday() {
+  const list = entries(viewDay), t = totals(list), T = S.targets;
+  const isToday = viewDay === todayKey();
+  const d = new Date(viewDay + 'T12:00:00');
+  $('#title').textContent = isToday ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  $('#hdr-extra').innerHTML = `<button class="icon-btn" data-act="day" data-d="-1" aria-label="Previous day">‹</button>
+    <button class="icon-btn" data-act="day" data-d="1" aria-label="Next day" ${isToday ? 'disabled' : ''}>›</button>`;
+  const left = T.cal - t.cal;
+  let h = '';
+  if (!S.targetsSet) h += `<div class="card" style="background:var(--soft)"><b>Set your goals first.</b>
+    <div class="small muted">Your daily macros decide what counts as Approved.</div>
+    <button class="btn sm" style="margin-top:8px" data-act="tab" data-t="settings">Set goals</button></div>`;
+  h += `<div class="card"><div class="row"><div class="grow"><div class="big-left" style="color:${left < 0 ? 'var(--bad)' : 'var(--ink)'}">${Math.abs(Math.round(left))}</div>
+    <div class="small muted">calories ${left < 0 ? 'over' : 'left'}</div></div>
+    <div class="small muted" style="text-align:right">P ${Math.round(T.p - t.p)} g left<br>C ${Math.round(T.c - t.c)} g left<br>F ${Math.round(T.f - t.f)} g left</div></div>
+    ${macroBar('Calories', t.cal, T.cal, 'var(--cal)', '')}${macroBar('Protein', t.p, T.p, 'var(--p)', ' g')}
+    ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}</div>
+    <div class="row" style="margin-bottom:12px"><button class="btn grow" data-act="tab" data-t="scan">Scan barcode</button>
+    <button class="btn alt grow" data-act="find">Search food</button></div>`;
+  for (const m of MEALS) {
+    const es = list.filter(e => e.meal === m); if (!es.length) continue;
+    const mt = totals(es);
+    h += `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${m}</h2><span class="small muted">${Math.round(mt.cal)} cal · P${Math.round(mt.p)} C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
+      ${es.map(e => `<div class="item"><div class="grow"><div class="name">${esc(e.name)}</div>
+        <div class="meta">${r1(e.sv)} × ${esc(e.serving)} · ${Math.round(e.cal * e.sv)} cal · P${r1(e.p * e.sv)} C${r1(e.c * e.sv)} F${r1(e.f * e.sv)}</div></div>
+        <button class="icon-btn" data-act="unlog" data-id="${e.id}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
+  }
+  if (!list.length) h += `<div class="empty">Nothing logged ${isToday ? 'yet today' : 'this day'}.<br>Scan a barcode or pick from your Costco list.</div>`;
+  $('#view').innerHTML = h;
+}
+
+/* ---------- Scan ---------- */
+let scan = { active: false, stream: null, reader: null, timer: 0, busy: false };
+function renderScan() {
+  $('#view').innerHTML = `<div class="scanbox" id="scanbox"><video id="video" playsinline muted></video><div class="guide" id="guide" hidden></div>
+      <div class="idle" id="scan-idle"><div style="font-size:15px">Point the camera at the barcode on the package.</div>
+      <button class="btn" data-act="startscan">Start camera</button></div></div>
+    <div class="row" style="margin:10px 0 14px"><button class="btn ghost sm" data-act="stopscan" id="stopbtn" hidden>Stop camera</button>
+      <span class="small muted grow" id="scan-status"></span></div>
+    <div class="card"><h2>Type the barcode</h2><div class="row"><input type="text" inputmode="numeric" id="manual-code" placeholder="e.g. 096619123456" autocomplete="off">
+      <button class="btn" data-act="lookup">Look up</button></div>
+      <div class="small muted" style="margin-top:6px">Nutrition comes from Open Food Facts, a free public food database. Only the barcode number is sent.</div></div>
+    <div class="card"><h2>No barcode?</h2><div class="row"><button class="btn alt grow" data-act="find">Search by name</button><button class="btn alt grow" data-act="newfood">Enter label</button></div></div>`;
+  if (S.camOk) startScan();
+}
+async function startScan() {
+  stopScan();
+  const video = $('#video'); if (!video) return;
+  const status = msg => { const el = $('#scan-status'); if (el) el.textContent = msg; };
+  scan.active = true; scan.busy = false;
+  $('#scan-idle').hidden = true; $('#guide').hidden = false; $('#stopbtn').hidden = false;
+  status('Starting camera…');
+  const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+  try {
+    let native = null;
+    if ('BarcodeDetector' in window) {
+      try {
+        const fm = await BarcodeDetector.getSupportedFormats();
+        const want = ['ean_13', 'ean_8', 'upc_a', 'upc_e'].filter(x => fm.includes(x));
+        if (want.length) native = new BarcodeDetector({ formats: want });
+      } catch (e) {}
+    }
+    if (native) {
+      scan.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (!scan.active) return stopScan();
+      video.srcObject = scan.stream; await video.play();
+      const tick = async () => {
+        if (!scan.active) return;
+        try { const r = await native.detect(video); if (r.length) return onCode(r[0].rawValue); } catch (e) {}
+        scan.timer = setTimeout(tick, 180);
+      };
+      tick();
+    } else {
+      await loadZxing();
+      if (!scan.active) return;
+      const hints = new Map();
+      const F = ZXing.BarcodeFormat;
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
+      scan.reader = new ZXing.BrowserMultiFormatReader(hints, 200);
+      await scan.reader.decodeFromConstraints(constraints, video, res => { if (res && scan.active) onCode(res.getText()); });
+    }
+    S.camOk = true; save();
+    status('Scanning… hold steady about 6 inches away.');
+  } catch (e) {
+    stopScan();
+    status(e && e.name === 'NotAllowedError' ? 'Camera blocked. Allow camera access for this app in your phone settings, or type the barcode below.'
+      : 'Could not start the camera. You can type the barcode below.');
+  }
+}
+let zxingLoading;
+function loadZxing() {
+  if (window.ZXing) return Promise.resolve();
+  return zxingLoading = zxingLoading || new Promise((ok, no) => {
+    const s = document.createElement('script'); s.src = 'vendor/zxing.min.js'; s.onload = ok; s.onerror = () => { zxingLoading = null; no(new Error('load')); };
+    document.head.appendChild(s);
+  });
+}
+function stopScan() {
+  scan.active = false; clearTimeout(scan.timer);
+  try { scan.reader && scan.reader.reset(); } catch (e) {}
+  scan.reader = null;
+  if (scan.stream) scan.stream.getTracks().forEach(t => t.stop());
+  scan.stream = null;
+  const v = $('#video'); if (v) { v.srcObject = null; }
+  if ($('#scan-idle')) { $('#scan-idle').hidden = false; $('#guide').hidden = true; $('#stopbtn').hidden = true; }
+}
+function onCode(code) {
+  if (scan.busy) return; scan.busy = true;
+  if (navigator.vibrate) navigator.vibrate(60);
+  stopScan();
+  lookupBarcode(code);
+}
+
+/* ---------- Open Food Facts lookup ---------- */
+const OFF_FIELDS = 'code,product_name,brands,serving_size,serving_quantity,nutriments,image_front_small_url';
+async function offFetch(url) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 12000);
+  try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok && r.status !== 404) throw new Error('http ' + r.status); return await r.json(); }
+  finally { clearTimeout(t); }
+}
+function codeVariants(code) {
+  const c = String(code).replace(/\D/g, ''); const v = [c];
+  if (c.length === 12) v.push('0' + c);
+  if (c.length === 13 && c[0] === '0') v.push(c.slice(1));
+  return v;
+}
+async function lookupBarcode(raw) {
+  const code = String(raw || '').replace(/\D/g, '');
+  if (code.length < 6) { toast('That barcode looks too short'); return; }
+  const saved = S.foods['b' + code] || allFoods().find(f => f.barcode === code);
+  if (saved) return openFood(saved.id);
+  sheet(`<div class="sheet-head"><h2>Looking up ${esc(code)}…</h2></div><div class="empty">Checking the food database.</div>`);
+  try {
+    for (const c of codeVariants(code)) {
+      const d = await offFetch(`https://world.openfoodfacts.org/api/v2/product/${c}.json?fields=${OFF_FIELDS}`);
+      if (d && d.status === 1 && d.product) {
+        const f = fromOFF(code, d.product);
+        S.foods[f.id] = f; save();
+        return openFood(f.id);
+      }
+    }
+    sheet(`<div class="sheet-head"><h2>Not in the database</h2><button class="icon-btn" data-act="close">✕</button></div>
+      <p>Barcode <b>${esc(code)}</b> wasn't found. Enter the numbers from the Nutrition Facts label once and the app will remember it.</p>
+      <button class="btn block" data-act="newfood" data-code="${esc(code)}">Enter label</button>`);
+  } catch (e) {
+    sheet(`<div class="sheet-head"><h2>Couldn't reach the food database</h2><button class="icon-btn" data-act="close">✕</button></div>
+      <p class="muted">Check your internet connection and try again, or enter the label yourself.</p>
+      <div class="row"><button class="btn grow" data-act="lookup" data-code="${esc(code)}">Try again</button>
+      <button class="btn alt grow" data-act="newfood" data-code="${esc(code)}">Enter label</button></div>`);
+  }
+}
+function fromOFF(code, p) {
+  const n = p.nutriments || {};
+  const sq = parseFloat(p.serving_quantity) || 0;
+  const num = v => (v === undefined || v === null || v === '' || isNaN(+v)) ? null : +v;
+  const hasServing = num(n['energy-kcal_serving']) != null || num(n.proteins_serving) != null || sq > 0;
+  const per = k => {
+    const s = num(n[k + '_serving']); if (s != null) return s;
+    const h = num(n[k + '_100g']); if (h == null) return null;
+    return hasServing && sq ? h * sq / 100 : h;
+  };
+  let cal = per('energy-kcal');
+  if (cal == null) { const kj = per('energy'); if (kj != null) cal = kj / 4.184; }
+  return {
+    id: 'b' + code, barcode: code, src: 'scan', cat: 'other',
+    name: (p.product_name || '').trim() || 'Unnamed product', brand: (p.brands || '').split(',')[0].trim(),
+    serving: hasServing ? (p.serving_size || (sq + ' g')) : '100 g', noServing: !hasServing,
+    cal: cal == null ? null : r1(cal), p: r1n(per('proteins')), c: r1n(per('carbohydrates')), f: r1n(per('fat')),
+    s: r1n(per('sugars')), fb: r1n(per('fiber')), img: p.image_front_small_url || '',
+  };
+}
+function r1n(v) { return v == null ? null : r1(v); }
+
+/* ---------- food sheet ---------- */
+let sheetFood = null;
+function sheet(html) { $('#sheet-card').innerHTML = html; $('#sheet').hidden = false; }
+function closeSheet() { $('#sheet').hidden = true; sheetFood = null; if (tab === 'scan') { scan.busy = false; if (S.camOk) startScan(); } else render(); }
+$('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
+
+function openFood(id, opts = {}) {
+  const f = getFood(id); if (!f) return;
+  sheetFood = f;
+  const v = verdict(f);
+  const left = (() => { const t = totals(entries(viewDay)), T = S.targets; return { cal: T.cal - t.cal, p: T.p - t.p, c: T.c - t.c, f: T.f - t.f }; })();
+  const fits = (f.cal || 0) <= left.cal && (f.c || 0) <= left.c && (f.f || 0) <= left.f;
+  const onList = S.list[f.id] && S.list[f.id].on;
+  const sv = opts.sv || 1;
+  sheet(`<div class="sheet-head">${f.img ? `<img src="${esc(f.img)}" alt="" style="width:52px;height:52px;object-fit:contain;border-radius:8px;background:#fff">` : ''}
+      <div class="grow"><h2>${esc(f.name)}</h2><div class="small muted">${esc(f.brand || (f.src === 'costco' ? 'Costco catalog' : ''))}${f.barcode ? ' · ' + esc(f.barcode) : ''}</div></div>
+      <button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">per serving</span></div>
+    ${v.fails.length ? `<ul class="reasons">${v.fails.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : `<div class="small muted" style="margin-top:6px">Within all your per-serving limits.</div>`}
+    <div class="small" style="margin-top:12px"><b>Serving:</b> ${esc(f.serving)}${f.noServing ? ' <span class="muted">(no serving size listed — values are per 100 g; tap Edit to fix)</span>' : ''}</div>
+    <div class="nut"><div><b>${fmt(f.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${fmt(f.p)}</b><span>protein g</span></div>
+      <div><b style="color:var(--c)">${fmt(f.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${fmt(f.f)}</b><span>fat g</span></div></div>
+    <div class="small muted">Sugar ${fmt(f.s)} g · Fiber ${fmt(f.fb)} g${S.rules.net ? ` · Net carbs ${fmt(carbsOf(f))} g` : ''}</div>
+    <div class="small" style="margin:8px 0 12px;color:${fits ? 'var(--ok)' : 'var(--warn)'}">${fits ? '✓ One serving fits in what you have left today.' : '⚠ One serving goes past what you have left today.'}</div>
+    <div class="row wrap" style="margin-bottom:10px"><span class="small muted">Servings</span>
+      <div class="stepper"><button data-act="sv" data-d="-0.5">−</button><input type="number" id="sv" value="${sv}" step="0.25" min="0.25" inputmode="decimal"><button data-act="sv" data-d="0.5">+</button></div>
+      <select id="meal" style="width:auto;flex:1">${MEALS.map(m => `<option ${m === (opts.meal || defaultMeal()) ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+    <button class="btn block" data-act="log">Log it</button>
+    <div class="row" style="margin-top:8px"><button class="btn alt grow sm" data-act="togglelist">${onList ? '✓ On Costco list' : '+ Costco list'}</button>
+      <button class="btn alt grow sm" data-act="edit">Edit</button>
+      ${f.src !== 'costco' ? `<button class="btn danger sm" data-act="delfood">Delete</button>` : ''}</div>`);
+}
+function foodForm(f, code) {
+  f = f || { name: '', brand: '', serving: '', cal: '', p: '', c: '', f: '', s: '', fb: '', cat: 'other' };
+  const n = v => v == null ? '' : v;
+  sheet(`<div class="sheet-head"><h2>${f.id ? 'Edit food' : 'Enter label'}</h2><button class="icon-btn" data-act="close">✕</button></div>
+    <div class="small muted" style="margin-bottom:10px">Copy the numbers from the Nutrition Facts label for <b>one serving</b>.</div>
+    <form id="foodform"><label class="field">Name<input type="text" name="name" value="${esc(f.name)}" required></label>
+    <div class="grid2" style="margin-top:10px"><label class="field">Brand<input type="text" name="brand" value="${esc(f.brand)}"></label>
+      <label class="field">Serving size<input type="text" name="serving" value="${esc(f.noServing ? '' : f.serving)}" placeholder="e.g. 1 cup (240 g)"></label>
+      <label class="field">Calories<input type="number" step="any" inputmode="decimal" name="cal" value="${n(f.cal)}"></label>
+      <label class="field">Protein g<input type="number" step="any" inputmode="decimal" name="p" value="${n(f.p)}"></label>
+      <label class="field">Total carbs g<input type="number" step="any" inputmode="decimal" name="c" value="${n(f.c)}"></label>
+      <label class="field">Fat g<input type="number" step="any" inputmode="decimal" name="f" value="${n(f.f)}"></label>
+      <label class="field">Sugars g<input type="number" step="any" inputmode="decimal" name="s" value="${n(f.s)}"></label>
+      <label class="field">Fiber g<input type="number" step="any" inputmode="decimal" name="fb" value="${n(f.fb)}"></label></div>
+    <label class="field" style="margin-top:10px">Type (used for meal plans)<select name="cat">${Object.entries(CATS).map(([k, c]) => `<option value="${k}" ${f.cat === k ? 'selected' : ''}>${c.label}</option>`).join('')}</select></label>
+    <button class="btn block" style="margin-top:14px" type="submit">Save</button>
+    ${f.src === 'costco' && S.foods[f.id] ? `<button class="btn ghost block" style="margin-top:8px" type="button" data-act="resetfood">Reset to catalog values</button>` : ''}</form>`);
+  $('#foodform').addEventListener('submit', e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const num = v => v === '' ? null : +v;
+    const id = f.id || (code ? 'b' + code : 'u' + uid());
+    const nf = { ...f, id, name: d.name.trim() || 'Food', brand: d.brand.trim(), serving: d.serving.trim() || '1 serving', noServing: false,
+      cal: num(d.cal), p: num(d.p), c: num(d.c), f: num(d.f), s: num(d.s), fb: num(d.fb), cat: d.cat,
+      src: f.src || (code ? 'scan' : 'custom'), barcode: f.barcode || code || '' };
+    S.foods[id] = nf; save(); toast('Saved'); openFood(id);
+  });
+}
+function findSheet(q = '') {
+  sheet(`<div class="sheet-head"><h2>Find food</h2><button class="icon-btn" data-act="close">✕</button></div>
+    <input type="search" id="findq" placeholder="Search your foods & Costco list" value="${esc(q)}" autocomplete="off">
+    <div id="findres" style="margin-top:8px"></div>`);
+  const run = () => {
+    const s = $('#findq').value.trim().toLowerCase();
+    const res = allFoods().filter(f => !s || (f.name + ' ' + (f.brand || '')).toLowerCase().includes(s)).slice(0, 40);
+    $('#findres').innerHTML = res.map(foodRow).join('') +
+      (s.length > 1 ? `<button class="btn alt block" style="margin-top:10px" data-act="online" data-q="${esc(s)}">Search online for “${esc(s)}”</button>` : '') +
+      `<button class="btn ghost block" style="margin-top:8px" data-act="newfood">Enter a label by hand</button>`;
+  };
+  $('#findq').addEventListener('input', run); run();
+  setTimeout(() => $('#findq') && $('#findq').focus(), 50);
+}
+function foodRow(f) {
+  return `<div class="item tap" data-act="open" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div>
+    <div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}</div></div>${badge(f)}</div>`;
+}
+let onlineResults = {};
+async function searchOnline(q) {
+  $('#findres').innerHTML = `<div class="empty">Searching…</div>`;
+  try {
+    const d = await offFetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=25&fields=${OFF_FIELDS}`);
+    const prods = ((d && d.products) || []).filter(p => p.product_name && p.code);
+    onlineResults = {};
+    const foods = prods.map(p => { const f = fromOFF(p.code, p); onlineResults[f.id] = f; return f; });
+    $('#findres').innerHTML = foods.length ? foods.map(f => `<div class="item tap" data-act="pickonline" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div>
+      <div class="meta">${esc(f.brand)} · ${esc(f.serving)} · ${fmt(f.cal)} cal</div></div>${badge(f)}</div>`).join('')
+      : `<div class="empty">No matches online.</div>`;
+  } catch (e) { $('#findres').innerHTML = `<div class="empty">Couldn't reach the food database. Check your connection.</div>`; }
+}
+
+/* ---------- Costco ---------- */
+function renderCostco() {
+  const listIds = Object.keys(S.list).filter(id => S.list[id].on && getFood(id));
+  let h = `<div class="chips" style="margin-bottom:10px"><button class="chip ${costcoView === 'catalog' ? 'on' : ''}" data-act="cview" data-v="catalog">All items</button>
+    <button class="chip ${costcoView === 'list' ? 'on' : ''}" data-act="cview" data-v="list">My shopping list (${listIds.length})</button></div>`;
+  if (costcoView === 'list') {
+    const items = listIds.map(getFood);
+    h += `<div class="card">${items.length ? items.sort((a, b) => (S.list[a.id].got - S.list[b.id].got) || a.name.localeCompare(b.name)).map(f => {
+      const L = S.list[f.id];
+      return `<div class="item"><input type="checkbox" data-act="got" data-id="${esc(f.id)}" ${L.got ? 'checked' : ''} aria-label="Got it">
+        <div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name" style="${L.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(f.name)}</div>
+        <div class="meta">${L.need ? `≈ ${r1(L.need)} servings for your plan · ` : ''}${esc(f.serving)}</div></div>${badge(f)}</div>`;
+    }).join('') : `<div class="empty">Your list is empty. Add items from “All items”, or make a meal plan and add it here.</div>`}</div>
+    ${items.length ? `<div class="row"><button class="btn ghost grow sm" data-act="cleargot">Remove checked</button><button class="btn danger grow sm" data-act="clearlist">Clear list</button></div>` : ''}`;
+  } else {
+    const q = costcoQ.toLowerCase();
+    const items = allFoods().filter(f => f.src === 'costco' || (S.list[f.id] && S.list[f.id].on) || f.src === 'custom')
+      .filter(f => !costcoCat || f.cat === costcoCat)
+      .filter(f => !q || (f.name + ' ' + (f.brand || '')).toLowerCase().includes(q))
+      .filter(f => costcoFilter === 'all' || verdict(f).ok === (costcoFilter === 'ok'));
+    const okCount = allFoods().filter(f => f.src === 'costco' && verdict(f).ok).length;
+    h += `<div class="small muted" style="margin-bottom:8px">Common Costco items (Lodi, CA warehouse). Stock and labels change, so scan the package in the store to confirm. ${okCount} of ${CATALOG.length} items are approved for your goals.</div>
+      <input type="search" id="cq" placeholder="Search Costco items" value="${esc(costcoQ)}" autocomplete="off">
+      <div class="chips" style="margin:8px 0">
+        ${[['all', 'All'], ['ok', '✓ Approved'], ['bad', '✕ Not approved']].map(([k, l]) => `<button class="chip ${costcoFilter === k ? 'on' : ''}" data-act="cfilter" data-v="${k}">${l}</button>`).join('')}
+        <select id="ccat" style="width:auto;border-radius:999px;padding:5px 10px;font-size:14px"><option value="">All types</option>${Object.entries(CATS).map(([k, c]) => `<option value="${k}" ${costcoCat === k ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
+      <div class="card">${items.length ? items.map(f => `<div class="item"><input type="checkbox" data-act="listtoggle" data-id="${esc(f.id)}" ${S.list[f.id] && S.list[f.id].on ? 'checked' : ''} aria-label="On my list">
+        <div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
+        <div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal · P${fmt(f.p)} C${fmt(f.c)} F${fmt(f.f)}</div></div>${badge(f)}</div>`).join('') : `<div class="empty">No items match.</div>`}</div>
+      <button class="btn alt block" data-act="newfood">+ Add your own Costco item</button>
+      <div class="small muted" style="margin-top:8px">Tick the box to put an item on your shopping list. Meal plans can use only ticked items (switch that on in Plan).</div>`;
+  }
+  $('#view').innerHTML = h;
+  const cq = $('#cq'); if (cq) cq.addEventListener('input', () => { costcoQ = cq.value; const pos = cq.selectionStart; renderCostco(); const n = $('#cq'); n.focus(); n.setSelectionRange(pos, pos); });
+  const cc = $('#ccat'); if (cc) cc.addEventListener('change', () => { costcoCat = cc.value; renderCostco(); });
+}
+
+/* ---------- Meal plan ---------- */
+function planPool() {
+  return allFoods().filter(f => f.cat && f.cat !== 'other' && f.cal != null && verdict(f).ok && (!S.planOpts.onlyList || (S.list[f.id] && S.list[f.id].on)));
+}
+function weightedPick(arr, used) {
+  if (!arr.length) return null;
+  const w = arr.map(f => 1 / (1 + 2 * (used[f.id] || 0)) * (0.6 + Math.random()));
+  let best = 0; for (let i = 1; i < w.length; i++) if (w[i] > w[best]) best = i;
+  return arr[best];
+}
+function makeDay(pool, used) {
+  const by = (cats, meal) => pool.filter(f => cats.includes(f.cat) && mealsFor(f).includes(meal));
+  const slots = [
+    ['Breakfast', [['bprotein', 'protein'], ['carb', 'fruit']]],
+    ['Lunch', [['protein'], ['carb'], ['veg'], ['fat']]],
+    ['Dinner', [['protein'], ['carb'], ['veg'], ['fat']]],
+  ];
+  for (let i = 0; i < S.planOpts.snacks; i++) slots.push(['Snacks', [['snack', 'bprotein', 'fruit', 'fat']]]);
+  const meals = [];
+  for (const [meal, parts] of slots) {
+    const code = meal[0].toLowerCase();
+    const items = [];
+    for (const cats of parts) {
+      const choice = weightedPick(by(cats, code).filter(f => !items.some(x => x.id === f.id)), used);
+      if (!choice) continue;
+      used[choice.id] = (used[choice.id] || 0) + 1;
+      const c = CATS[choice.cat] || CATS.other;
+      items.push({ id: choice.id, sv: 1, step: choice.whole ? 1 : 0.5, min: c.min === 0 ? 0 : (choice.whole ? 1 : 0.5), max: c.max });
+    }
+    let m = meals.find(x => x.meal === meal);
+    if (m) m.items.push(...items); else if (items.length) meals.push({ meal, items });
+  }
+  optimize(meals.flatMap(m => m.items));
+  for (const m of meals) m.items = m.items.filter(x => x.sv > 0);
+  return { meals };
+}
+function optimize(items) {
+  const T = S.targets, W = { cal: 3, p: 3, c: 1, f: 1 };
+  const err = () => {
+    const t = { cal: 0, p: 0, c: 0, f: 0 };
+    for (const x of items) { const f = getFood(x.id); for (const k in t) t[k] += (f[k] || 0) * x.sv; }
+    let e = 0; for (const k in t) e += W[k] * ((t[k] - T[k]) / (T[k] || 1)) ** 2; return e;
+  };
+  let e = err();
+  for (let it = 0; it < 400; it++) {
+    let best = null, be = e;
+    for (const x of items) for (const d of [x.step, -x.step]) {
+      const nv = x.sv + d; if (nv < x.min - 1e-9 || nv > x.max + 1e-9) continue;
+      x.sv = nv; const ne = err(); x.sv -= d;
+      if (ne < be - 1e-9) { be = ne; best = [x, d]; }
+    }
+    if (!best) break; best[0].sv = r1(best[0].sv + best[1]); e = be;
+  }
+}
+function generatePlan() {
+  const pool = planPool();
+  const used = {};
+  const days = [];
+  for (let i = 0; i < S.planOpts.days; i++) days.push(makeDay(pool, used));
+  S.plan = { made: Date.now(), days }; planDay = 0; save();
+}
+function planTotals(day) {
+  const list = day.meals.flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
+  return totals(list);
+}
+function renderPlan() {
+  const pool = planPool(), T = S.targets, o = S.planOpts;
+  const listCount = Object.values(S.list).filter(l => l.on).length;
+  let h = `<div class="card"><div class="small muted" style="margin-bottom:8px">Builds meals only from <b>approved</b> Costco items, sized to hit ${T.cal} cal · P${T.p} C${T.c} F${T.f}.</div>
+    <div class="chips" style="margin-bottom:8px">${[[1, '1 day'], [7, '7 days']].map(([d, l]) => `<button class="chip ${o.days === d ? 'on' : ''}" data-act="pdays" data-v="${d}">${l}</button>`).join('')}
+      ${[0, 1, 2].map(n => `<button class="chip ${o.snacks === n ? 'on' : ''}" data-act="psnacks" data-v="${n}">${n} snack${n === 1 ? '' : 's'}</button>`).join('')}</div>
+    <label class="switch"><input type="checkbox" id="onlylist" ${o.onlyList ? 'checked' : ''}><span class="grow">Only use items on my shopping list <span class="muted small">(${listCount})</span></span></label>
+    <div class="small muted" style="margin:4px 0 10px">${pool.length} approved items available.</div>
+    <button class="btn block" data-act="genplan" ${pool.length < 3 ? 'disabled' : ''}>${S.plan ? 'Make a new plan' : 'Make my meal plan'}</button>
+    ${pool.length < 3 ? `<div class="small" style="color:var(--warn);margin-top:6px">Not enough approved items. Add more items to your list or loosen your rules in Goals.</div>` : ''}</div>`;
+  if (S.plan && S.plan.days.length) {
+    const days = S.plan.days; if (planDay >= days.length) planDay = 0;
+    if (days.length > 1) h += `<div class="chips" style="margin-bottom:10px">${days.map((d, i) => `<button class="chip ${i === planDay ? 'on' : ''}" data-act="pday" data-v="${i}">Day ${i + 1}</button>`).join('')}</div>`;
+    const day = days[planDay], t = planTotals(day);
+    h += `<div class="card"><h2>Day ${planDay + 1} totals</h2>
+      ${macroBar('Calories', t.cal, T.cal, 'var(--cal)', '')}${macroBar('Protein', t.p, T.p, 'var(--p)', ' g')}
+      ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}</div>`;
+    day.meals.forEach((m, mi) => {
+      const mt = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
+      h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal}</h3><span class="small muted">${Math.round(mt.cal)} cal · P${Math.round(mt.p)} C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
+        ${m.items.map(x => { const f = getFood(x.id); return `<div class="item tap" data-act="open" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div>
+          <div class="meta">${r1(x.sv)} × ${esc(f.serving)} · ${Math.round(f.cal * x.sv)} cal</div></div></div>`; }).join('')}
+        <button class="btn alt sm" style="margin-top:6px" data-act="logmeal" data-m="${mi}">Log this meal today</button></div>`;
+    });
+    h += `<button class="btn block" data-act="plan2list">Add ${days.length > 1 ? 'all ' + days.length + ' days' : 'this plan'} to my Costco shopping list</button>`;
+  }
+  $('#view').innerHTML = h;
+  $('#onlylist').addEventListener('change', e => { S.planOpts.onlyList = e.target.checked; save(); renderPlan(); });
+}
+
+/* ---------- Settings ---------- */
+function renderSettings() {
+  const T = S.targets, r = S.rules, c = S.calc;
+  const ruleRow = (k, label, unit, word) => `<label class="switch"><input type="checkbox" data-rule="${k}" ${r[k].on ? 'checked' : ''}>
+    <span class="grow">${label} <span class="muted small">${word}</span></span><input type="number" inputmode="decimal" step="any" data-rulev="${k}" value="${r[k].v}"><span class="small muted" style="width:20px">${unit}</span></label>`;
+  $('#view').innerHTML = `<div class="card"><h2>Daily goals</h2>
+      <div class="grid2"><label class="field">Calories<input type="number" inputmode="numeric" data-t="cal" value="${T.cal}"></label>
+      <label class="field">Protein g<input type="number" inputmode="numeric" data-t="p" value="${T.p}"></label>
+      <label class="field">Carbs g<input type="number" inputmode="numeric" data-t="c" value="${T.c}"></label>
+      <label class="field">Fat g<input type="number" inputmode="numeric" data-t="f" value="${T.f}"></label></div>
+      <details style="margin-top:12px"><summary>Don't know your numbers? Calculate them</summary>
+        <div class="grid2" style="margin-top:10px">
+          <label class="field">Sex<select data-c="sex"><option value="m" ${c.sex === 'm' ? 'selected' : ''}>Male</option><option value="f" ${c.sex === 'f' ? 'selected' : ''}>Female</option></select></label>
+          <label class="field">Age<input type="number" inputmode="numeric" data-c="age" value="${c.age}"></label>
+          <label class="field">Weight (lb)<input type="number" inputmode="decimal" data-c="lb" value="${c.lb}"></label>
+          <div class="row"><label class="field grow">Height ft<input type="number" inputmode="numeric" data-c="ft" value="${c.ft}"></label><label class="field grow">in<input type="number" inputmode="numeric" data-c="inch" value="${c.inch}"></label></div>
+          <label class="field">Activity<select data-c="act">${[[1.2, 'Mostly sitting'], [1.375, 'Light (1–3 workouts/wk)'], [1.55, 'Moderate (3–5/wk)'], [1.725, 'Very active (6–7/wk)']].map(([v, l]) => `<option value="${v}" ${+c.act === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          <label class="field">Goal<select data-c="goal">${[['lose', 'Lose fat'], ['keep', 'Maintain'], ['gain', 'Build muscle']].map(([v, l]) => `<option value="${v}" ${c.goal === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+        <button class="btn alt block" style="margin-top:10px" data-act="calc">Use calculated goals</button>
+        <div class="small muted" style="margin-top:6px">Mifflin–St Jeor estimate. Protein 1 g per lb (0.8 g when maintaining), fat 25% of calories, carbs the rest. A starting point, not medical advice.</div></details></div>
+    <div class="card"><h2>Approved rules (per serving)</h2>
+      <div class="small muted" style="margin-bottom:6px">A food is <b style="color:var(--ok)">Approved</b> only if one serving passes every rule that's switched on.</div>
+      ${ruleRow('cal', 'Calories', '', 'at most')}${ruleRow('c', r.net ? 'Net carbs' : 'Carbs', 'g', 'at most')}${ruleRow('f', 'Fat', 'g', 'at most')}${ruleRow('s', 'Sugar', 'g', 'at most')}${ruleRow('p', 'Protein', 'g', 'at least')}
+      <label class="switch"><input type="checkbox" id="netcarbs" ${r.net ? 'checked' : ''}><span class="grow">Count net carbs (carbs minus fiber)</span></label>
+      <div class="row" style="margin-top:8px"><span class="small grow">Set limits from my daily goals ÷</span>
+        <input type="number" inputmode="numeric" id="spd" value="${S.servingsPerDay}" style="width:64px"><span class="small muted">servings</span>
+        <button class="btn alt sm" data-act="autorules">Apply</button></div></div>
+    <div class="card"><h2>Your data</h2><div class="small muted" style="margin-bottom:10px">Everything is saved only on this phone. Nothing is uploaded or shared. Save a backup now and then in case you change phones.</div>
+      <div class="row wrap"><button class="btn alt grow sm" data-act="export">Save backup</button>
+      <label class="btn alt grow sm" style="text-align:center">Restore backup<input type="file" id="importfile" accept="application/json,.json" hidden></label>
+      <button class="btn danger grow sm" data-act="reset">Erase all</button></div></div>
+    <div class="small muted" style="text-align:center;margin:8px 0 20px">Barcode data: Open Food Facts (openfoodfacts.org). Costco values are approximate.</div>`;
+  const v = $('#view');
+  v.querySelectorAll('[data-t]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (n > 0) { S.targets[i.dataset.t] = Math.round(n); S.targetsSet = true; save(); } }));
+  v.querySelectorAll('[data-c]').forEach(i => i.addEventListener('change', () => { S.calc[i.dataset.c] = i.tagName === 'SELECT' && i.dataset.c !== 'act' ? i.value : +i.value; save(); }));
+  v.querySelectorAll('[data-rule]').forEach(i => i.addEventListener('change', () => { S.rules[i.dataset.rule].on = i.checked; save(); }));
+  v.querySelectorAll('[data-rulev]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (n >= 0) { S.rules[i.dataset.rulev].v = n; save(); } }));
+  $('#netcarbs').addEventListener('change', e => { S.rules.net = e.target.checked; save(); renderSettings(); });
+  $('#importfile').addEventListener('change', importBackup);
+}
+function calcGoals() {
+  const c = S.calc, kg = c.lb * 0.4536, cm = (c.ft * 12 + +c.inch) * 2.54;
+  const bmr = 10 * kg + 6.25 * cm - 5 * c.age + (c.sex === 'm' ? 5 : -161);
+  let cal = bmr * c.act; cal += c.goal === 'lose' ? -500 : c.goal === 'gain' ? 300 : 0;
+  cal = Math.max(1200, Math.round(cal / 10) * 10);
+  const p = Math.round(c.lb * (c.goal === 'keep' ? 0.8 : 1)), f = Math.round(cal * 0.25 / 9);
+  const carbs = Math.max(50, Math.round((cal - p * 4 - f * 9) / 4));
+  S.targets = { cal, p, c: carbs, f }; S.targetsSet = true; autoRules(); save(); renderSettings();
+  toast(`Goals set: ${cal} cal · P${p} C${carbs} F${f}`);
+}
+function autoRules() {
+  const n = Math.max(1, S.servingsPerDay), T = S.targets;
+  S.rules.cal.v = Math.round(T.cal / n); S.rules.c.v = Math.round(T.c / n); S.rules.f.v = Math.round(T.f / n);
+}
+function exportBackup() {
+  const blob = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' });
+  const name = `macro-check-backup-${todayKey()}.json`;
+  const file = new File([blob], name, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Macro Check backup' }).catch(() => {}); return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function importBackup(e) {
+  const file = e.target.files[0]; if (!file) return;
+  file.text().then(t => {
+    const d = JSON.parse(t); if (!d || !d.targets || !d.rules) throw new Error('bad');
+    localStorage.setItem(KEY, JSON.stringify(d)); S = load(); toast('Backup restored'); render();
+  }).catch(() => toast('That file is not a Macro Check backup'));
+}
+
+/* ================= actions ================= */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const a = el.dataset.act, id = el.dataset.id;
+  if (el.tagName === 'INPUT' && el.type === 'checkbox') return; // handled on change
+  switch (a) {
+    case 'tab': go(el.dataset.t); break;
+    case 'day': { const d = new Date(viewDay + 'T12:00:00'); d.setDate(d.getDate() + +el.dataset.d); if (dayKey(d) <= todayKey()) { viewDay = dayKey(d); renderToday(); } break; }
+    case 'unlog': S.log[viewDay] = entries(viewDay).filter(x => x.id !== id); save(); renderToday(); break;
+    case 'find': findSheet(); break;
+    case 'startscan': startScan(); break;
+    case 'stopscan': stopScan(); S.camOk = false; save(); break;
+    case 'lookup': lookupBarcode(el.dataset.code || ($('#manual-code') && $('#manual-code').value)); break;
+    case 'newfood': foodForm(null, el.dataset.code); break;
+    case 'close': closeSheet(); break;
+    case 'open': openFood(id); break;
+    case 'online': searchOnline(el.dataset.q); break;
+    case 'pickonline': { const f = onlineResults[id]; if (f) { S.foods[f.id] = S.foods[f.id] || f; save(); openFood(f.id); } break; }
+    case 'sv': { const i = $('#sv'); i.value = Math.max(0.25, r1((+i.value || 1) + +el.dataset.d)); break; }
+    case 'log': { const sv = +$('#sv').value || 1; logFood(sheetFood, sv, $('#meal').value); toast(`Logged ${r1(sv)} × ${sheetFood.name}`); closeSheet(); if (tab === 'scan') go('today'); break; }
+    case 'togglelist': {
+      const f = sheetFood, L = S.list[f.id];
+      if (L && L.on) delete S.list[f.id];
+      else { S.list[f.id] = { on: true, got: false }; if (f.cat === 'other' && f.src !== 'costco') { save(); toast('Added — pick a type so meal plans can use it'); return foodForm(f); } }
+      save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
+    }
+    case 'edit': foodForm(sheetFood); break;
+    case 'resetfood': { const fid = sheetFood.id; delete S.foods[fid]; save(); openFood(fid); break; }
+    case 'delfood': if (confirm('Delete this saved food?')) { delete S.foods[sheetFood.id]; delete S.list[sheetFood.id]; save(); closeSheet(); } break;
+    case 'cview': costcoView = el.dataset.v; renderCostco(); break;
+    case 'cfilter': costcoFilter = el.dataset.v; renderCostco(); break;
+    case 'cleargot': for (const k in S.list) if (S.list[k].got) delete S.list[k]; save(); renderCostco(); break;
+    case 'clearlist': if (confirm('Clear your whole shopping list?')) { S.list = {}; save(); renderCostco(); } break;
+    case 'pdays': S.planOpts.days = +el.dataset.v; save(); renderPlan(); break;
+    case 'psnacks': S.planOpts.snacks = +el.dataset.v; save(); renderPlan(); break;
+    case 'genplan': generatePlan(); renderPlan(); break;
+    case 'pday': planDay = +el.dataset.v; renderPlan(); break;
+    case 'logmeal': {
+      const m = S.plan.days[planDay].meals[+el.dataset.m];
+      for (const x of m.items) logFood(getFood(x.id), x.sv, m.meal, todayKey());
+      toast(`${m.meal} logged for today`); break;
+    }
+    case 'plan2list': {
+      const need = {};
+      for (const d of S.plan.days) for (const m of d.meals) for (const x of m.items) need[x.id] = (need[x.id] || 0) + x.sv;
+      for (const [fid, n] of Object.entries(need)) S.list[fid] = { on: true, got: false, need: n };
+      save(); toast(`${Object.keys(need).length} items on your shopping list`); costcoView = 'list'; go('costco'); break;
+    }
+    case 'calc': calcGoals(); break;
+    case 'autorules': { S.servingsPerDay = Math.max(1, Math.round(+$('#spd').value || 5)); autoRules(); save(); renderSettings(); toast('Per-serving limits updated'); break; }
+    case 'export': exportBackup(); break;
+    case 'reset': if (confirm('Erase all goals, logs, saved foods and lists from this phone?')) { localStorage.removeItem(KEY); S = load(); render(); } break;
+  }
+});
+document.addEventListener('change', e => {
+  const el = e.target; if (!el.matches('input[type=checkbox][data-act]')) return;
+  const id = el.dataset.id;
+  if (el.dataset.act === 'listtoggle') { if (el.checked) S.list[id] = { on: true, got: false }; else delete S.list[id]; save(); }
+  if (el.dataset.act === 'got' && S.list[id]) { S.list[id].got = el.checked; save(); renderCostco(); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'manual-code') lookupBarcode(e.target.value); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && scan.active) stopScan(); });
+
+render();
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
