@@ -1,0 +1,6 @@
+{
+  "name": "little-sprouts-tools",
+  "private": true,
+  "description": "Build tools for the Little Sprouts website (run: npm install --prefix tools, then python3 tools/build_site.py)",
+  "devDependencies": { "esbuild": "^0.24.0" }
+}

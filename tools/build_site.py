@@ -145,7 +145,7 @@ s = s[:start] + r"""async function savePack(k, btn) {
     return;
   }
   try {
-    const safe = (k.name || 'Lesson').replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'Lesson';
+    const safe = safeFileName(k.name);
     await downloads.save({ filename: `${safe} lessons ${todayKey()}.pdf`, data: entry.blob });
     btn.textContent = label;
   } catch (e) {
@@ -227,6 +227,20 @@ s = s[:start] + r"""async function connect() {
 }
 """ + s[end:]
 rep("const S = { ", "const S = { needFamily: false, ")
+
+# ---------- older iPads: convert the app's code to an older JavaScript style (esbuild, see tools/package.json) ----------
+import subprocess, os
+esbuild = os.path.join('tools', 'node_modules', '.bin', 'esbuild')
+if not os.path.exists(esbuild):
+    sys.exit('esbuild is missing: run  npm install --prefix tools  first')
+start = s.rindex('<script>\n(() => {') + len('<script>\n'); end = s.index('</script>', start)
+app_js = s[start:end]
+out = subprocess.run([esbuild, '--loader=js', '--target=es2017', '--log-level=warning'], input=app_js, capture_output=True, text=True)
+if out.returncode != 0:
+    sys.exit('esbuild failed:\n' + out.stderr)
+if '</script' in out.stdout.lower():
+    sys.exit('converted code contains </script>')
+s = s[:start] + out.stdout + s[end:]
 
 for bad in ('window.claude', 'claude.use'):
     if bad in s: sys.exit('leftover platform reference: ' + bad)
