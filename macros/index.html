@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '4.5 (sauces + potato bowls)';
+const APP_VERSION = '4.6 (bulk prep in grams)';
 const PLANNER_VERSION = 6; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1790,9 +1790,10 @@ function cookStep(f, amt) {
   if (/egg whites/.test(n)) return `Scramble ${what} in a nonstick pan, 2–3 min.`;
   if (/\beggs?\b/.test(n)) return `Scramble or fry ${what} over medium heat, 3–4 min.`;
   if (/pouch|seeds of change|tasty bite|bibigo|cooked/.test(n)) return `Heat ${what} in the microwave per the package, about 90 seconds.`;
-  if (/brown rice/.test(n)) return `Simmer ${what} with 2½× its volume of water, covered, about 40 min.`;
-  if (/rice/.test(n)) return `Rinse ${what}, then simmer with 1½× its volume of water, covered, 15 min. Rest 5 min.`;
+  if (f.cat === 'carb' && /brown rice/.test(n)) return `Simmer ${what} with 2½× its volume of water, covered, about 40 min.`;
+  if (f.cat === 'carb' && /\brice\b/.test(n)) return `Rinse ${what}, then simmer with 1½× its volume of water, covered, 15 min. Rest 5 min.`;
   if (/quinoa/.test(n)) return `Rinse ${what}, then simmer with 2× its volume of water, covered, 15 min.`;
+  if (/wedges|fries/.test(n)) return `Spread ${what} on sheet pans in one layer and bake at 425°F for 20–25 min, flipping halfway, until crisp.`;
   if (/sweet potato|potato|butternut/.test(n)) return `Cube ${what}, toss with a little oil spray, salt and pepper, and roast at 425°F for 25–30 min.`;
   if (/corn on the cob/.test(n)) return `Boil ${what} for 5 min (or microwave 3–4 min in the husk).`;
   if (/steel cut/.test(n)) return `Simmer ${what} with 3× its volume of water, 5–7 min.`;
@@ -1851,6 +1852,21 @@ function showRecipe(mi) {
 }
 // Refresh the plan behind an open sheet without closing it.
 function renderPlanKeepSheet() { const open = !$('#sheet').hidden, html = $('#sheet-card').innerHTML; renderPlan(); if (open) { $('#sheet').hidden = false; $('#sheet-card').innerHTML = html; } }
+// Grams of a food for sv servings (sauces by the tablespoon, hot sauce by the teaspoon).
+function gramsFor(f, sv) {
+  const g = servingGrams(f); if (g) return g * sv;
+  const m = /^(\d+\/\d+|\d+(?:\.\d+)?)\s*tsp\b/.exec(f.serving || ''); if (m) return toNum(m[1]) * 5 * sv;
+  return null;
+}
+// About how much a food weighs once cooked, per gram raw/dry.
+function cookedFactor(f, role) {
+  const n = nm(f), sv = f.serving || '';
+  if (f.cat === 'protein' && /raw/.test(sv)) return COOKED_YIELD(f);
+  if (/\bdry\b/.test(sv)) return /quinoa/.test(n) ? 2.7 : /oats/.test(n) ? 2 : /pasta/.test(n) ? 2.2 : 3;
+  if (role === 'starch' && /potato/.test(n) && !/wedges|fries|hash/.test(n)) return 0.8; // roasted potatoes lose about a fifth
+  return 1;
+}
+const gTxt = x => x >= 1000 ? `${(x / 1000).toFixed(2).replace(/0$/, '')} kg` : `${Math.round(x)} g`;
 function prepGuide() {
   const n = S.plan.prep, day = S.plan.days[0];
   const tot = {};
@@ -1875,16 +1891,34 @@ function prepGuide() {
     if (breakfast.items.some(x => /yogurt|cottage/.test(nm(getFood(x.id))))) steps.push(`Breakfast: portion the yogurt and berries into ${n} jars; add nuts or seeds the morning you eat it so they stay crunchy.`);
   }
   const boxes = day.meals.filter(m => m.meal === 'Lunch' || m.meal === 'Dinner');
-  steps.push(`Let everything cool for 15–20 min, then set out ${boxes.length * n} containers (${n} for lunch, ${n} for dinner). Into each, put one day's amount: ` +
-    boxes.map(m => `${m.meal.toLowerCase()} — ${m.items.map(x => { const f = getFood(x.id), a = amountText(f, x.sv), raw = /^([\d.]+) (oz|lb) raw/.exec(a);
-      const cooked = raw && !/cooked/.test(a) ? ` (about ${r1((raw[2] === 'lb' ? +raw[1] * 16 : +raw[1]) * 0.75)} oz cooked)` : '';
-      return `${a}${cooked} ${shortName(f).toLowerCase()}`; }).join(', ')}`).join('; ') + '.');
+  steps.push(`Let everything cool for 15–20 min, then set out ${boxes.length * n} containers (${n} for lunch, ${n} for dinner). Weigh each cooked food into the boxes using “What goes in each container” above — a kitchen scale set to grams makes this quick.`);
   steps.push('Keep salsa, sauces, dressing, avocado and salad greens in separate small containers and add them when you eat, so nothing gets soggy.');
-  steps.push(`Refrigerate within 2 hours of cooking. Cooked meals are best within 3–4 days, so ${n >= 5 ? 'freeze the day 4 and day 5 containers' : 'freeze the day 4 containers'} and move each to the fridge the night before. Reheat until steaming hot (165°F).`);
+  steps.push(`Refrigerate within 2 hours of cooking. Cooked meals are best within 3–4 days, so freeze ${n >= 7 ? 'the day 5, 6 and 7 containers' : n >= 5 ? 'the day 4 and day 5 containers' : 'the day 4 containers'} and move each to the fridge the night before. Reheat until steaming hot (165°F).`);
   const shop = all.sort((a, b) => (a.role === 'poultry' || a.role === 'red' ? -1 : 0) - (b.role === 'poultry' || b.role === 'red' ? -1 : 0));
+  // 1) Cook this much: the whole batch for every lunch and dinner box.
+  const SIDE = /^(salsa|bowlSauce|hotSauce|stirSauce|marinara|vinegar|oil|avocado|greens|rawVeg)$/;
+  const batch = {};
+  for (const m of boxes) for (const x of m.items) { const f = getFood(x.id), b = batch[x.id] = batch[x.id] || { f, role: x.role, sv: 0, boxes: 0 }; b.sv += x.sv * n; b.boxes += n; }
+  const cookRows = Object.values(batch).filter(b => !SIDE.test(b.role)).sort((a, b) => (COOK_ORDER[a.role] ?? 5) - (COOK_ORDER[b.role] ?? 5)).map(b => {
+    const g = gramsFor(b.f, b.sv), k = cookedFactor(b.f, b.role), sv = b.f.serving || '';
+    const state = b.f.cat === 'protein' && /raw/.test(sv) ? 'raw' : /\bdry\b/.test(sv) ? 'dry' : b.role === 'starch' && k !== 1 ? 'raw' : '';
+    return `<tr><td>${esc(shortName(b.f))}</td><td><b>${g ? gTxt(g) : esc(amountText(b.f, b.sv))}</b>${state ? ` ${state}` : ''}</td><td>${g && k !== 1 ? `≈ ${gTxt(g * k)} cooked` : g ? '' : ''}</td></tr>`; }).join('');
+  // 2) Each container: cooked grams of every food, sauces on the side.
+  const boxRows = boxes.map(m => `<div class="card" style="margin:8px 0;padding:10px 12px;background:var(--bg)"><b>${m.meal} × ${n}</b> <span class="small muted">· ${esc(m.title)}</span>
+    <table class="small" style="width:100%;margin-top:4px;border-collapse:collapse">${m.items.map(x => { const f = getFood(x.id), g = gramsFor(f, x.sv), k = cookedFactor(f, x.role), side = SIDE.test(x.role);
+      return `<tr><td style="padding:3px 0">${esc(shortName(f))}${side ? ' <span class="muted">(on the side)</span>' : ''}</td><td style="text-align:right;white-space:nowrap"><b>${g ? gTxt(g * k) : esc(amountText(f, x.sv))}</b>${g && k !== 1 ? ' cooked' : ''}${g && side ? ` <span class="muted">(${esc(amountText({ ...f, cat: 'other' }, x.sv))})</span>` : ''}</td></tr>`; }).join('')}</table></div>`).join('');
+  const bf = day.meals.find(m => m.meal === 'Breakfast');
+  const bfRows = bf ? `<div class="card" style="margin:8px 0;padding:10px 12px;background:var(--bg)"><b>Breakfast × ${n}</b> <span class="small muted">· ${esc(bf.title)} — ${bf.items.some(x => /\beggs?\b/.test(nm(getFood(x.id))) && !/whites|hard-boiled/.test(nm(getFood(x.id)))) ? 'cook fresh each morning, or hard-boil the eggs on prep day (see steps)' : 'make it fresh each morning'}</span>
+    <table class="small" style="width:100%;margin-top:4px;border-collapse:collapse">${bf.items.map(x => { const f = getFood(x.id), g = gramsFor(f, x.sv);
+      return `<tr><td style="padding:3px 0">${esc(shortName(f))}</td><td style="text-align:right;white-space:nowrap"><b>${g ? gTxt(g) : esc(amountText(f, x.sv))}</b>${g && isUnit(f) ? ` <span class="muted">(${esc(amountText({ ...f, cat: 'other' }, x.sv))})</span>` : ''}</td></tr>`; }).join('')}</table></div>` : '';
   sheet(`<div class="sheet-head"><div class="grow"><h2>🍱 Prep day guide</h2><div class="small muted">${n} days of ${boxes.map(m => m.title).join(' + ')} · about 1½–2 hours</div></div><button class="icon-btn" data-act="close">✕</button></div>
-    <h3 style="margin:10px 0 4px;font-size:15px">Everything you'll need for ${n} days</h3>
-    <ul class="reasons" style="font-size:14px">${shop.map(t => `<li>${esc(t.amt)} — ${esc(shortName(t.f))}</li>`).join('')}</ul>
+    <h3 style="margin:10px 0 4px;font-size:15px">1. Cook this much (all ${boxes.length * n} lunch & dinner boxes)</h3>
+    <table class="small" style="width:100%;border-collapse:collapse;font-size:14px">${cookRows}</table>
+    <div class="small muted" style="margin-top:4px">Cooked weights are estimates. For exact portions, weigh each cooked batch and divide by ${n} — that's what goes in each box.</div>
+    <h3 style="margin:14px 0 4px;font-size:15px">2. What goes in each container</h3>
+    ${boxRows}${bfRows}
+    <h3 style="margin:14px 0 4px;font-size:15px">Everything you'll need for ${n} days</h3>
+    <ul class="reasons" style="font-size:14px">${shop.map(t => { const g = gramsFor(t.f, t.sv); return `<li>${g && !isUnit(t.f) ? gTxt(g) : esc(t.amt)} — ${esc(shortName(t.f))}</li>`; }).join('')}</ul>
     <h3 style="margin:14px 0 4px;font-size:15px">Steps</h3><ol class="reasons" style="font-size:15px">${steps.map(x => `<li style="margin-bottom:8px">${esc(x)}</li>`).join('')}</ol>
     <button class="btn block" style="margin-top:12px" data-act="plan2list">Add all of it to my shopping list</button>`);
 }
@@ -2115,7 +2149,7 @@ function renderPlan() {
     ${o.style === 'bowls' ? `<div class="small muted" style="margin-bottom:8px">Eggs for breakfast; lunch and dinner are rice + chicken or beef + vegetables, in grams. About ${snackReserve().cal} cal and ${snackReserve().p} g protein are left open for snacks — scan them to see if they fit.</div>` : ''}
     <div class="chips" style="margin-bottom:8px"><button class="chip ${o.mode !== 'prep' ? 'on' : ''}" data-act="pmode" data-v="daily">🍽 Daily meals</button><button class="chip ${o.mode === 'prep' ? 'on' : ''}" data-act="pmode" data-v="prep">🍱 Meal prep</button></div>
     ${o.mode === 'prep' ? `<div class="small muted" style="margin-bottom:6px">Cook once: the same breakfast, lunch and dinner for several days, with a prep-day guide. Chicken for lunch, beef for dinner when available.</div>` : ''}
-    <div class="chips" style="margin-bottom:8px">${(o.mode === 'prep' ? [[4, '4 days'], [5, '5 days']] : [[1, '1 day'], [7, '7 days']]).map(([d, l]) => `<button class="chip ${(o.mode === 'prep' ? o.prepDays : o.days) === d ? 'on' : ''}" data-act="${o.mode === 'prep' ? 'pprepdays' : 'pdays'}" data-v="${d}">${l}</button>`).join('')}
+    <div class="chips" style="margin-bottom:8px">${(o.mode === 'prep' ? [[4, '4 days'], [5, '5 days'], [7, '7 days']] : [[1, '1 day'], [7, '7 days']]).map(([d, l]) => `<button class="chip ${(o.mode === 'prep' ? o.prepDays : o.days) === d ? 'on' : ''}" data-act="${o.mode === 'prep' ? 'pprepdays' : 'pdays'}" data-v="${d}">${l}</button>`).join('')}
       ${o.style === 'bowls' ? '' : [0, 1, 2].map(n => `<button class="chip ${o.snacks === n ? 'on' : ''}" data-act="psnacks" data-v="${n}">${n} snack${n === 1 ? '' : 's'}</button>`).join('')}</div>
     <label class="switch"><input type="checkbox" id="onlylist" ${o.onlyList ? 'checked' : ''}><span class="grow">Only use items on my shopping list <span class="muted small">(${listCount})</span></span></label>
     <div class="small muted" style="margin:4px 0 10px">${pool.length} approved items available.</div>
