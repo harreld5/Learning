@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '4.3 (protein: how much you need)';
+const APP_VERSION = '4.4 (simple bowls plan)';
 const PLANNER_VERSION = 5; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -793,7 +793,7 @@ function defaults() {
     servingsPerDay: 5,
     rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, sf: { on: true, v: 4.5 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
     foods: {}, list: {}, log: {}, plan: null, prices: {}, pkg: {}, units: 'mixed',
-    planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5 },
+    planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5, style: 'variety' },
     avoid: ['chickpea', 'garbanzo', 'hummus', 'falafel'], excluded: {},
     calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose', tg: false, pf: true },
   };
@@ -1450,8 +1450,8 @@ function proteinShares(meals) {
   const snacks = meals.filter(m => m.meal === 'Snacks').length;
   return snacks ? { Breakfast: 0.25, Lunch: 0.3, Dinner: 0.3, Snacks: 0.15 / snacks } : { Breakfast: 0.3, Lunch: 0.35, Dinner: 0.35 };
 }
-function optimize(meals, pf) {
-  const T = S.targets, W = { cal: 3, p: 3, c: 1, f: 1 };
+function optimize(meals, pf, reserve) {
+  const R = reserve || { cal: 0, p: 0, c: 0, f: 0 }, T = { cal: S.targets.cal - R.cal, p: S.targets.p - R.p, c: S.targets.c - R.c, f: S.targets.f - R.f }, W = { cal: 3, p: 3, c: 1, f: 1 };
   const items = meals.flatMap(m => m.items), shares = proteinShares(meals);
   const sum = (list, k) => list.reduce((a, x) => a + (getFood(x.id)[k] || 0) * x.sv, 0);
   const err = () => {
@@ -1488,6 +1488,19 @@ function optimize(meals, pf) {
   }
 }
 
+/* ---------- Simple bowls: eggs for breakfast, rice + meat + vegetables for lunch and dinner, snacks left open for scanning ---------- */
+const BOWL_TEMPLATE = { key: 'bowl', name: p => `${p} rice bowl`, slots: [['poultry|red|ground', 1, 2.5, 'P'], ['rice', 1, 2], ['cookVeg', 1, 2], ['cookVeg', 0.5, 1.5, 'opt'], ['stirSauce|salsa', 1, 1, 'opt']] };
+const isBowls = () => S.planOpts.style === 'bowls';
+function templatesFor(meal) {
+  if (!isBowls()) return MEAL_TEMPLATES[meal];
+  if (meal === 'Breakfast') return MEAL_TEMPLATES.Breakfast.filter(t => ['eggs', 'hash', 'btacos'].includes(t.key));
+  if (meal === 'Lunch' || meal === 'Dinner') return [BOWL_TEMPLATE];
+  return [];
+}
+const mealOrder = () => ['Breakfast', 'Lunch', 'Dinner', ...Array(isBowls() ? 0 : S.planOpts.snacks).fill('Snacks')];
+// Calories and macros kept free for the snacks you scan during the day.
+const snackReserve = () => isBowls() ? { cal: Math.round(S.targets.cal * 0.15 / 10) * 10, p: Math.round(S.targets.p * 0.15), c: Math.round(S.targets.c * 0.12), f: Math.round(S.targets.f * 0.15) } : null;
+
 /* ---------- Meal-based planner: real meals with sensible portions ---------- */
 const nm = f => (f.name || '').toLowerCase();
 const ROLES = {
@@ -1501,6 +1514,7 @@ const ROLES = {
   oats: f => f.cat === 'carb' && /\boats?\b|oatmeal/.test(nm(f)) && !/instant|honey bunches|flavored/.test(nm(f)),
   cakes: f => /power cakes/.test(nm(f)),
   grain: f => f.cat === 'carb' && /rice|quinoa/.test(nm(f)) && !/bowl/.test(nm(f)),
+  rice: f => f.cat === 'carb' && /rice/.test(nm(f)) && !/bowl|cake|crisp|cracker|chip|noodle|pudding/.test(nm(f)),
   starch: f => f.cat === 'carb' && /potato|squash|corn on the cob/.test(nm(f)) && !/hashbrown|fries|scalloped|flatbread/.test(nm(f)),
   greens: f => f.cat === 'veg' && /romaine|spinach|spring mix|power greens/.test(nm(f)),
   rawVeg: f => f.cat === 'veg' && /tomato|cucumber|bell pepper|mini sweet pepper|carrot|celery/.test(nm(f)) && !/canned/.test(nm(f)),
@@ -1605,10 +1619,10 @@ function buildMeal(meal, tmpl, pool, used, preferFish, avoidLabels = [], preferL
 }
 function makeDay(pool, used, opts = {}) {
   const meals = [], prev = opts.prev || {};
-  const order = ['Breakfast', 'Lunch', 'Dinner', ...Array(S.planOpts.snacks).fill('Snacks')];
+  const order = mealOrder();
   order.forEach((meal, idx) => {
-    const wantFish = meal === 'Dinner' && opts.fishDinner;
-    const list = MEAL_TEMPLATES[meal].filter(t => wantFish ? t.fish : !t.fish)
+    const wantFish = meal === 'Dinner' && opts.fishDinner && !isBowls();
+    const list = templatesFor(meal).filter(t => wantFish ? t.fish : !t.fish)
       .map(t => [t, Math.random() * (t.w || 1)]).sort((a, b) => b[1] - a[1]).map(x => x[0]) // favorites (w) come up more often
       .sort((a, b) => (prev[meal + idx] === a ? 1 : 0) - (prev[meal + idx] === b ? 1 : 0));
     // Don't repeat today's main protein, or yesterday's protein at the same meal.
@@ -1624,7 +1638,7 @@ function makeDay(pool, used, opts = {}) {
     if (fallback) { meals.push(fallback[0]); prev[meal + idx] = fallback[1]; prev['label' + meal] = fallback[0].label; }
   });
   if (meals.filter(m => m.meal !== 'Snacks').length < 3) return makeDayBasic(pool, used); // too few foods for real meals
-  optimize(meals, S.planOpts.pf);
+  optimize(meals, S.planOpts.pf, snackReserve());
   for (const m of meals) m.items = m.items.filter(x => x.sv > 0);
   return { meals };
 }
@@ -1637,7 +1651,7 @@ function generatePlan() {
   // A fish night about once a week (chicken and beef are the staples).
   const fishDays = n >= 7 ? [3] : (Math.random() < 0.15 ? [0] : []);
   for (let i = 0; i < n; i++) days.push(makeDay(pool, used, { prev, fishDinner: fishDays.includes(i) }));
-  S.plan = { made: Date.now(), start: todayKey(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION }; planDay = 0; planDayPicked = false; save();
+  S.plan = { made: Date.now(), start: todayKey(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION, style: S.planOpts.style, reserve: snackReserve() }; planDay = 0; planDayPicked = false; save();
 }
 
 /* ---------- Meal prep: the same lunch and dinner for 4-5 days ---------- */
@@ -1645,8 +1659,8 @@ const PREP_TEMPLATES = { Breakfast: ['eggs', 'yogurt', 'oats', 'hash'], Lunch: [
 function generatePrepPlan() {
   const pool = planPool(), used = {}, n = S.planOpts.prepDays || 5, meals = [];
   const want = { Lunch: 'Chicken', Dinner: 'Beef' };
-  ['Breakfast', 'Lunch', 'Dinner', ...Array(S.planOpts.snacks).fill('Snacks')].forEach(meal => {
-    const list = MEAL_TEMPLATES[meal].filter(t => PREP_TEMPLATES[meal].includes(t.key)).sort(() => Math.random() - 0.5);
+  mealOrder().forEach(meal => {
+    const list = (isBowls() ? templatesFor(meal) : MEAL_TEMPLATES[meal].filter(t => PREP_TEMPLATES[meal].includes(t.key))).sort(() => Math.random() - 0.5);
     const avoid = meals.filter(m => m.meal === 'Lunch' || m.meal === 'Dinner').map(m => m.label);
     for (const t of list) {
       const m = buildMeal(meal, t, pool, used, false, avoid, want[meal] || '');
@@ -1654,10 +1668,10 @@ function generatePrepPlan() {
     }
   });
   if (meals.filter(m => m.meal !== 'Snacks').length < 3) { S.planOpts.mode = 'daily'; return generatePlan(); }
-  optimize(meals, S.planOpts.pf);
+  optimize(meals, S.planOpts.pf, snackReserve());
   for (const m of meals) m.items = m.items.filter(x => x.sv > 0);
   const days = Array.from({ length: n }, () => ({ meals: JSON.parse(JSON.stringify(meals)) }));
-  S.plan = { made: Date.now(), start: todayKey(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION, prep: n }; planDay = 0; planDayPicked = false; save();
+  S.plan = { made: Date.now(), start: todayKey(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION, prep: n, style: S.planOpts.style, reserve: snackReserve() }; planDay = 0; planDayPicked = false; save();
 }
 
 
@@ -1666,7 +1680,10 @@ function generatePrepPlan() {
 const GRAMS_EACH = [[/hard-boiled|\beggs?\b(?! whites)/, 50, 'egg'], [/carb balance/, 45, 'tortilla'], [/corn tortilla/, 23, 'tortilla'], [/siete/, 28, 'tortilla'],
   [/10" flour/, 70, 'tortilla'], [/8" flour|flour tortilla/, 40, 'tortilla'], [/bimbo/, 28, 'slice'], [/\bbread\b|sourdough/, 45, 'slice'],
   [/banana/, 118], [/apple pear/, 122], [/apples?\b/, 182], [/pears?\b/, 178], [/gold kiwi/, 81], [/kiwi/, 75], [/mandarin/, 76], [/orange/, 140], [/peach/, 150], [/plums?\b/, 66, 'plum']];
-const GRAMS_PER_CUP = [[/strawberr/, 152], [/raspberr/, 123], [/blackberr/, 144], [/blueberr/, 148], [/three-berry|berry blend/, 140], [/grapes/, 151],
+const GRAMS_PER_CUP = [[/quinoa & brown rice|rice \(pouch\)|ready rice/, 120], [/strawberr/, 152], [/raspberr/, 123], [/blackberr/, 144], [/blueberr/, 148], [/three-berry|berry blend/, 140], [/grapes/, 151],
+  [/broccoli/, 91], [/green beans/, 110], [/asparagus/, 134], [/brussels/, 88], [/zucchini/, 124], [/squash/, 113], [/vegetable blend|normandy|stir fry|stir-fry/, 120],
+  [/mushroom/, 70], [/edamame/, 155], [/bell pepper|sweet pepper/, 92], [/cabbage|slaw/, 89], [/cauliflower/, 107], [/spinach|spring mix|greens|arugula/, 30], [/romaine|lettuce/, 47],
+  [/tomato/, 150], [/cucumber/, 119], [/carrot/, 128], [/onion/, 160], [/celery/, 101], [/snap peas|snow peas/, 98], [/corn/, 145], [/peas/, 145],
   [/watermelon/, 152], [/cantaloupe|melon/, 160], [/pineapple/, 165], [/mango/, 140], [/fruit bowl/, 150], [/cottage cheese/, 226], [/marinara|pasta sauce/, 250]];
 const GRAMS_PER_TBSP = [[/peanut butter|almond butter/, 16], [/olive oil/, 13.5], [/mayo/, 14], [/salsa|picante/, 16], [/balsamic|vinegar/, 16], [/teriyaki|yoshida|bachan|sauce/, 18], [/honey|syrup|agave/, 21]];
 const toNum = t => t.includes('/') ? t.split('/').reduce((a, b) => a / b) : +t;
@@ -1687,11 +1704,12 @@ const fmtWeight = (f, x) => usesOz(f) ? (x >= 453.6 ? `${r1(x / 453.6)} lb` : `$
 const COOKED_YIELD = f => /salmon|steelhead|fish|tilapia|halibut|rockfish|shrimp|bass|ahi/.test(nm(f)) ? 0.8 : 0.75;
 // Amount in the chosen unit: grams/ounces for weighable foods (vegetables stay in cups), raw meat with its cooked weight.
 function weightText(f, sv) {
-  if (S.units === 'servings' || f.cat === 'veg' || f.cat === 'other') return null; // vegetables and sauces stay in cups/tbsp
+  if (S.units === 'servings' || f.cat === 'other' || (f.cat === 'veg' && S.units !== 'g')) return null; // sauces stay in tbsp; vegetables in cups unless you picked grams
   const g = servingGrams(f); if (!g) return null;
   const w = x => fmtWeight(f, x);
   const tot = g * sv;
   if (/raw/.test(f.serving || '') && f.cat === 'protein') return `${w(tot)} raw (≈ ${w(tot * COOKED_YIELD(f))} cooked)`;
+  if (/\bdry\b/.test(f.serving || '') && /rice|quinoa|oats|pasta|lentil/.test(nm(f))) return `${w(tot)} dry (≈ ${w(tot * (/quinoa/.test(nm(f)) ? 2.7 : /oats/.test(nm(f)) ? 2 : /pasta/.test(nm(f)) ? 2.2 : 3))} cooked)`;
   return w(tot);
 }
 // Package size from a label like "about 8.52 lb package", "2.5 lbs, 2-count", "5.3 oz, 20-count" or "24-count".
@@ -1736,7 +1754,8 @@ function niceNum(q) {
 // "2.5 × 4 oz raw" → "10 oz raw"; "1.5 × 1/4 cup dry (45 g)" → "⅜ cup dry"; "3 × 2 eggs" → "6 eggs"
 function amountText(f, sv) {
   const wt = weightText(f, sv);
-  if (wt) return isUnit(f) && !/raw/.test(wt) ? `${amountText({ ...f, cat: 'veg' }, sv)} (${wt})` : wt;
+  if (wt && f.cat === 'veg') return `${wt} (${amountText({ ...f, cat: 'other' }, sv)})`; // grams, with the cups to eyeball it
+  if (wt) return isUnit(f) && !/raw/.test(wt) ? `${amountText({ ...f, cat: 'other' }, sv)} (${wt})` : wt;
   const m = /^(\d+\/\d+|\d+(?:\.\d+)?)\s*(.*)$/.exec(f.serving || '');
   if (!m) return `${r1(sv)} × ${f.serving}`;
   const base = m[1].includes('/') ? m[1].split('/').reduce((a, b) => a / b) : +m[1];
@@ -1798,7 +1817,7 @@ const ASSEMBLY = {
   marinara: 'Stir the marinara into the browned meat and simmer 5 min; spoon over the grain or potatoes with the vegetables.',
   psnack: 'Grab and go.', splate: 'Arrange on a plate or pack in a container.',
 };
-const COOK_ORDER = { grain: 0, starch: 0, oats: 1, cakes: 1, poultry: 2, red: 2, fish: 3, oilyFish: 3, ground: 2, tofu: 2, eggs: 3, cookVeg: 4 };
+const COOK_ORDER = { grain: 0, rice: 0, starch: 0, oats: 1, cakes: 1, poultry: 2, red: 2, fish: 3, oilyFish: 3, ground: 2, tofu: 2, eggs: 3, cookVeg: 4 };
 function recipeFor(m, mult = 1) {
   const items = m.items.map(x => { const f = getFood(x.id); return { x, f, amt: amountText(f, x.sv * mult) }; });
   const USE = { vinegar: 'for the dressing — drizzle over the salad', oil: m.key === 'salad' ? 'for the dressing' : 'to roast the vegetables or drizzle on top',
@@ -2086,10 +2105,12 @@ function renderPlan() {
   const listCount = Object.values(S.list).filter(l => l.on).length;
   let h = `<div class="card"><div class="small muted" style="margin-bottom:8px">Builds meals only from <b>approved</b> Costco items, sized to hit ${T.cal} cal · P${T.p} C${T.c} F${T.f}.</div>
     <label class="switch"><input type="checkbox" id="pf" ${o.pf ? 'checked' : ''}><span class="grow"><b>Protein-forward meals</b><br><span class="small muted">Every meal is built around a protein and gets its share of your ${T.p} g; snacks are protein snacks.</span></span></label>
+    <div class="chips" style="margin-bottom:6px"><button class="chip ${o.style !== 'bowls' ? 'on' : ''}" data-act="pstyle" data-v="variety">🍳 Variety</button><button class="chip ${o.style === 'bowls' ? 'on' : ''}" data-act="pstyle" data-v="bowls">🍚 Simple bowls</button></div>
+    ${o.style === 'bowls' ? `<div class="small muted" style="margin-bottom:8px">Eggs for breakfast; lunch and dinner are rice + chicken or beef + vegetables, in grams. About ${snackReserve().cal} cal and ${snackReserve().p} g protein are left open for snacks — scan them to see if they fit.</div>` : ''}
     <div class="chips" style="margin-bottom:8px"><button class="chip ${o.mode !== 'prep' ? 'on' : ''}" data-act="pmode" data-v="daily">🍽 Daily meals</button><button class="chip ${o.mode === 'prep' ? 'on' : ''}" data-act="pmode" data-v="prep">🍱 Meal prep</button></div>
     ${o.mode === 'prep' ? `<div class="small muted" style="margin-bottom:6px">Cook once: the same breakfast, lunch and dinner for several days, with a prep-day guide. Chicken for lunch, beef for dinner when available.</div>` : ''}
     <div class="chips" style="margin-bottom:8px">${(o.mode === 'prep' ? [[4, '4 days'], [5, '5 days']] : [[1, '1 day'], [7, '7 days']]).map(([d, l]) => `<button class="chip ${(o.mode === 'prep' ? o.prepDays : o.days) === d ? 'on' : ''}" data-act="${o.mode === 'prep' ? 'pprepdays' : 'pdays'}" data-v="${d}">${l}</button>`).join('')}
-      ${[0, 1, 2].map(n => `<button class="chip ${o.snacks === n ? 'on' : ''}" data-act="psnacks" data-v="${n}">${n} snack${n === 1 ? '' : 's'}</button>`).join('')}</div>
+      ${o.style === 'bowls' ? '' : [0, 1, 2].map(n => `<button class="chip ${o.snacks === n ? 'on' : ''}" data-act="psnacks" data-v="${n}">${n} snack${n === 1 ? '' : 's'}</button>`).join('')}</div>
     <label class="switch"><input type="checkbox" id="onlylist" ${o.onlyList ? 'checked' : ''}><span class="grow">Only use items on my shopping list <span class="muted small">(${listCount})</span></span></label>
     <div class="small muted" style="margin:4px 0 10px">${pool.length} approved items available.</div>
     ${o.pf && T.p * 4 < T.cal * 0.3 ? `<div class="small" style="color:var(--warn);margin:0 0 8px">Your protein goal is only ${T.p} g. For a protein-forward goal, open Goals → Calculate them, tick <b>Protein-forward</b>, and tap <b>Use calculated goals</b>.</div>` : ''}
@@ -2105,7 +2126,9 @@ function renderPlan() {
     h += `<div class="card"><h2>${S.plan.prep ? 'Each day' : `Day ${planDay + 1}`} totals</h2>
       ${macroBar('Calories', t.cal, T.cal, 'var(--cal)', '')}${macroBar('Protein', t.p, T.p, 'var(--p)', ' g')}
       ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}
-      <div class="small muted" style="margin-top:6px">${(() => { const all = day.meals.flatMap(m => m.items); const fb = all.reduce((a, x) => a + (getFood(x.id).fb || 0) * x.sv, 0); const veg = all.reduce((a, x) => a + (getFood(x.id).cat === 'veg' ? x.sv : 0), 0); const sat = all.reduce((a, x) => a + (getFood(x.id).sf || 0) * x.sv, 0); return `Fiber ${Math.round(fb)} g · Vegetables ${r1(veg)} servings · Saturated fat ${Math.round(sat)} / ${sfTarget()} g`; })()}</div></div>`;
+      <div class="small muted" style="margin-top:6px">${(() => { const all = day.meals.flatMap(m => m.items); const fb = all.reduce((a, x) => a + (getFood(x.id).fb || 0) * x.sv, 0); const veg = all.reduce((a, x) => a + (getFood(x.id).cat === 'veg' ? x.sv : 0), 0); const sat = all.reduce((a, x) => a + (getFood(x.id).sf || 0) * x.sv, 0); return `Fiber ${Math.round(fb)} g · Vegetables ${r1(veg)} servings · Saturated fat ${Math.round(sat)} / ${sfTarget()} g`; })()}</div>
+      ${S.plan.reserve ? (() => { const all = day.meals.flatMap(m => m.items), tt = k => all.reduce((a, x) => a + (getFood(x.id)[k] || 0) * x.sv, 0), cal = Math.max(0, T.cal - tt('cal')), pr = Math.max(0, T.p - tt('p'));
+        return `<div class="small" style="margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--soft)">🍎 <b>Room for snacks: about ${Math.round(cal)} cal${pr >= 1 ? ` and ${Math.round(pr)} g protein` : ''}.</b> Scan a snack — if it's approved and says it fits what you have left, add it.</div>`; })() : ''}</div>`;
     day.meals.forEach((m, mi) => {
       const mt = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
       h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal}${m.title ? ` · ${esc(m.title)}` : ''} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
@@ -2296,6 +2319,9 @@ document.addEventListener('click', e => {
     case 'rmphoto': { const m = S.plan.days[planDay].meals[+el.dataset.m]; try { localStorage.removeItem(photoKey(m)); } catch (e) {} showRecipe(+el.dataset.m); break; }
     case 'prepguide': prepGuide(); break;
     case 'psnacks': S.planOpts.snacks = +el.dataset.v; save(); renderPlan(); break;
+    case 'pstyle': S.planOpts.style = el.dataset.v;
+      if (el.dataset.v === 'bowls' && S.units !== 'g') { S.units = 'g'; S.unitsChosen = true; toast('Showing everything in grams (change in Goals)'); }
+      save(); renderPlan(); break;
     case 'genplan': generatePlan(); renderPlan(); break;
     case 'pday': planDay = +el.dataset.v; planDayPicked = true; renderPlan(); break;
     case 'swap': swapSheet(+el.dataset.m, +el.dataset.i); break;
