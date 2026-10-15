@@ -784,8 +784,8 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '4.6 (bulk prep in grams)';
-const PLANNER_VERSION = 6; // bump when the planner changes so old saved plans get rebuilt
+const APP_VERSION = '4.7 (bowls: beef + chicken)';
+const PLANNER_VERSION = 7; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -1490,8 +1490,8 @@ function optimize(meals, pf, reserve) {
 
 /* ---------- Simple bowls: eggs for breakfast, rice + meat + vegetables for lunch and dinner, snacks left open for scanning ---------- */
 const BOWL_TEMPLATES = [
-  { key: 'bowl', w: 1.8, name: p => `${p} rice bowl`, slots: [['poultry|red|ground', 1, 2.5, 'P'], ['rice', 1, 2], ['cookVeg', 1, 2], ['cookVeg', 0.5, 1.5, 'opt'], ['bowlSauce', 1, 2], ['hotSauce', 1, 2, 'opt']] },
-  { key: 'pbowl', w: 1, name: p => `${p} & potato bowl`, slots: [['poultry|red|ground', 1, 2.5, 'P'], ['starch', 1, 2], ['cookVeg', 1, 2], ['cookVeg', 0.5, 1.5, 'opt'], ['bowlSauce', 1, 2], ['hotSauce', 1, 2, 'opt']] },
+  { key: 'bowl', w: 1.8, name: p => `${p} rice bowl`, slots: [['chicken|beef', 1, 2.5, 'P'], ['rice', 1, 2], ['cookVeg', 1, 2], ['cookVeg', 0.5, 1.5, 'opt'], ['bowlSauce', 1, 2], ['hotSauce', 1, 2, 'opt']] },
+  { key: 'pbowl', w: 1, name: p => `${p} & potato bowl`, slots: [['chicken|beef', 1, 2.5, 'P'], ['starch', 1, 2], ['cookVeg', 1, 2], ['cookVeg', 0.5, 1.5, 'opt'], ['bowlSauce', 1, 2], ['hotSauce', 1, 2, 'opt']] },
 ];
 const BOWL_BREAKFAST_EGGS = { key: 'eggs', name: () => 'Eggs & toast', slots: [['eggs', 1, 2, 'P'], ['toast', 1, 2], ['fruit', 0.5, 1.5], ['salsa|hotSauce', 1, 1, 'opt']] };
 const isBowls = () => S.planOpts.style === 'bowls';
@@ -1543,7 +1543,9 @@ const ROLES = {
   fish: f => f.cat === 'protein' && /salmon|steelhead|tilapia|rockfish|halibut|sea bass|ahi tuna|shrimp|sockeye/.test(nm(f)) && !/canned/.test(nm(f)),
   oilyFish: f => f.cat === 'protein' && /salmon|steelhead|sockeye/.test(nm(f)) && !/canned/.test(nm(f)),
   ground: f => f.cat === 'protein' && /ground (turkey|beef)|bison/.test(nm(f)),
-  red: f => f.cat === 'protein' && /sirloin|eye round|flank|pork tenderloin|pork loin|top loin chops/.test(nm(f)),
+  red: f => f.cat === 'protein' && /sirloin|eye round|flank|filet|flap|tri-tip|pork tenderloin|pork loin|top loin chops/.test(nm(f)),
+  chicken: f => ROLES.poultry(f) && /chicken/.test(nm(f)),
+  beef: f => f.cat === 'protein' && /sirloin|eye round|flank|steak|tri-tip|filet|flap|\bbeef\b|bison/.test(nm(f)) && !/meatball|jerky|sticks?\b|short rib|ribs\b|stew|brisket|oxtail|tongue|chuck|hot dog|frank/.test(nm(f)),
   deli: f => f.cat === 'protein' && /turkey breast|\bham\b/.test(nm(f)) && !/chicken/.test(nm(f)),
   canned: f => f.cat === 'protein' && /canned|chunk light|albacore|sardine/.test(nm(f)),
   tofu: f => /tofu/.test(nm(f)),
@@ -1581,7 +1583,7 @@ const MEAL_TEMPLATES = {
 };
 const PROTEIN_LABELS = [[/salmon|sockeye/, 'Salmon'], [/steelhead/, 'Steelhead'], [/sardine/, 'Sardine'], [/shrimp/, 'Shrimp'],
   [/ahi|tuna/, 'Tuna'], [/tilapia|rockfish|halibut|sea bass/, 'Fish'], [/ground turkey/, 'Turkey'], [/ground beef|bison/, 'Beef'],
-  [/chicken/, 'Chicken'], [/turkey/, 'Turkey'], [/\bham\b/, 'Ham'], [/pork/, 'Pork'], [/sirloin|eye round|flank|steak/, 'Beef'], [/tofu/, 'Tofu']];
+  [/chicken/, 'Chicken'], [/turkey/, 'Turkey'], [/\bham\b/, 'Ham'], [/pork/, 'Pork'], [/sirloin|eye round|flank|steak|tri-tip|filet|flap|\bbeef\b/, 'Beef'], [/tofu/, 'Tofu']];
 const proteinLabel = f => (PROTEIN_LABELS.find(([re]) => re.test(nm(f))) || [0, 'Protein'])[1];
 
 // Foods that come in whole units (bars, shakes, cups, slices, eggs) are planned in whole numbers.
@@ -1780,6 +1782,7 @@ function cookStep(f, amt) {
   if (/ground (turkey|beef)|bison/.test(n)) return `Brown ${what} in a skillet over medium-high heat, breaking it up, 8–10 min until no pink remains (${/turkey/.test(n) ? '165' : '160'}°F). Season with salt, pepper, garlic and onion powder.`;
   if (/chicken/.test(n)) return `Season ${what} with salt, pepper, garlic powder and paprika. Bake at 425°F for ${/thigh/.test(n) ? '22–25' : '18–22'} min until it reaches 165°F inside. Rest 5 min, then slice.`;
   if (/turkey/.test(n)) return `Season and cook ${what} until it reaches 165°F inside.`;
+  if (/tri-tip/.test(n)) return `Season ${what} and roast at 425°F for 25–35 min until 135°F inside (medium). Rest 10 min, then slice thin against the grain.`;
   if (/eye round/.test(n)) return `Season ${what} and roast at 325°F until 135°F inside (about 20 min per lb). Rest 15 min, then slice thin against the grain.`;
   if (/sirloin|flank|steak|beef/.test(n)) return `Pat ${what} dry and season. Sear in a very hot skillet or grill 4–5 min per side to 135°F (medium). Rest 5 min, then slice thin against the grain.`;
   if (/pork tenderloin/.test(n)) return `Season ${what} and roast at 400°F for 20–25 min to 145°F. Rest 3 min, then slice.`;
@@ -1824,7 +1827,7 @@ const ASSEMBLY = {
   marinara: 'Stir the marinara into the browned meat and simmer 5 min; spoon over the grain or potatoes with the vegetables.',
   psnack: 'Grab and go.', splate: 'Arrange on a plate or pack in a container.',
 };
-const COOK_ORDER = { grain: 0, rice: 0, starch: 0, oats: 1, cakes: 1, poultry: 2, red: 2, fish: 3, oilyFish: 3, ground: 2, tofu: 2, eggs: 3, cookVeg: 4 };
+const COOK_ORDER = { grain: 0, rice: 0, starch: 0, oats: 1, cakes: 1, poultry: 2, red: 2, chicken: 2, beef: 2, fish: 3, oilyFish: 3, ground: 2, tofu: 2, eggs: 3, cookVeg: 4 };
 function recipeFor(m, mult = 1) {
   const items = m.items.map(x => { const f = getFood(x.id); return { x, f, amt: amountText(f, x.sv * mult) }; });
   const USE = { bowlSauce: 'on top', hotSauce: 'to taste', vinegar: 'for the dressing — drizzle over the salad', oil: m.key === 'salad' ? 'for the dressing' : 'to roast the vegetables or drizzle on top',
@@ -1874,7 +1877,7 @@ function prepGuide() {
   const all = Object.values(tot).map(t => ({ ...t, amt: amountText(t.f, t.sv) }));
   const cookList = all.map(t => ({ ...t, step: cookStep(t.f, t.amt) }));
   const grains = cookList.filter(t => t.step && /^(grain|starch)$/.test(t.role));
-  const proteins = cookList.filter(t => t.step && /^(poultry|red|ground|fish|oilyFish|tofu)$/.test(t.role));
+  const proteins = cookList.filter(t => t.step && /^(poultry|red|chicken|beef|ground|fish|oilyFish|tofu)$/.test(t.role));
   const veg = cookList.filter(t => t.step && t.role === 'cookVeg');
   const breakfast = day.meals.find(m => m.meal === 'Breakfast');
   const steps = [];
@@ -1894,7 +1897,7 @@ function prepGuide() {
   steps.push(`Let everything cool for 15–20 min, then set out ${boxes.length * n} containers (${n} for lunch, ${n} for dinner). Weigh each cooked food into the boxes using “What goes in each container” above — a kitchen scale set to grams makes this quick.`);
   steps.push('Keep salsa, sauces, dressing, avocado and salad greens in separate small containers and add them when you eat, so nothing gets soggy.');
   steps.push(`Refrigerate within 2 hours of cooking. Cooked meals are best within 3–4 days, so freeze ${n >= 7 ? 'the day 5, 6 and 7 containers' : n >= 5 ? 'the day 4 and day 5 containers' : 'the day 4 containers'} and move each to the fridge the night before. Reheat until steaming hot (165°F).`);
-  const shop = all.sort((a, b) => (a.role === 'poultry' || a.role === 'red' ? -1 : 0) - (b.role === 'poultry' || b.role === 'red' ? -1 : 0));
+  const shop = all.sort((a, b) => (/^(poultry|red|chicken|beef)$/.test(a.role) ? -1 : 0) - (/^(poultry|red|chicken|beef)$/.test(b.role) ? -1 : 0));
   // 1) Cook this much: the whole batch for every lunch and dinner box.
   const SIDE = /^(salsa|bowlSauce|hotSauce|stirSauce|marinara|vinegar|oil|avocado|greens|rawVeg)$/;
   const batch = {};
@@ -2115,7 +2118,7 @@ function doSwap(mi, ii, id) {
     const lo = whole ? Math.max(1, Math.round(x.min || 1)) : (x.min ?? 0.5), hi = whole ? Math.max(lo, Math.round(x.max || 2)) : (x.max || 2);
     let sv = f.cal ? kcal / f.cal : 1; sv = Math.min(hi, Math.max(lo, Math.round(sv / step) * step));
     Object.assign(x, { id, sv, step, min: lo, max: hi });
-    if (/^(poultry|red|fish|oilyFish|ground|deli|canned|tofu|eggs|rawEggs|dairyP|pSnack|cheeseSnack|bonein)$/.test(x.role || '') || old.cat === 'protein') {
+    if (/^(poultry|red|chicken|beef|fish|oilyFish|ground|deli|canned|tofu|eggs|rawEggs|dairyP|pSnack|cheeseSnack|bonein)$/.test(x.role || '') || old.cat === 'protein') {
       const t = (MEAL_TEMPLATES[m.meal] || []).find(t => t.key === m.key);
       if (t) { m.label = proteinLabel(f); m.title = t.name(m.label, f); }
     }
