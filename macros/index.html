@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '4.8 (no corn or edamame)';
+const APP_VERSION = '4.9 (kitchen inventory)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -793,7 +793,7 @@ function defaults() {
     servingsPerDay: 5,
     rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, sf: { on: true, v: 4.5 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
     foods: {}, list: {}, log: {}, plan: null, prices: {}, pkg: {}, units: 'mixed',
-    planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5, style: 'variety' },
+    planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5, style: 'variety' }, stock: {},
     avoid: ['chickpea', 'garbanzo', 'hummus', 'falafel', 'edamame', 'corn on the cob', 'sweet corn', 'kernel corn'], excluded: {},
     calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose', tg: false, pf: true },
   };
@@ -977,8 +977,9 @@ function totals(list) {
   for (const e of list) for (const m of ['cal', 'p', 'c', 'f', 'sf']) t[m] += (e[m] || 0) * e.sv;
   return t;
 }
-function logFood(f, sv, meal, k = viewDay) {
-  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0, sf: f.sf || 0 });
+function logFood(f, sv, meal, k = viewDay, opts = {}) {
+  const stock = !opts.noStock && changeStock(f.id, -sv); // eaten food comes out of your kitchen
+  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0, sf: f.sf || 0, stock });
   save();
 }
 function defaultMeal() { const h = new Date().getHours(); return h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 20 ? 'Dinner' : 'Snacks'; }
@@ -1025,6 +1026,7 @@ function renderToday() {
     ${macroBar('Calories', t.cal, T.cal, 'var(--cal)', '')}${macroBar('Protein', t.p, T.p, 'var(--p)', ' g')}
     ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}
     <div class="small" style="margin-top:6px;color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</div></div>
+    ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
     <div class="row" style="margin-bottom:12px"><button class="btn grow" data-act="tab" data-t="scan">Scan barcode</button>
     <button class="btn alt grow" data-act="find">Search food</button></div>`;
   for (const m of MEALS) {
@@ -1237,6 +1239,8 @@ function openFood(id, opts = {}) {
       <select id="meal" style="width:auto;flex:1">${MEALS.map(m => `<option ${m === (opts.meal || defaultMeal()) ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
     <button class="btn block" data-act="log">Log it</button>
     <div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)">
+      <div class="row"><b class="small grow">🏠 In my kitchen</b></div>${stockRow(f)}</div>
+    <div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)">
       <div class="row"><b class="small grow">🛒 Shopping list</b>${onList ? `<span class="small" style="color:var(--ok)">✓ On your list</span>` : ''}</div>
       <div class="row" style="margin-top:6px;gap:6px">
         <label class="row" style="gap:2px">$<input type="number" id="pprice" inputmode="decimal" step="0.01" min="0" value="${priceOf(f.id) == null ? '' : priceOf(f.id).toFixed(2)}" placeholder="price" style="width:90px;padding:7px 8px"></label>
@@ -1362,11 +1366,14 @@ const aisleOf = f => (AISLES.find(([c]) => c === f.cat) || AISLES[AISLES.length 
 function renderList() {
   const back = prevTab && prevTab !== 'list' ? prevTab : 'today';
   $('#hdr-extra').innerHTML = `<button class="btn alt sm" data-act="tab" data-t="${back}" aria-label="Back">‹ Back to ${({ today: 'Today', scan: 'Scan', costco: 'Costco', plan: 'Plan', settings: 'Goals' })[back]}</button>`;
+  const low = lowItems().length;
+  const switcher = `<div class="chips" style="margin-bottom:10px"><button class="chip ${listView === 'shop' ? 'on' : ''}" data-act="kview" data-v="shop">🛒 Shopping list</button><button class="chip ${listView === 'kitchen' ? 'on' : ''}" data-act="kview" data-v="kitchen">🏠 In my kitchen${low ? ` <b>· ⚠ ${low} low</b>` : ''}</button></div>`;
+  if (listView === 'kitchen') { $('#view').innerHTML = switcher + renderKitchen(); return; }
   const ids = Object.keys(S.list).filter(id => S.list[id].on && getFood(id));
   const line = id => { const pr = priceOf(id); return pr == null ? null : pr * (S.list[id].qty || 1); };
   let total = 0, inCart = 0, missing = 0, count = 0;
   for (const id of ids) { const L = S.list[id], t = line(id); count += L.qty || 1; if (t == null) { missing++; continue; } total += t; if (L.got) inCart += t; }
-  let h = `<div class="card" style="position:sticky;top:52px;z-index:4">
+  let h = switcher + `<div class="card" style="position:sticky;top:52px;z-index:4">
       <div class="row"><div class="grow"><div class="small muted">Estimated total · ${count} item${count === 1 ? '' : 's'}</div><div class="big-left">${money(total)}</div></div>
       <div class="small" style="text-align:right"><span class="muted">In cart</span> <b>${money(inCart)}</b><br><span class="muted">Left to buy</span> <b>${money(total - inCart)}</b></div></div>
       ${missing ? `<div class="small" style="color:var(--warn);margin-top:6px">${missing} item${missing === 1 ? ' has' : 's have'} no price yet — type one in to include ${missing === 1 ? 'it' : 'them'}.</div>` : ''}</div>`;
@@ -1402,6 +1409,72 @@ function renderList() {
     if (v === '') delete S.prices[id]; else if (+v >= 0) S.prices[id] = Math.round(+v * 100) / 100;
     save(); renderList();
   }));
+}
+
+/* ---------- In my kitchen: what you have on hand, by weight ---------- */
+// Kept in servings; shown in grams (raw, as bought) or as a count for eggs, tortillas, bars...
+let listView = 'shop';
+const stockOf = id => S.stock && S.stock[id] != null ? S.stock[id] : null;
+function stockUnit(f) {
+  const per = /^(\d+)\s*(eggs?|bars?|tortillas?|slices?|links?|sticks?|pieces?|bagels?|rolls?|pouch(?:es)?|shakes?|patty|patties|bottles?|cans?|cups?|bowls?|trays?|burritos?|skewers?|meatballs?)\b/.exec(f.serving || '');
+  if (isUnit(f) && per) return { u: per[2].replace(/s$|es$/, ''), per: +per[1] };
+  const g = gramsFor(f, 1); if (g) return { u: 'g', per: g };
+  return { u: 'servings', per: 1 };
+}
+function stockText(f, sv) {
+  const u = stockUnit(f), q = Math.max(0, sv) * u.per;
+  if (u.u === 'g') return gTxt(q);
+  if (u.u === 'servings') return `${r1(q)} serving${q === 1 ? '' : 's'}`;
+  const n = Math.round(q * 10) / 10; return `${n} ${u.u}${n === 1 ? '' : u.u.endsWith('h') ? 'es' : 's'}`;
+}
+function changeStock(id, dsv, start) {
+  S.stock = S.stock || {};
+  if (S.stock[id] == null) { if (!start) return false; S.stock[id] = 0; }
+  S.stock[id] = Math.max(0, Math.round((S.stock[id] + dsv) * 1000) / 1000); return true;
+}
+// How much of a food the meal plan uses per day, on average.
+function dailyUse(id) {
+  if (!S.plan || !S.plan.days.length) return 0;
+  let t = 0; for (const d of S.plan.days) for (const m of d.meals) for (const x of m.items) if (x.id === id) t += x.sv;
+  return t / S.plan.days.length;
+}
+function stockStatus(id) {
+  const s = stockOf(id), use = dailyUse(id);
+  if (s == null) return { tracked: false, use };
+  const days = use ? s / use : null;
+  return { tracked: true, s, use, days, out: s <= 0.001, low: s > 0.001 && days != null && days < 3 };
+}
+const lowItems = () => Object.keys(S.stock || {}).filter(id => getFood(id) && (stockStatus(id).out || stockStatus(id).low));
+function stockRow(f, compact) {
+  const st = stockStatus(f.id), u = stockUnit(f), pi = packageInfo(f);
+  const tag = !st.tracked ? `<span class="small muted">Not tracked yet</span>`
+    : st.out ? `<span class="small" style="color:var(--bad);font-weight:700">Out — buy more</span>`
+    : st.low ? `<span class="small" style="color:var(--warn);font-weight:700">Low — about ${Math.max(0, Math.floor(st.days * 10) / 10)} day${st.days >= 1 && st.days < 2 ? '' : 's'} left</span>`
+    : st.days != null ? `<span class="small" style="color:var(--ok)">≈ ${Math.floor(st.days)} days left</span>` : '';
+  return `${compact ? '' : `<div style="margin-top:4px"><b style="font-size:17px">${st.tracked ? esc(stockText(f, st.s)) : '—'}</b> ${tag}</div>`}
+    <div class="row" style="gap:6px;margin-top:6px">
+      <input type="number" inputmode="decimal" min="0" step="any" data-stockin="${esc(f.id)}" placeholder="${u.u === 'g' ? 'grams' : u.u + 's'}" style="flex:1;min-width:70px;padding:6px 8px" aria-label="Amount you have">
+      <button class="btn alt sm" data-act="stockset" data-id="${esc(f.id)}">Set</button>
+      ${pi.servings ? `<button class="btn alt sm" data-act="stockpkg" data-id="${esc(f.id)}">+ 1 package</button>` : ''}
+      ${st.tracked ? `<button class="btn ghost sm" data-act="stockrm" data-id="${esc(f.id)}" aria-label="Stop tracking">✕</button>` : ''}</div>`;
+}
+function renderKitchen() {
+  const planIds = S.plan ? [...new Set(S.plan.days.flatMap(d => d.meals.flatMap(m => m.items.map(x => x.id))))] : [];
+  const ids = [...new Set([...Object.keys(S.stock || {}), ...planIds])].filter(id => getFood(id));
+  const rank = id => { const st = stockStatus(id); return st.out ? 0 : st.low ? 1 : st.tracked ? 2 : 3; };
+  ids.sort((a, b) => rank(a) - rank(b) || getFood(a).name.localeCompare(getFood(b).name));
+  const low = lowItems();
+  let h = `<div class="card"><div class="small muted">Weigh what you have (raw, as you bought it) or tap <b>+ 1 package</b>. It goes down when you log meals, and checking items off your shopping list adds them. “Days left” is based on your meal plan.</div>
+    ${low.length ? `<button class="btn block" style="margin-top:8px" data-act="low2list">Add ${low.length} low item${low.length === 1 ? '' : 's'} to my shopping list</button>` : ''}</div>`;
+  if (!ids.length) h += `<div class="empty">Nothing here yet. Make a meal plan, or open any food and set how much you have.</div>`;
+  for (const id of ids) { const f = getFood(id);
+    h += `<div class="card" style="padding:10px 12px"><div class="name tap" data-act="open" data-id="${esc(id)}">${esc(f.name)}</div>${stockRow(f)}</div>`; }
+  return h;
+}
+function setStockFrom(id) {
+  const f = getFood(id), i = document.querySelector(`[data-stockin="${CSS.escape(id)}"]`), v = i ? i.value.trim() : '';
+  if (v === '' || !(+v >= 0)) { toast(stockUnit(f).u === 'g' ? 'Type how many grams you have' : 'Type how many you have'); return false; }
+  S.stock = S.stock || {}; S.stock[id] = +v / stockUnit(f).per; save(); toast(`${shortName(f)}: ${stockText(f, S.stock[id])} in your kitchen`); return true;
 }
 
 /* ---------- Meal plan ---------- */
@@ -1925,7 +1998,9 @@ function prepGuide() {
     <h3 style="margin:14px 0 4px;font-size:15px">Everything you'll need for ${n} days</h3>
     <ul class="reasons" style="font-size:14px">${shop.map(t => { const g = gramsFor(t.f, t.sv); return `<li>${g && !isUnit(t.f) ? gTxt(g) : esc(t.amt)} — ${esc(shortName(t.f))}</li>`; }).join('')}</ul>
     <h3 style="margin:14px 0 4px;font-size:15px">Steps</h3><ol class="reasons" style="font-size:15px">${steps.map(x => `<li style="margin-bottom:8px">${esc(x)}</li>`).join('')}</ol>
-    <button class="btn block" style="margin-top:12px" data-act="plan2list">Add all of it to my shopping list</button>`);
+    <button class="btn block" style="margin-top:12px" data-act="plan2list">Add all of it to my shopping list</button>
+    <button class="btn ${S.plan.cooked ? 'ghost' : 'alt'} block" style="margin-top:8px" data-act="prepcooked">${S.plan.cooked ? '✓ Prep marked as cooked (tap to undo)' : '🏠 I cooked it — take it out of my kitchen'}</button>
+    <div class="small muted" style="margin-top:4px;text-align:center">Lunch and dinner come out of your kitchen amounts all at once; logging those meals later won't count them twice.</div>`);
 }
 
 /* ---------- Meal pictures: drawn plates sized to the portions, or your own photo ---------- */
@@ -2309,7 +2384,7 @@ document.addEventListener('click', e => {
   switch (a) {
     case 'tab': go(el.dataset.t); break;
     case 'day': { const d = new Date(viewDay + 'T12:00:00'); d.setDate(d.getDate() + +el.dataset.d); if (dayKey(d) <= todayKey()) { viewDay = dayKey(d); renderToday(); } break; }
-    case 'unlog': S.log[viewDay] = entries(viewDay).filter(x => x.id !== id); save(); renderToday(); break;
+    case 'unlog': { const e = entries(viewDay).find(x => x.id === id); if (e && e.stock) changeStock(e.foodId, e.sv); S.log[viewDay] = entries(viewDay).filter(x => x.id !== id); save(); renderToday(); break; }
     case 'find': findSheet(); break;
     case 'startscan': startScan(); break;
     case 'stopscan': stopScan(); S.camOk = false; save(); break;
@@ -2327,6 +2402,20 @@ document.addEventListener('click', e => {
       else { S.list[f.id] = { on: true, got: false, qty: 1 }; }
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
+    case 'kitchen': listView = 'kitchen'; go('list'); break;
+    case 'kview': listView = el.dataset.v; renderList(); break;
+    case 'stockset': if (setStockFrom(id)) { if (sheetFood) openFood(id); else renderList(); } break;
+    case 'stockpkg': { const f = getFood(id), pi = packageInfo(f); changeStock(id, pi.servings, true); save(); toast(`Added 1 package: now ${stockText(f, stockOf(id))}`); if (sheetFood) openFood(id); else renderList(); break; }
+    case 'stockrm': delete S.stock[id]; save(); toast('Stopped tracking ' + shortName(getFood(id))); if (sheetFood) openFood(id); else renderList(); break;
+    case 'low2list': {
+      const ids = lowItems(), days = S.plan ? S.plan.days.length : 7;
+      for (const fid of ids) { const f = getFood(fid), pi = packageInfo(f), short = Math.max(0, dailyUse(fid) * Math.max(days, 7) - (stockOf(fid) || 0));
+        S.list[fid] = { ...(S.list[fid] || {}), on: true, got: false, qty: pi.servings ? Math.max(1, Math.ceil(short / pi.servings - 0.05)) : ((S.list[fid] && S.list[fid].qty) || 1) }; }
+      save(); toast(`${ids.length} item${ids.length === 1 ? '' : 's'} added to your shopping list`); listView = 'shop'; renderList(); break; }
+    case 'prepcooked': {
+      const n = S.plan.prep, undo = !!S.plan.cooked;
+      for (const m of S.plan.days[0].meals) if (m.meal !== 'Breakfast') for (const x of m.items) changeStock(x.id, (undo ? 1 : -1) * x.sv * n);
+      S.plan.cooked = !undo; save(); toast(undo ? 'Prep un-marked — kitchen amounts restored' : 'Prep marked as cooked — taken out of your kitchen'); prepGuide(); break; }
     case 'sqty': { const q = $('#sqty'); q.textContent = Math.max(1, (+q.textContent || 1) + +el.dataset.d); break; }
     case 'addlist': {
       const f = sheetFood, had = S.list[f.id] && S.list[f.id].on;
@@ -2373,7 +2462,8 @@ document.addEventListener('click', e => {
     case 'doswap': doSwap(+el.dataset.m, +el.dataset.i, el.dataset.id); break;
     case 'logmeal': {
       const m = S.plan.days[planDay].meals[+el.dataset.m];
-      for (const x of m.items) logFood(getFood(x.id), x.sv, m.meal, todayKey());
+      const cooked = S.plan.prep && S.plan.cooked && m.meal !== 'Breakfast'; // already taken out of the kitchen on prep day
+      for (const x of m.items) logFood(getFood(x.id), x.sv, m.meal, todayKey(), { noStock: cooked });
       toast(`${m.meal} logged for today`); break;
     }
     case 'plan2list': {
@@ -2395,7 +2485,12 @@ document.addEventListener('change', e => {
   const el = e.target; if (!el.matches('input[type=checkbox][data-act]')) return;
   const id = el.dataset.id;
   if (el.dataset.act === 'listtoggle') { if (el.checked) S.list[id] = { on: true, got: false }; else delete S.list[id]; save(); }
-  if (el.dataset.act === 'got' && S.list[id]) { S.list[id].got = el.checked; save(); renderList(); }
+  if (el.dataset.act === 'got' && S.list[id]) {
+    S.list[id].got = el.checked;
+    const f = getFood(id), pi = packageInfo(f), q = S.list[id].qty || 1;
+    if (pi.servings) { changeStock(id, (el.checked ? 1 : -1) * pi.servings * q, el.checked); if (el.checked) toast(`Added to your kitchen: ${stockText(f, pi.servings * q)}`); }
+    save(); renderList();
+  }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'manual-code') lookupBarcode(e.target.value); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && scan.active) stopScan(); });
