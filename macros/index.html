@@ -784,8 +784,8 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '4.7 (bowls: beef + chicken)';
-const PLANNER_VERSION = 7; // bump when the planner changes so old saved plans get rebuilt
+const APP_VERSION = '4.8 (no corn or edamame)';
+const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
   return {
@@ -794,7 +794,7 @@ function defaults() {
     rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, sf: { on: true, v: 4.5 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
     foods: {}, list: {}, log: {}, plan: null, prices: {}, pkg: {}, units: 'mixed',
     planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5, style: 'variety' },
-    avoid: ['chickpea', 'garbanzo', 'hummus', 'falafel'], excluded: {},
+    avoid: ['chickpea', 'garbanzo', 'hummus', 'falafel', 'edamame', 'corn on the cob', 'sweet corn', 'kernel corn'], excluded: {},
     calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose', tg: false, pf: true },
   };
 }
@@ -811,6 +811,8 @@ function load() {
 let S = load();
 if (!S.unitsChosen && S.units === 'g') S.units = 'mixed'; // ounces for meat, grams for the rest unless picked otherwise
 for (const f of Object.values(S.foods)) if (f.src === 'scan' && f.cat === 'other' && !f.catChecked) { f.cat = guessCategory(f); f.catAuto = true; f.catChecked = true; }
+// One-time: you asked for no edamame or corn (corn tortillas and popcorn are still fine).
+if (!S.noCornEdamame) { for (const w of ['edamame', 'corn on the cob', 'sweet corn', 'kernel corn']) if (!S.avoid.includes(w)) S.avoid.push(w); S.noCornEdamame = true; }
 // Drop plan items whose food no longer exists (e.g. removed from the catalog).
 if (S.plan) for (const d of S.plan.days) for (const m of d.meals) m.items = m.items.filter(x => getFoodSafe(x.id));
 function save() {
