@@ -810,6 +810,45 @@ const RESTAURANT_MEALS = [
   ['rm23', 'Breakfast diner', 'Egg White Omelet with ham or chicken + fruit + dry toast (estimate)', 'Egg white omelet with ham or chicken, peppers, onions and spinach (light or no cheese), fruit cup and 1 slice dry wheat toast. Skip hash browns and bacon.', 500, 45, 45, 14, 5, 15, 5],
   ['rm24', 'Burger place', 'Grilled Chicken Sandwich, no mayo or cheese + side salad (estimate)', 'Grilled (not crispy) chicken sandwich, no mayo or cheese — mustard, lettuce, tomato, onion. Side salad with light dressing instead of fries.', 500, 38, 45, 15, 3.5, 9, 5],
   ['rm25', 'Taco shop', '3 Chicken or Carne Asada Street Tacos (estimate)', '3 street tacos on corn tortillas with chicken (or carne asada), onion, cilantro, salsa and lime. No cheese or crema. Add a side of beans instead of rice if you want more.', 480, 38, 40, 16, 4.5, 3, 6],
+  // --- More chains in the Lodi / Stockton area: the usual orders, including popular ones that don't fit (so you can see why) ---
+  ['rm26', 'Chipotle', 'Chicken Burrito with rice, beans, cheese & sour cream', 'A typical burrito: flour tortilla, chicken, white rice, black beans, cheese, sour cream, salsa.', 1085, 61, 119, 39, 19, 6, 12],
+  ['rm27', 'Panda Express', 'Orange Chicken + Chow Mein (bowl)', 'Bowl: chow mein with orange chicken.', 1000, 38, 131, 43, 8.5, 28, 6],
+  ['rm28', 'Chick-fil-A', 'Grilled Cool Wrap (no dressing)', 'Grilled Cool Wrap; use a light dressing or salsa sparingly (the Avocado Lime Ranch adds about 310 cal).', 350, 42, 29, 13, 3.5, 4, 13],
+  ['rm29', 'Chick-fil-A', 'Grilled Chicken Sandwich + 8-ct Grilled Nuggets', 'Grilled Chicken Sandwich and an 8-count Grilled Nuggets. Skip the fries.', 450, 55, 37, 9, 2, 11, 4],
+  ['rm30', 'Chick-fil-A', 'Chicken Sandwich + Medium Waffle Fries', 'The classic fried Chicken Sandwich with medium waffle fries.', 860, 33, 86, 43, 8, 6, 6],
+  ['rm31', "McDonald's", 'Big Mac', 'Big Mac.', 590, 25, 46, 34, 11, 9, 3],
+  ['rm32', "McDonald's", 'Quarter Pounder with Cheese', 'Quarter Pounder with Cheese.', 520, 30, 42, 26, 12, 10, 2],
+  ['rm33', "McDonald's", '10-pc Chicken McNuggets', '10-piece McNuggets (sauce extra).', 410, 23, 24, 24, 4, 0, 1],
+  ['rm34', "McDonald's", 'Egg McMuffin', 'Egg McMuffin. (Two of them is about 34 g protein and 12 g saturated fat.)', 310, 17, 30, 13, 6, 3, 2],
+  ['rm35', 'Taco Bell', 'Cantina Chicken Bowl', 'Cantina Chicken Bowl. Extra chicken brings it to about 32 g protein.', 490, 24, 43, 24, 7, 3, 10],
+  ['rm36', 'Taco Bell', 'Chicken Power Menu Bowl', 'Power Menu Bowl with chicken.', 460, 26, 44, 21, 7, 3, 8],
+  ['rm37', 'Taco Bell', 'Crunchwrap Supreme', 'Crunchwrap Supreme (beef).', 530, 16, 71, 21, 7, 6, 4],
+  ['rm38', "Wendy's", 'Grilled Chicken Ranch Wrap', 'Grilled Chicken Ranch Wrap.', 420, 27, 42, 16, 5, 4, 2],
+  ['rm39', "Wendy's", "Dave's Single (no cheese)", "Dave's Single, no cheese or bacon.", 520, 29, 41, 24, 8, 9, 2],
+  ['rm40', "Wendy's", 'Small Chili', 'Small chili — a good add-on: a grilled chicken wrap + small chili is about 43 g protein.', 240, 16, 22, 11, 4.5, 5, 6],
+  ['rm41', 'In-N-Out', 'Hamburger', 'Hamburger (with spread).', 390, 16, 39, 19, 5, 8, 3],
+  ['rm42', 'In-N-Out', 'Double-Double', 'Double-Double.', 670, 37, 39, 41, 18, 10, 3],
+  ['rm43', 'In-N-Out', 'Double-Double, Protein Style', 'Double-Double wrapped in lettuce instead of a bun.', 520, 33, 11, 39, 17, 8, 3],
+  ['rm44', 'Burger King', 'Whopper', 'Whopper.', 670, 28, 51, 39, 11, 11, 2],
+  ['rm45', "Carl's Jr.", 'Charbroiled Big Hamburger', 'Big Hamburger.', 480, 25, 56, 18, 8, 12, 3],
+  ['rm46', "Carl's Jr.", 'Famous Star with Cheese', 'Famous Star with Cheese.', 610, 28, 50, 32, 11, 12, 2],
+  ['rm47', 'Jack in the Box', 'Chicken Teriyaki Bowl', 'Chicken Teriyaki Bowl (white rice). Lots of rice and sauce for the protein.', 690, 27, 134, 6, 1, 30, 3],
+  ['rm48', 'Del Taco', 'Grilled Chicken Epic Burrito', 'Grilled Chicken Epic Burrito.', 500, 32, 56, 17, 6, 4, 4],
+  ['rm49', 'El Pollo Loco', 'Double Chicken Bowl', 'Double Chicken Bowl as it comes (rice, beans, cheese, sour cream, avocado). Skipping cheese and sour cream helps a lot.', 930, 72, 85, 33, 11, 6, 12],
+  ['rm50', 'KFC', 'Original Recipe Breast + Green Beans', '1 Original Recipe chicken breast with a side of green beans (peel off some skin to cut fat).', 385, 35, 15, 21, 4, 2, 2],
+  ['rm51', 'Popeyes', '5-pc Blackened Tenders + Green Beans (estimate)', 'Blackened (not fried) tenders, 5 pieces, with green beans. Dipping sauce on the side.', 330, 45, 10, 5, 1.5, 2, 3],
+  ['rm52', "Raising Cane's", '4 Chicken Fingers, no sides (estimate)', '4 chicken fingers only — skip the fries and Texas toast. Cane\'s Sauce adds about 190 cal.', 520, 52, 28, 26, 4, 0, 1],
+  ['rm53', "Raising Cane's", 'Box Combo', 'Box Combo: 4 fingers, fries, coleslaw, Texas toast, Cane\'s Sauce.', 1290, 62, 98, 72, 12, 10, 5],
+  ['rm54', 'Wingstop', '6 Plain or Dry-Rub Classic Wings (estimate)', '6 classic (bone-in) wings, plain or Louisiana dry rub. Celery instead of fries, skip ranch.', 480, 60, 1, 26, 7, 0, 0],
+  ['rm55', 'Wingstop', '5-pc Boneless Wings', '5 boneless wings, unsauced.', 520, 28, 29, 32, 5, 0, 2],
+  ['rm56', "Arby's", 'Classic Roast Beef', 'Classic Roast Beef sandwich.', 360, 23, 37, 14, 5, 5, 2],
+  ['rm57', "Arby's", 'Double Roast Beef', 'Double Roast Beef sandwich.', 510, 38, 38, 24, 9, 6, 2],
+  ['rm58', 'Panera Bread', 'Chicken Noodle Soup (bowl)', 'Bowl of chicken noodle soup — light; pair it with a protein side.', 160, 12, 20, 3.5, 1, 3, 1],
+  ['rm59', 'Panera Bread', 'Mediterranean Bowl with Chicken', 'Mediterranean Bowl with chicken.', 550, 26, 50, 27, 6, 5, 6],
+  ['rm60', "Denny's", 'Fit Slam', 'Fit Slam (egg whites, turkey bacon, English muffin, fruit).', 450, 27, 50, 12, 2.5, 18, 4],
+  ['rm61', 'IHOP', 'Pesto Veggie Egg White Omelette', 'Pesto Veggie Egg White Omelette (avocado and pesto add most of the fat).', 480, 21, 26, 34, 6, 6, 5],
+  ['rm62', 'Starbucks', 'Egg White & Roasted Red Pepper Egg Bites', 'Egg White & Roasted Red Pepper Egg Bites (2).', 170, 12, 11, 8, 5, 3, 0],
+  ['rm63', 'Starbucks', 'Eggs & Cheddar Protein Box', 'Eggs & Cheddar Protein Box.', 470, 22, 40, 25, 8, 20, 4],
 ].map(([id, brand, name, order, cal, p, c, f, sf, s, fb]) => ({ id, brand, name, order, cal, p, c, f, sf, s, fb, serving: '1 order', cat: 'other', src: 'restaurant', whole: true }));
 CATALOG.push(...RESTAURANT_MEALS);
 const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
@@ -819,7 +858,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '7.2 (eating out anywhere: 25 orders)';
+const APP_VERSION = '7.3 (restaurant database: 60+ orders)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -2856,21 +2895,21 @@ const isGenericPlace = b => /restaurant|shop|place|joint|diner|steakhouse|vietna
 function renderEatingOut() {
   const meals = allFoods().filter(f => f.src === 'restaurant' && (eatFilter === 'all' || (eatFilter === 'any') === isGenericPlace(f.brand))), byR = {};
   for (const f of meals) (byR[f.brand || 'Other'] = byR[f.brand || 'Other'] || []).push(f);
-  let h = `<div class="card" style="background:var(--soft)"><div class="small">Orders that fit your goals <b>as a meal</b> (about a third of your day). Numbers are approximate, from each restaurant's nutrition info — if you change the order, check their app. Tap one to log it.</div>
+  let h = `<div class="card" style="background:var(--soft)"><div class="small">Common orders at chains around Lodi and Stockton, rated <b>as a meal</b> (about a third of your day) — the ones that fit are listed first, and the popular ones that don't show why. Numbers are approximate, from published nutrition info; tap <b>📋 Full menu nutrition</b> for anything else. Tap an order to log it.</div>
     <button class="btn alt sm" style="margin-top:8px" data-act="rmnew">+ Add a restaurant meal</button></div>
     <div class="chips" style="margin-bottom:10px">${[['all', 'All'], ['chains', '🍔 Fast food chains'], ['any', '🍽 Any restaurant']].map(([k, l]) => `<button class="chip ${eatFilter === k ? 'on' : ''}" data-act="eatfilter" data-v="${k}">${l}</button>`).join('')}</div>`;
-  for (const [brand, fs] of Object.entries(byR)) {
-    h += `<div class="card"><h2 style="margin:0 0 4px">${esc(brand)}</h2>${fs.map(f => { const v = verdict(f);
+  for (const [brand, fs] of Object.entries(byR).sort((x, y) => y[1].some(f => verdict(f).ok) - x[1].some(f => verdict(f).ok))) {
+    fs.sort((a, b) => (verdict(b).ok - verdict(a).ok) || a.cal - b.cal);
+    const link = isGenericPlace(brand) ? '' : `<a class="small" href="https://www.google.com/search?q=${encodeURIComponent(brand + ' nutrition calculator')}" target="_blank" rel="noopener">📋 Full menu nutrition ↗</a>`;
+    const nFit = fs.filter(f => verdict(f).ok).length;
+    h += `<div class="card"><div class="row"><h2 class="grow" style="margin:0 0 4px">${esc(brand)}</h2>${link}</div><div class="small muted">${nFit ? `${nFit} order${nFit === 1 ? ' fits' : 's fit'}` : '⚠️ No orders here fit — see why below'}</div>${fs.map(f => { const v = verdict(f);
       return `<div class="item" style="align-items:flex-start"><div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
         <div class="meta"><b>${Math.round(f.cal)} cal</b> · <span style="color:var(--p)">P${Math.round(f.p)}</span> C${Math.round(f.c)} F${Math.round(f.f)} · sat fat ${r1(f.sf || 0)} g</div>
         ${f.order ? `<div class="small muted" style="margin-top:2px">${esc(f.order)}</div>` : ''}${v.ok ? '' : `<div class="small" style="color:var(--warn);margin-top:2px">${esc(v.fails[0])}</div>`}</div>
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span class="badge ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ Fits' : '✕'}</span>${S.foods[f.id] ? `<button class="icon-btn" data-act="rmdel" data-id="${esc(f.id)}" aria-label="Remove">✕</button>` : ''}</div></div>`; }).join('')}</div>`;
   }
-  h += `<div class="card" style="background:var(--bg)"><h2 style="margin:0 0 4px">⚠️ Hard to fit</h2><div class="small">
-    <p style="margin:4px 0"><b>In-N-Out:</b> even a Double-Double protein style is about 17 g saturated fat (the cheese and spread). A plain protein-style hamburger is low in protein.</p>
-    <p style="margin:4px 0"><b>Taco Bell:</b> the Cantina Chicken Bowl is about 24 g protein and 7 g saturated fat — short on protein for the calories.</p>
+  h += `<div class="card" style="background:var(--bg)"><h2 style="margin:0 0 4px">⚠️ Also hard to fit</h2><div class="small">
     <p style="margin:4px 0"><b>Jersey Mike's:</b> a turkey & provolone sub in a tub is about 38 g fat. If you go, skip the cheese and oil and get extra turkey.</p>
-    <p style="margin:4px 0"><b>McDonald's:</b> an Egg McMuffin is only about 17 g protein; most other items are fried or high in saturated fat.</p>
     <p style="margin:4px 0"><b>Costco food court:</b> the chicken bake and pizza are very high in calories and saturated fat. A rotisserie chicken from inside the store is the better grab.</p>
     <p class="muted" style="margin:4px 0">Anywhere: grilled, not fried · double the meat · light or no rice/bun · skip cheese, sour cream and creamy sauces · sauce on the side.</p></div></div>`;
   return h;
