@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '5.4 (clear list from the top)';
+const APP_VERSION = '5.5 (scan: checking / have it / getting it)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1050,7 +1050,7 @@ function renderScan() {
     <div class="row" style="margin:10px 0 14px"><button class="btn ghost sm" data-act="stopscan" id="stopbtn" hidden>Stop camera</button>
       <span class="small muted grow" id="scan-status"></span></div>
     <div class="card" style="padding:10px 14px"><label class="switch" style="border:0;padding:0"><input type="checkbox" id="scantolist" ${S.scanToList ? 'checked' : ''}>
-      <span class="grow"><b>🛒 Shopping mode</b><br><span class="small muted">Add everything I scan to my shopping list, then type the shelf price.</span></span></label></div>
+      <span class="grow"><b>🛒 Shopping mode</b> <span class="small muted">(turn on at Costco)</span><br><span class="small muted">Everything I scan goes on my list, and “Getting it” checks it off as in my cart and adds it to my kitchen.</span></span></label></div>
     <div class="card"><h2>Type the barcode</h2><div class="row"><input type="text" inputmode="numeric" id="manual-code" placeholder="e.g. 096619123456" autocomplete="off">
       <button class="btn" data-act="lookup">Look up</button></div>
       <div class="small muted" style="margin-top:6px">Nutrition comes from Open Food Facts, a free public food database. Only the barcode number is sent.</div></div>
@@ -1143,7 +1143,7 @@ async function lookupBarcode(raw) {
   const code = String(raw || '').replace(/\D/g, '');
   if (code.length < 6) { toast('That barcode looks too short'); return; }
   const saved = S.foods['b' + code] || allFoods().find(f => f.barcode === code);
-  if (saved) { addScanToList(saved.id); return openFood(saved.id, { focusPrice: S.scanToList }); }
+  if (saved) { addScanToList(saved.id); return openFood(saved.id, { focusPrice: S.scanToList, fromScan: true }); }
   sheet(`<div class="sheet-head"><h2>Looking up ${esc(code)}…</h2></div><div class="empty">Checking the food database.</div>`);
   try {
     for (const c of codeVariants(code)) {
@@ -1152,7 +1152,7 @@ async function lookupBarcode(raw) {
         const f = fromOFF(code, d.product);
         S.foods[f.id] = f; save();
         addScanToList(f.id);
-        return openFood(f.id, { focusPrice: S.scanToList });
+        return openFood(f.id, { focusPrice: S.scanToList, fromScan: true });
       }
     }
     sheet(`<div class="sheet-head"><h2>Not in the database</h2><button class="icon-btn" data-act="close">✕</button></div>
@@ -1208,6 +1208,11 @@ function openFood(id, opts = {}) {
       <div class="grow"><h2>${esc(f.name)}</h2><div class="small muted">${esc(f.brand || (f.src === 'costco' ? 'Costco catalog' : ''))}${f.barcode ? ' · ' + esc(f.barcode) : ''}</div></div>
       <button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">per serving</span></div>
+    ${opts.fromScan ? (() => { const st = stockOf(f.id), on = S.list[f.id] && S.list[f.id].on, got = on && S.list[f.id].got;
+      return `<div class="row" style="gap:6px;margin-top:8px">
+        <button class="btn alt sm grow" data-act="scanjust">🔎 Checking</button>
+        <button class="btn ${st != null ? '' : 'alt'} sm grow" data-act="scanhave" data-id="${esc(f.id)}">🏠 ${st != null ? 'Have ' + esc(stockText(f, st)) : 'I have it'}</button>
+        <button class="btn ${on ? '' : 'alt'} sm grow" data-act="scanget" data-id="${esc(f.id)}">🛒 ${got ? 'In cart ✓' : on ? 'On list ✓' : 'Getting it'}</button></div>`; })() : ''}
     ${v.ok ? `<div class="small muted" style="margin-top:6px">Within all your per-serving limits.</div>` : (() => {
       const part = portionThatFits(f), swaps = approvedSwaps(f), pp = proteinPortion(f);
       const g = servingGrams(f), amt = pp ? `${svText(pp.sc)} serving${pp.sc > 1 ? 's' : ''}${g && S.units !== 'servings' ? ` (${fmtWeight(f, g * pp.sc)})` : ''}` : '';
@@ -1295,7 +1300,7 @@ function foodForm(f, code) {
     const nf = { ...f, id, name: d.name.trim() || 'Food', brand: d.brand.trim(), serving: d.serving.trim() || '1 serving', noServing: false,
       cal: num(d.cal), p: num(d.p), c: num(d.c), f: num(d.f), sf: num(d.sf), s: num(d.s), fb: num(d.fb), cat: d.cat,
       src: f.src === 'search' ? 'scan' : (f.src || (code ? 'scan' : 'custom')), barcode: f.barcode || code || '', catAuto: false };
-    S.foods[id] = nf; save(); toast('Saved'); if (code) addScanToList(id); openFood(id, { focusPrice: !!code && S.scanToList });
+    S.foods[id] = nf; save(); toast('Saved'); if (code) addScanToList(id); openFood(id, { focusPrice: !!code && S.scanToList, fromScan: !!code });
   });
 }
 function findSheet(q = '') {
@@ -2658,6 +2663,16 @@ document.addEventListener('click', e => {
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
     case 'kitchen': listView = 'kitchen'; go('list'); break;
+    case 'scanjust': closeSheet(); break;
+    case 'scanhave': { const f = getFood(id), pi = packageInfo(f);
+      if (pi.servings) { changeStock(id, pi.servings, true); save(); toast(`In your kitchen: ${stockText(f, stockOf(id))}`); openFood(id, { fromScan: true }); }
+      else { openFood(id, { fromScan: true }); const i = document.querySelector(`[data-stockin="${CSS.escape(id)}"]`); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } toast('How much do you have? Type it and tap Set'); }
+      break; }
+    case 'scanget': { const f = getFood(id), L = S.list[id], pi = packageInfo(f), inStore = !!S.scanToList;
+      if (L && L.on && (L.got || !inStore)) { toast(L.got ? 'Already in your cart' : 'Already on your list'); break; }
+      S.list[id] = { ...(L || {}), on: true, got: inStore, qty: (L && L.on && L.qty) || 1 };
+      if (inStore && pi.servings) changeStock(id, pi.servings * S.list[id].qty, true); // in the store: it's in your cart, so it's in your kitchen
+      save(); toast(inStore ? 'In your cart — added to your kitchen' : 'Added to your shopping list'); openFood(id, { fromScan: true, focusPrice: inStore }); break; }
     case 'pview': planView = el.dataset.v; renderPlan(); break;
     case 'rnew': editRecipe(null); break;
     case 'ropen': showRecipeCard(id); break;
