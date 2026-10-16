@@ -112,6 +112,10 @@ nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: va
 nav button { flex: 1; border: 0; background: transparent; padding: 8px 0 7px; font-size: 11px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; }
 nav button svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 nav button.on { color: var(--brand); font-weight: 700; }
+nav button.scan-tab { position: relative; }
+nav .scan-fab { width: 52px; height: 52px; margin-top: -22px; border-radius: 50%; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+nav .scan-fab svg { width: 28px; height: 28px; }
+nav button.scan-tab.on .scan-fab { outline: 3px solid var(--soft); }
 
 /* sheet */
 .sheet { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; }
@@ -126,6 +130,9 @@ nav button.on { color: var(--brand); font-weight: 700; }
   background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-size: 14px; max-width: 90vw; }
 .meal h3 { margin: 0; font-size: 15px; }
 details summary { cursor: pointer; font-weight: 600; }
+details.card > summary::-webkit-details-marker { display: none; }
+.chev { display: inline-block; transition: transform .15s; color: var(--muted); margin-left: 6px; }
+details[open] .chev { transform: rotate(90deg); }
 .switch { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
 .switch:first-of-type { border-top: 0; }
 .switch input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--brand); }
@@ -137,12 +144,11 @@ details summary { cursor: pointer; font-weight: 600; }
 <main id="view"></main>
 
 <nav id="nav">
-  <button data-tab="today"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Today</button>
-  <button data-tab="scan"><svg viewBox="0 0 24 24"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>Scan</button>
-  <button data-tab="costco"><svg viewBox="0 0 24 24"><path d="M3 4h2l2.4 11h11l2-8H6.2"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="17" cy="19.5" r="1.5"/></svg>Costco</button>
-  <button data-tab="plan"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Plan</button>
-  <button data-tab="list"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>List</button>
-  <button data-tab="settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Goals</button>
+  <button data-tab="today"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Today</button>
+  <button data-tab="plan"><svg viewBox="0 0 24 24"><path d="M7 3v8a2 2 0 0 0 2 2v8M5 3v5M9 3v5M17 3c-2 0-3 3-3 6s1 4 3 4v8"/></svg>Meals</button>
+  <button data-tab="scan" class="scan-tab"><span class="scan-fab"><svg viewBox="0 0 24 24"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg></span>Scan</button>
+  <button data-tab="list"><svg viewBox="0 0 24 24"><path d="M3 4h2l2.4 11h11l2-8H6.2"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="17" cy="19.5" r="1.5"/></svg>Groceries</button>
+  <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>More</button>
 </nav>
 
 <div class="sheet" id="sheet" hidden><div class="sheet-card" id="sheet-card"></div></div>
@@ -784,7 +790,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '6.2 (better barcode reading, photo of barcode)';
+const APP_VERSION = '6.3 (simpler layout: Today · Meals · Scan · Groceries · More)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -982,14 +988,14 @@ function totals(list) {
 }
 function logFood(f, sv, meal, k = viewDay, opts = {}) {
   const stock = !opts.noStock && changeStock(f.id, -sv); // eaten food comes out of your kitchen
-  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0, sf: f.sf || 0, stock });
+  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0, sf: f.sf || 0, stock, ...(opts.tag ? { tag: opts.tag } : {}) });
   save();
 }
 function defaultMeal() { const h = new Date().getHours(); return h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 20 ? 'Dinner' : 'Snacks'; }
 
 /* ================= tabs ================= */
 let tab = 'today', viewDay = todayKey(), costcoView = 'catalog', costcoFilter = 'all', costcoCat = '', costcoQ = '', planDay = 0, planDayPicked = false;
-const TITLES = { today: 'Today', scan: 'Scan food', costco: 'Costco', plan: 'Meal plan', list: 'Shopping list', settings: 'Goals & rules' };
+const TITLES = { today: 'Today', scan: 'Scan food', costco: 'Costco items', plan: 'Meals', list: 'Groceries', settings: 'More' };
 let prevTab = 'today';
 function go(t) {
   if (tab === 'scan' && t !== 'scan') stopScan();
@@ -998,14 +1004,41 @@ function go(t) {
   tab = t; render(); window.scrollTo(0, 0);
 }
 function render() {
-  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === (tab === 'costco' ? 'settings' : tab)));
   $('#title').textContent = TITLES[tab];
   $('#hdr-extra').innerHTML = '';
   ({ today: renderToday, scan: renderScan, costco: renderCostco, plan: renderPlan, list: renderList, settings: renderSettings })[tab]();
+  if (tab === 'costco' && !$('#hdr-extra').innerHTML.trim()) $('#hdr-extra').innerHTML = `<button class="btn alt sm" data-act="tab" data-t="settings">‹ More</button>`;
 }
 $('#nav').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) go(b.dataset.tab); });
 
 /* ---------- Today ---------- */
+// Which day of the meal plan is today (or -1).
+function planTodayIndex() {
+  if (!S.plan || !S.plan.days || !S.plan.days.length) return -1;
+  const idx = Math.round((new Date(todayKey() + 'T12:00:00') - new Date((S.plan.start || todayKey()) + 'T12:00:00')) / 864e5);
+  return idx >= 0 && idx < S.plan.days.length ? idx : -1;
+}
+const mealTag = (di, mi) => `plan:${S.plan.made}:${di}:${mi}`;
+function logPlannedMeal(di, mi) {
+  const m = S.plan.days[di].meals[mi], cooked = S.plan.prep && S.plan.cooked && m.meal !== 'Breakfast'; // prep meals were taken out of the kitchen on prep day
+  for (const x of m.items) logFood(getFood(x.id), x.sv, m.meal, todayKey(), { noStock: cooked, tag: mealTag(di, mi) });
+}
+function unlogPlannedMeal(di, mi) {
+  const tag = mealTag(di, mi), k = todayKey();
+  for (const e of entries(k)) if (e.tag === tag && e.stock) changeStock(e.foodId, e.sv);
+  S.log[k] = entries(k).filter(e => e.tag !== tag); save();
+}
+function todaysMealsCard() {
+  const di = planTodayIndex(); if (di < 0) return `<div class="card tap" data-act="tab" data-t="plan" style="background:var(--soft)"><b>🍽 No meal plan for today</b><div class="small muted">Tap to make one in Meals.</div></div>`;
+  const day = S.plan.days[di], logged = new Set(entries(todayKey()).map(e => e.tag).filter(Boolean));
+  return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🍽 Today's meals</h2><button class="btn ghost sm" data-act="tab" data-t="plan">Full plan</button></div>
+    ${day.meals.map((m, mi) => { const t = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))), done = logged.has(mealTag(di, mi));
+      return `<div class="item"><div class="grow tap" data-act="todayrecipe" data-d="${di}" data-m="${mi}"><div class="name" style="${done ? 'opacity:.6' : ''}">${m.meal}: ${esc(m.title || m.meal)}</div>
+        <div class="meta">${Math.round(t.cal)} cal · <span style="color:var(--p)">${Math.round(t.p)} g protein</span> · tap for recipe</div></div>
+        ${done ? `<button class="btn ghost sm" data-act="todayunlog" data-d="${di}" data-m="${mi}">✓ Eaten</button>` : `<button class="btn sm" data-act="todaylog" data-d="${di}" data-m="${mi}">Ate it</button>`}</div>`; }).join('')}
+    </div>`;
+}
 function macroBar(label, val, target, color, unit) {
   const pct = target ? Math.min(100, val / target * 100) : 0;
   return `<div class="macro"><div class="top"><span><b>${label}</b></span><span>${Math.round(val)} / ${target}${unit}</span></div>
@@ -1030,8 +1063,9 @@ function renderToday() {
     ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}
     <div class="small" style="margin-top:6px;color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</div></div>
     ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
-    <div class="row" style="margin-bottom:12px"><button class="btn grow" data-act="tab" data-t="scan">Scan barcode</button>
-    <button class="btn alt grow" data-act="find">Search food</button></div>`;
+    ${isToday ? todaysMealsCard() : ''}
+    <div class="row" style="margin-bottom:12px"><button class="btn alt grow" data-act="find">🔎 Ate something else? Search for it</button></div>
+    ${list.length ? `<h3 style="margin:4px 4px 8px;font-size:15px">What you've logged</h3>` : ''}`;
   for (const m of MEALS) {
     const es = list.filter(e => e.meal === m); if (!es.length) continue;
     const mt = totals(es);
@@ -1040,7 +1074,7 @@ function renderToday() {
         <div class="meta">${r1(e.sv)} × ${esc(e.serving)} · ${Math.round(e.cal * e.sv)} cal · P${r1(e.p * e.sv)} C${r1(e.c * e.sv)} F${r1(e.f * e.sv)}</div></div>
         <button class="icon-btn" data-act="unlog" data-id="${e.id}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
   }
-  if (!list.length) h += `<div class="empty">Nothing logged ${isToday ? 'yet today' : 'this day'}.<br>Scan a barcode or pick from your Costco list.</div>`;
+  if (!list.length) h += `<div class="empty">Nothing logged ${isToday ? 'yet today — tap “Ate it” on a meal above, or scan a snack' : 'this day'}.</div>`;
   $('#view').innerHTML = h;
 }
 
@@ -1417,9 +1451,9 @@ const AISLES = [['protein', 'Meat & seafood'], ['bprotein', 'Eggs & dairy'], ['v
 const aisleOf = f => (AISLES.find(([c]) => c === f.cat) || AISLES[AISLES.length - 1])[1];
 function renderList() {
   const back = prevTab && prevTab !== 'list' ? prevTab : 'today';
-  $('#hdr-extra').innerHTML = `<button class="btn alt sm" data-act="tab" data-t="${back}" aria-label="Back">‹ Back to ${({ today: 'Today', scan: 'Scan', costco: 'Costco', plan: 'Plan', settings: 'Goals' })[back]}</button>`;
+  $('#hdr-extra').innerHTML = `<button class="btn alt sm" data-act="tab" data-t="${back}" aria-label="Back">‹ ${({ today: 'Today', scan: 'Scan', costco: 'Costco', plan: 'Meals', settings: 'More' })[back]}</button>`;
   const low = lowItems().length;
-  const switcher = `<div class="chips" style="margin-bottom:10px"><button class="chip ${listView === 'shop' ? 'on' : ''}" data-act="kview" data-v="shop">🛒 List</button><button class="chip ${listView === 'kitchen' ? 'on' : ''}" data-act="kview" data-v="kitchen">🏠 Kitchen${low ? ` <b>· ⚠ ${low} low</b>` : ''}</button><button class="chip ${listView === 'spices' ? 'on' : ''}" data-act="kview" data-v="spices">🧂 Spices</button></div>`;
+  const switcher = `<div class="chips" style="margin-bottom:10px"><button class="chip ${listView === 'shop' ? 'on' : ''}" data-act="kview" data-v="shop">🛒 Shopping list</button><button class="chip ${listView === 'kitchen' ? 'on' : ''}" data-act="kview" data-v="kitchen">🏠 Kitchen${low ? ` <b>· ⚠ ${low} low</b>` : ''}</button><button class="chip ${listView === 'spices' ? 'on' : ''}" data-act="kview" data-v="spices">🧂 Spices</button></div>`;
   if (listView === 'kitchen') { $('#view').innerHTML = switcher + renderKitchen(); return; }
   if (listView === 'spices') { $('#view').innerHTML = switcher + renderSpices(); return; }
   const ids = Object.keys(S.list).filter(id => S.list[id].on && getFood(id));
@@ -1544,7 +1578,7 @@ function setStockFrom(id) {
 }
 
 /* ---------- My recipes: favorites for quick reference, with macros and a shopping list ---------- */
-let planView = 'plan', recipeBatches = 1;
+let planView = 'plan', recipeBatches = 1, planOptsOpen = false;
 // Ingredients link to Costco foods (id + servings of that food) so macros and the shopping list work; pantry items (spices) never go on the list.
 const CHILI_RECIPE = { id: 'chili', name: 'Lean Beef & Black Bean Chili', servings: 8, time: 'About 3 hr (mostly simmering)', notes: 'About 450 g per bowl: weigh the finished chili (minus the pot) and divide by 8. Keeps 4 days in the fridge; freeze bowls 5–8. Toppings that fit: cilantro, green onion, lime, jalapeño, hot sauce, 2 tbsp nonfat Greek yogurt instead of sour cream. Go easy on cheese (¼ cup ≈ 5 g saturated fat). For a bigger meal, serve over 150 g baked potato.',
   ingredients: [
@@ -2619,7 +2653,7 @@ function planTotals(day) {
   const list = day.meals.flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
   return totals(list);
 }
-const planSwitch = () => `<div class="chips" style="margin-bottom:10px"><button class="chip ${planView === 'plan' ? 'on' : ''}" data-act="pview" data-v="plan">🗓 Meal plan</button><button class="chip ${planView === 'recipes' ? 'on' : ''}" data-act="pview" data-v="recipes">📖 My recipes (${(S.recipes || []).length})</button></div>`;
+const planSwitch = () => `<div class="chips" style="margin-bottom:10px"><button class="chip ${planView === 'plan' ? 'on' : ''}" data-act="pview" data-v="plan">🗓 This week's plan</button><button class="chip ${planView === 'recipes' ? 'on' : ''}" data-act="pview" data-v="recipes">📖 My recipes (${(S.recipes || []).length})</button></div>`;
 function renderPlan() {
   if (planView === 'recipes') { $('#view').innerHTML = planSwitch() + renderRecipes(); return; }
   // A plan saved by an older planner gets rebuilt with the current one, keeping the same number of days.
@@ -2636,7 +2670,9 @@ function renderPlan() {
   }
   const pool = planPool(), T = S.targets, o = S.planOpts;
   const listCount = Object.values(S.list).filter(l => l.on).length;
-  let h = planSwitch() + `<div class="card"><div class="small muted" style="margin-bottom:8px">Builds meals only from <b>approved</b> Costco items, sized to hit ${T.cal} cal · P${T.p} C${T.c} F${T.f}.</div>
+  const planSummary = S.plan ? `${S.plan.prep ? `🍱 Meal prep · ${S.plan.prep} days` : `🗓 ${S.plan.days.length} day${S.plan.days.length === 1 ? '' : 's'}`} · ${o.style === 'bowls' ? '🍚 Simple bowls' : '🍳 Variety'}` : '';
+  let h = planSwitch() + `<details class="card" id="planopts" ${!S.plan || planOptsOpen ? 'open' : ''}><summary style="cursor:pointer;list-style:none"><div class="row"><b class="grow">⚙️ ${S.plan ? 'Change my plan' : 'Make my meal plan'}</b><span class="small muted">${planSummary}</span><span class="chev">›</span></div></summary>
+    <div class="small muted" style="margin:8px 0">Builds meals only from <b>approved</b> Costco items, sized to hit ${T.cal} cal · P${T.p} C${T.c} F${T.f}.</div>
     <label class="switch"><input type="checkbox" id="pf" ${o.pf ? 'checked' : ''}><span class="grow"><b>Protein-forward meals</b><br><span class="small muted">Every meal is built around a protein and gets its share of your ${T.p} g; snacks are protein snacks.</span></span></label>
     <div class="chips" style="margin-bottom:6px"><button class="chip ${o.style !== 'bowls' ? 'on' : ''}" data-act="pstyle" data-v="variety">🍳 Variety</button><button class="chip ${o.style === 'bowls' ? 'on' : ''}" data-act="pstyle" data-v="bowls">🍚 Simple bowls</button></div>
     ${o.style === 'bowls' ? `<div class="small muted" style="margin-bottom:8px">Eggs for breakfast; lunch and dinner are rice + chicken or beef + vegetables, in grams. About ${snackReserve().cal} cal and ${snackReserve().p} g protein are left open for snacks — scan them to see if they fit.</div>` : ''}
@@ -2648,14 +2684,14 @@ function renderPlan() {
     <div class="small muted" style="margin:4px 0 10px">${pool.length} approved items available.</div>
     ${o.pf && T.p * 4 < T.cal * 0.3 ? `<div class="small" style="color:var(--warn);margin:0 0 8px">Your protein goal is only ${T.p} g. For a protein-forward goal, open Goals → Calculate them, tick <b>Protein-forward</b>, and tap <b>Use calculated goals</b>.</div>` : ''}
     <button class="btn block" data-act="genplan" ${pool.length < 3 ? 'disabled' : ''}>${S.plan ? 'Make a new plan' : 'Make my meal plan'}</button>
-    ${pool.length < 3 ? `<div class="small" style="color:var(--warn);margin-top:6px">Not enough approved items. Add more items to your list or loosen your rules in Goals.</div>` : ''}</div>`;
+    ${pool.length < 3 ? `<div class="small" style="color:var(--warn);margin-top:6px">Not enough approved items. Add more items to your list or loosen your rules in Goals.</div>` : ''}</details>`;
   if (S.plan && S.plan.days.length) {
     const days = S.plan.days; if (planDay >= days.length) planDay = 0;
     if (S.plan.prep) h += `<div class="card" style="background:var(--soft)"><div class="row"><div class="grow"><b>🍱 Meal prep for ${S.plan.prep} days</b><div class="small muted">Same meals every day — cook once with the prep-day guide.</div></div>
       <button class="btn sm" data-act="prepguide">Prep guide</button></div></div>`;
     else if (days.length > 1) h += `<div class="chips" style="margin-bottom:10px">${days.map((d, i) => `<button class="chip ${i === planDay ? 'on' : ''}" data-act="pday" data-v="${i}">${i === planTodayIdx() ? 'Today' : (() => { const dt = new Date(S.plan.start + 'T12:00:00'); dt.setDate(dt.getDate() + i); return dt.toLocaleDateString(undefined, { weekday: 'short' }); })()}</button>`).join('')}</div>`;
     const day = days[planDay], t = planTotals(day);
-    if (S.plan.pf) h += `<div class="small" style="color:var(--p);margin:0 0 8px"><b>💪 Protein-forward plan</b> — every meal is built around a protein.</div>`;
+
     h += `<div class="card"><h2>${S.plan.prep ? 'Each day' : `Day ${planDay + 1}`} totals</h2>
       ${macroBar('Calories', t.cal, T.cal, 'var(--cal)', '')}${macroBar('Protein', t.p, T.p, 'var(--p)', ' g')}
       ${macroBar('Carbs', t.c, T.c, 'var(--c)', ' g')}${macroBar('Fat', t.f, T.f, 'var(--f)', ' g')}
@@ -2673,19 +2709,24 @@ function renderPlan() {
     h += `<button class="btn block" data-act="plan2list">Add ${days.length > 1 ? 'all ' + days.length + ' days' : 'this plan'} to my shopping list</button>`;
   }
   $('#view').innerHTML = h;
+  const po = $('#planopts'); if (po) po.addEventListener('toggle', () => { planOptsOpen = po.open; });
   $('#onlylist').addEventListener('change', e => { S.planOpts.onlyList = e.target.checked; save(); renderPlan(); });
   $('#pf').addEventListener('change', e => { S.planOpts.pf = e.target.checked; save(); renderPlan(); });
 }
 
 /* ---------- Settings ---------- */
+function moreLinks() {
+  return `<div class="card"><div class="row wrap" style="gap:6px">
+    <button class="btn alt sm grow" data-act="tab" data-t="costco">🛒 Browse Costco items</button>
+    <button class="btn alt sm grow" data-act="howto">❓ How do I…</button>
+    <button class="btn alt sm grow" data-act="export">💾 Save a backup</button></div></div>`;
+}
 function renderSettings() {
   const T = S.targets, r = S.rules, c = S.calc;
   const ruleRow = (k, label, unit, word) => `<label class="switch"><input type="checkbox" data-rule="${k}" ${r[k].on ? 'checked' : ''}>
     <span class="grow">${label} <span class="muted small">${word}</span></span><input type="number" inputmode="decimal" step="any" data-rulev="${k}" value="${r[k].v}"><span class="small muted" style="width:20px">${unit}</span></label>`;
-  $('#view').innerHTML = `<div class="card"><h2>Setup code</h2>
-      <div class="small muted" style="margin-bottom:6px">Got a setup code? Paste it here to fill in all your goals and rules at once.</div>
-      <div class="row"><input type="text" id="setupcode" placeholder="MC1-…" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" data-act="setupcode">Apply</button></div></div>
-    <div class="card"><h2>Daily goals</h2>
+  $('#view').innerHTML = `${moreLinks()}
+    <div class="card" id="goalscard"><h2>Daily goals</h2>
       <div class="grid2"><label class="field">Calories<input type="number" inputmode="numeric" data-t="cal" value="${T.cal}"></label>
       <label class="field">Protein g<input type="number" inputmode="numeric" data-t="p" value="${T.p}"></label>
       <label class="field">Carbs g<input type="number" inputmode="numeric" data-t="c" value="${T.c}"></label>
@@ -2717,6 +2758,9 @@ function renderSettings() {
       ${Object.keys(S.excluded).length ? `<div class="small" style="margin-top:8px">Marked “Never use”: ${Object.keys(S.excluded).map(id => getFoodSafe(id)).filter(Boolean).map(f => `<button class="chip" data-act="open" data-id="${esc(f.id)}">${esc(f.name)}</button>`).join(' ')}</div>` : ''}</div>
     <div class="card"><h2>Measurements</h2><div class="small muted" style="margin-bottom:8px">How plans, recipes and the prep guide show amounts. Weights are the most accurate with a kitchen scale; vegetables stay in cups.</div>
       <div class="chips">${[['mixed', '⚖️ Meat in oz, rest in g'], ['g', 'Grams'], ['oz', 'Ounces'], ['servings', 'Cups & pieces']].map(([k, l]) => `<button class="chip ${S.units === k ? 'on' : ''}" data-act="units" data-v="${k}">${l}</button>`).join('')}</div></div>
+    <div class="card"><h2>Setup code</h2>
+      <div class="small muted" style="margin-bottom:6px">Got a setup code? Paste it here to fill in all your goals and rules at once.</div>
+      <div class="row"><input type="text" id="setupcode" placeholder="MC1-…" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" data-act="setupcode">Apply</button></div></div>
     <div class="card"><h2>Your data</h2><div class="small muted" style="margin-bottom:10px">Everything is saved only on this phone. Nothing is uploaded or shared. Save a backup now and then in case you change phones.</div>
       <div class="row wrap"><button class="btn alt grow sm" data-act="export">Save backup</button>
       <label class="btn alt grow sm" style="text-align:center">Restore backup<input type="file" id="importfile" accept="application/json,.json" hidden></label>
@@ -2816,6 +2860,20 @@ document.addEventListener('click', e => {
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
     case 'kitchen': listView = 'kitchen'; go('list'); break;
+    case 'howto': sheet(`<div class="sheet-head"><h2>❓ How do I…</h2><button class="icon-btn" data-act="close">✕</button></div>
+      <ul class="reasons" style="font-size:15px">${[
+        ['Log what I ate from my plan', '<b>Today</b> → tap <b>Ate it</b> next to the meal.'],
+        ['Check if a food is OK', 'Tap the big <b>📷 Scan</b> button. Green = approved. Curved jar? Use <b>📸 Photo of the barcode</b>.'],
+        ['Log a snack', 'Scan it (or <b>Today → 🔎 Search food</b>), set servings, tap <b>Log it</b>.'],
+        ['See my meals and recipes', '<b>Meals</b> → <b>This week\'s plan</b> or <b>My recipes</b>. Tap a meal for its recipe and picture.'],
+        ['Make a new plan', '<b>Meals → ⚙️ Change my plan → Make a new plan</b>.'],
+        ['Shop for a recipe', '<b>Meals → My recipes</b> → open it → <b>🛒 Shopping list</b>.'],
+        ['Use my shopping list at Costco', '<b>Groceries → 🛒 Shopping list</b>. Tick items as they go in the cart.'],
+        ['Say I already have something', 'Scan it → <b>🏠 I have it</b> (spices go to <b>Groceries → 🧂 Spices</b>).'],
+        ['See what\'s running low', '<b>Groceries → 🏠 Kitchen</b>. Low items also show on <b>Today</b>.'],
+        ['Change my calories or limits', '<b>More</b> → <b>Daily goals</b> and <b>Approved rules</b>.'],
+      ].map(([q, a]) => `<li style="margin-bottom:8px"><b>${q}</b><br><span class="muted">${a}</span></li>`).join('')}</ul>`); break;
+    case 'gotogoals': { const g = $('#goalscard'); if (g) g.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
     case 'scanjust': closeSheet(); break;
     case 'spiceadd': { const n = $('#newspice').value.trim(); if (!n) { toast('Type a spice name'); break; } const nice = n.charAt(0).toUpperCase() + n.slice(1); spiceEntry(nice).have = true; save(); renderList(); toast(`${nice} added to your spice rack`); break; }
     case 'spiceout': { const e = spiceEntry(el.dataset.name); e.have = false; for (const fid of e.ids || []) { if (S.have) delete S.have[fid]; if (S.stock) delete S.stock[fid]; } spiceToList(el.dataset.name); save(); renderList(); toast(`${el.dataset.name} added to your shopping list`); break; }
@@ -2910,16 +2968,14 @@ document.addEventListener('click', e => {
     case 'pstyle': S.planOpts.style = el.dataset.v;
       if (el.dataset.v === 'bowls' && S.units !== 'g') { S.units = 'g'; S.unitsChosen = true; toast('Showing everything in grams (change in Goals)'); }
       save(); renderPlan(); break;
-    case 'genplan': generatePlan(); renderPlan(); break;
+    case 'genplan': planOptsOpen = false; generatePlan(); renderPlan(); toast('Here is your new plan'); break;
     case 'pday': planDay = +el.dataset.v; planDayPicked = true; renderPlan(); break;
     case 'swap': swapSheet(+el.dataset.m, +el.dataset.i); break;
     case 'doswap': doSwap(+el.dataset.m, +el.dataset.i, el.dataset.id); break;
-    case 'logmeal': {
-      const m = S.plan.days[planDay].meals[+el.dataset.m];
-      const cooked = S.plan.prep && S.plan.cooked && m.meal !== 'Breakfast'; // already taken out of the kitchen on prep day
-      for (const x of m.items) logFood(getFood(x.id), x.sv, m.meal, todayKey(), { noStock: cooked });
-      toast(`${m.meal} logged for today`); break;
-    }
+    case 'logmeal': { const m = S.plan.days[planDay].meals[+el.dataset.m]; logPlannedMeal(planDay, +el.dataset.m); toast(`${m.meal} logged for today`); break; }
+    case 'todaylog': { const di = +el.dataset.d, mi = +el.dataset.m; logPlannedMeal(di, mi); toast(`${S.plan.days[di].meals[mi].meal} logged ✓`); renderToday(); break; }
+    case 'todayunlog': unlogPlannedMeal(+el.dataset.d, +el.dataset.m); toast('Removed from today'); renderToday(); break;
+    case 'todayrecipe': planDay = +el.dataset.d; planDayPicked = true; showRecipe(+el.dataset.m); break;
     case 'plan2list': {
       const need = {};
       for (const d of S.plan.days) for (const m of d.meals) for (const x of m.items) need[x.id] = (need[x.id] || 0) + x.sv;
