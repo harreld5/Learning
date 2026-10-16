@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '5.3 (recipes share one shopping list)';
+const APP_VERSION = '5.4 (clear list from the top)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1376,6 +1376,7 @@ function renderList() {
   let h = switcher + `<div class="card" style="position:sticky;top:52px;z-index:4">
       <div class="row"><div class="grow"><div class="small muted">Estimated total · ${count} item${count === 1 ? '' : 's'}</div><div class="big-left">${money(total)}</div></div>
       <div class="small" style="text-align:right"><span class="muted">In cart</span> <b>${money(inCart)}</b><br><span class="muted">Left to buy</span> <b>${money(total - inCart)}</b></div></div>
+      ${ids.length || (S.extra || []).length ? `<div class="row" style="gap:6px;margin-top:8px"><button class="btn ghost sm grow" data-act="cleargot">Remove checked</button><button class="btn danger sm grow" data-act="clearlist">🗑 Clear whole list</button></div>` : ''}
       ${missing ? `<div class="small" style="color:var(--warn);margin-top:6px">${missing} item${missing === 1 ? ' has' : 's have'} no price yet — type one in to include ${missing === 1 ? 'it' : 'them'}.</div>` : ''}</div>`;
   const extra = S.extra || [];
   if (!ids.length && !extra.length) {
