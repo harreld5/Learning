@@ -790,7 +790,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '6.7 (egg scramble bowls)';
+const APP_VERSION = '6.8 (shop and plan for 2 weeks)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1899,23 +1899,27 @@ function vegServings(x) {
   if (/^rcp-/.test(x.id)) { const r = recipeById(x.id.slice(4)); return r ? r.ingredients.reduce((a, i) => a + (i.id && i.sv != null && getFood(i.id) && getFood(i.id).cat === 'veg' ? i.sv : 0), 0) / r.servings * x.sv : 0; }
   const f = getFood(x.id); return f && f.cat === 'veg' ? x.sv : 0;
 }
+const weekDays = () => S.weekDays === 14 ? 14 : 7;
 const weekSel = () => (S.week || []).filter(w => recipeById(w.rid));
 const weekServings = (bf = false) => weekSel().filter(w => (recipeById(w.rid).meal === 'Breakfast') === bf).reduce((a, w) => a + recipeById(w.rid).servings * w.b, 0);
 function weekCard() {
   const wk = weekSel(), n = weekServings(), nb = weekServings(true);
-  return `<div class="card" style="background:var(--soft)"><h2 style="margin:0 0 4px">🍳 This week I'm making</h2>
+  const D = weekDays(), slots = D * 2;
+  return `<div class="card" style="background:var(--soft)"><div class="row"><h2 class="grow" style="margin:0 0 4px">🍳 What I'm making</h2></div>
+    <div class="row" style="gap:6px;margin:2px 0 6px"><span class="small muted">Shopping for</span><div class="chips" style="margin:0"><button class="chip ${D === 7 ? 'on' : ''}" data-act="wkdays" data-v="7">1 week</button><button class="chip ${D === 14 ? 'on' : ''}" data-act="wkdays" data-v="14">2 weeks</button></div></div>
     ${wk.length ? wk.map(w => { const r = recipeById(w.rid); return `<div class="item"><div class="grow"><div class="name">${esc(r.name)}</div><div class="meta">${r.meal === 'Breakfast' ? `${r.servings * w.b} breakfast${r.servings * w.b === 1 ? '' : 's'}` : `${r.servings * w.b} servings`}</div></div>
         <div class="stepper"><button data-act="wkb" data-id="${esc(r.id)}" data-d="-1" aria-label="Fewer batches">−</button><span style="min-width:30px;text-align:center"><b>${w.b}×</b></span><button data-act="wkb" data-id="${esc(r.id)}" data-d="1" aria-label="More batches">+</button></div>
         <button class="icon-btn" data-act="wkrm" data-id="${esc(r.id)}" aria-label="Remove">✕</button></div>`; }).join('') + `
-      <div class="small" style="margin:6px 0 8px">${n ? `<b>${n} lunches & dinners</b> — covers ${Math.min(14, n)} of 14${n > 14 ? ` · ${n - 14} extra to freeze` : n < 14 ? ` · the other ${14 - n} are filled in for you` : ''}.` : 'Lunches and dinners will be filled in for you.'}
-        ${nb ? `<br><b>${nb} breakfast${nb === 1 ? '' : 's'}</b> — covers ${Math.min(7, nb)} of 7${nb < 7 ? ` · the other ${7 - nb} are filled in for you` : ''}.` : ''}</div>
-      <div class="row" style="gap:6px"><button class="btn sm grow" data-act="rshop" data-id="week">🛒 Check groceries</button><button class="btn sm grow" data-act="wkplan">🗓 Put them in my week</button></div>`
-    : `<div class="small muted">Tap <b>➕ Making this week</b> on the recipes you're cooking. Then get one grocery check for all of them, and have them fill your lunches and dinners.</div>`}</div>`;
+      <div class="small" style="margin:6px 0 8px">${n ? `<b>${n} lunches & dinners</b> — covers ${Math.min(slots, n)} of ${slots}${n > slots ? ` · ${n - slots} extra to freeze` : n < slots ? ` · the other ${slots - n} are filled in for you${D === 14 && slots - n >= 4 ? ' (tap + to make bigger batches)' : ''}` : ''}.` : 'Lunches and dinners will be filled in for you.'}
+        ${nb ? `<br><b>${nb} breakfast${nb === 1 ? '' : 's'}</b> — covers ${Math.min(D, nb)} of ${D}${nb < D ? ` · the other ${D - nb} are filled in for you` : ''}.` : ''}
+        ${D === 14 ? `<div class="muted" style="margin-top:4px">🧊 Two weeks: cooked food keeps 4 days in the fridge, so freeze most of the bowls and chili right after cooking. Buy week-2 vegetables frozen (or chop and freeze peppers and onions), and use the meat by its date or freeze it.</div>` : ''}</div>
+      <div class="row" style="gap:6px"><button class="btn sm grow" data-act="rshop" data-id="week">🛒 Check groceries</button><button class="btn sm grow" data-act="wkplan">🗓 Put them in my ${D === 14 ? '2 weeks' : 'week'}</button></div>`
+    : `<div class="small muted">Tap <b>➕ Making this week</b> on the recipes you're cooking. Then get one grocery check for all of them, and have them fill your meals for 1 or 2 weeks.</div>`}</div>`;
 }
 function buildWeekFromRecipes() {
   const left = weekSel().map(w => ({ r: recipeById(w.rid), n: recipeById(w.rid).servings * w.b }));
   const pool = planPool(), used = {}, prev = {}, days = [];
-  for (let d = 0; d < 7; d++) {
+  for (let d = 0; d < weekDays(); d++) {
     const day = makeDay(pool, used, { prev });
     let last = null;
     day.meals = day.meals.map(m => {
@@ -2787,7 +2791,7 @@ function planTotals(day) {
   const list = day.meals.flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
   return totals(list);
 }
-const planSwitch = () => `<div class="chips" style="margin-bottom:10px"><button class="chip ${planView === 'plan' ? 'on' : ''}" data-act="pview" data-v="plan">🗓 This week's plan</button><button class="chip ${planView === 'recipes' ? 'on' : ''}" data-act="pview" data-v="recipes">📖 My recipes (${(S.recipes || []).length})</button></div>`;
+const planSwitch = () => `<div class="chips" style="margin-bottom:10px"><button class="chip ${planView === 'plan' ? 'on' : ''}" data-act="pview" data-v="plan">🗓 My plan</button><button class="chip ${planView === 'recipes' ? 'on' : ''}" data-act="pview" data-v="recipes">📖 My recipes (${(S.recipes || []).length})</button></div>`;
 function renderPlan() {
   if (planView === 'recipes') { $('#view').innerHTML = planSwitch() + renderRecipes(); return; }
   // A plan saved by an older planner gets rebuilt with the current one, keeping the same number of days.
@@ -2823,7 +2827,7 @@ function renderPlan() {
     const days = S.plan.days; if (planDay >= days.length) planDay = 0;
     if (S.plan.prep) h += `<div class="card" style="background:var(--soft)"><div class="row"><div class="grow"><b>🍱 Meal prep for ${S.plan.prep} days</b><div class="small muted">Same meals every day — cook once with the prep-day guide.</div></div>
       <button class="btn sm" data-act="prepguide">Prep guide</button></div></div>`;
-    else if (days.length > 1) h += `<div class="chips" style="margin-bottom:10px">${days.map((d, i) => `<button class="chip ${i === planDay ? 'on' : ''}" data-act="pday" data-v="${i}">${i === planTodayIdx() ? 'Today' : (() => { const dt = new Date(S.plan.start + 'T12:00:00'); dt.setDate(dt.getDate() + i); return dt.toLocaleDateString(undefined, { weekday: 'short' }); })()}</button>`).join('')}</div>`;
+    else if (days.length > 1) h += `<div class="chips" style="margin-bottom:10px">${days.map((d, i) => `<button class="chip ${i === planDay ? 'on' : ''}" data-act="pday" data-v="${i}">${i === planTodayIdx() ? 'Today' : (() => { const dt = new Date(S.plan.start + 'T12:00:00'); dt.setDate(dt.getDate() + i); return dt.toLocaleDateString(undefined, { weekday: 'short' }) + (days.length > 7 ? ' ' + dt.getDate() : ''); })()}</button>`).join('')}</div>`;
     const day = days[planDay], t = planTotals(day);
 
     h += `<div class="card"><h2>${S.plan.prep ? 'Each day' : `Day ${planDay + 1}`} totals</h2>
@@ -2837,7 +2841,7 @@ function renderPlan() {
       if (m.recipe) { const r = recipeById(m.recipe);
         h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal} · ${esc(m.title)} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
           <div class="tap" data-act="${r ? 'ropen' : 'none'}" data-id="${esc(m.recipe)}" style="margin:8px auto 4px;max-width:230px">${mealVisual(m, 'card')}</div>
-          <div class="small muted">📖 From your recipes · 1 serving${r && r.servings > 1 ? ` (1/${r.servings} of a batch)` : ''}${planDay >= 4 ? ' · use a bowl from the freezer (cooked food keeps 4 days in the fridge)' : ''}</div>
+          <div class="small muted">📖 From your recipes · 1 serving${r && r.servings > 1 ? ` (1/${r.servings} of a batch)` : ''}${planDay >= 4 ? ' · 🧊 take one out of the freezer the night before' : ''}</div>
           <div class="row" style="margin-top:6px">${r ? `<button class="btn sm" data-act="ropen" data-id="${esc(r.id)}">📖 Recipe</button>` : ''}<button class="btn alt sm" data-act="logmeal" data-m="${mi}">Log this meal today</button></div></div>`;
         return; }
       h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal}${m.title ? ` · ${esc(m.title)}` : ''} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
@@ -3007,7 +3011,7 @@ document.addEventListener('click', e => {
         ['Log what I ate from my plan', '<b>Today</b> → tap <b>Ate it</b> next to the meal.'],
         ['Check if a food is OK', 'Tap the big <b>📷 Scan</b> button. Green = approved. Curved jar? Use <b>📸 Photo of the barcode</b>.'],
         ['Log a snack', 'Scan it (or <b>Today → 🔎 Search food</b>), set servings, tap <b>Log it</b>.'],
-        ['See my meals and recipes', '<b>Meals</b> → <b>This week\'s plan</b> or <b>My recipes</b>. Tap a meal for its recipe and picture.'],
+        ['See my meals and recipes', '<b>Meals</b> → <b>My plan</b> or <b>My recipes</b>. Tap a meal for its recipe and picture.'],
         ['Make a new plan', '<b>Meals → ⚙️ Change my plan → Make a new plan</b>.'],
         ['Shop for a recipe', '<b>Meals → My recipes</b> → open it → <b>🛒 Shopping list</b>.'],
         ['Use my shopping list at Costco', '<b>Groceries → 🛒 Shopping list</b>. Tick items as they go in the cart.'],
@@ -3038,10 +3042,13 @@ document.addEventListener('click', e => {
       if (inStore && pi.servings) changeStock(id, pi.servings * S.list[id].qty, true); // in the store: it's in your cart, so it's in your kitchen
       save(); toast(inStore ? 'In your cart — added to your kitchen' : 'Added to your shopping list'); openFood(id, { fromScan: true, focusPrice: inStore }); break; }
     case 'pview': planView = el.dataset.v; renderPlan(); break;
-    case 'wkadd': S.week = S.week || []; if (!S.week.some(w => w.rid === id)) S.week.push({ rid: id, b: recipeById(id).meal === 'Breakfast' && recipeById(id).servings === 1 ? 7 : 1 }); /* a one-bowl breakfast: every morning */ save(); renderPlan(); toast(`${recipeById(id).name} added to this week`); break;
+    case 'wkadd': S.week = S.week || []; if (!S.week.some(w => w.rid === id)) S.week.push({ rid: id, b: recipeById(id).meal === 'Breakfast' && recipeById(id).servings === 1 ? weekDays() : 1 }); /* a one-bowl breakfast: every morning */ save(); renderPlan(); toast(`${recipeById(id).name} added to this week`); break;
     case 'wkrm': S.week = (S.week || []).filter(w => w.rid !== id); save(); renderPlan(); break;
     case 'wkb': { const w = (S.week || []).find(w => w.rid === id); if (w) w.b = Math.max(1, Math.min(recipeById(id).meal === 'Breakfast' ? 14 : 6, w.b + +el.dataset.d)); save(); renderPlan(); break; }
-    case 'wkplan': if (!weekSel().length) { toast('Pick a recipe first'); break; } buildWeekFromRecipes(); planView = 'plan'; renderPlan(); toast('Your week is built around your recipes'); break;
+    case 'wkdays': { const old = weekDays(); S.weekDays = +el.dataset.v; // one-bowl breakfasts follow the number of mornings
+      for (const w of S.week || []) { const r = recipeById(w.rid); if (r && r.meal === 'Breakfast' && r.servings === 1 && w.b === old) w.b = weekDays(); }
+      save(); renderPlan(); break; }
+    case 'wkplan': if (!weekSel().length) { toast('Pick a recipe first'); break; } buildWeekFromRecipes(); planView = 'plan'; renderPlan(); toast(weekDays() === 14 ? 'Your 2 weeks are built around your recipes' : 'Your week is built around your recipes'); break;
     case 'rnew': editRecipe(null); break;
     case 'ropen': showRecipeCard(id); break;
     case 'redit': editRecipe(id); break;
