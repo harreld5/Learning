@@ -790,7 +790,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '6.3 (simpler layout: Today · Meals · Scan · Groceries · More)';
+const APP_VERSION = '6.4 (cocoa and spices in their own aisle)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -819,6 +819,8 @@ if (!S.unitsChosen && S.units === 'g') S.units = 'mixed'; // ounces for meat, gr
 for (const f of Object.values(S.foods)) if (f.src === 'scan' && f.cat === 'other' && !f.catChecked) { f.cat = guessCategory(f); f.catAuto = true; f.catChecked = true; }
 // One-time: you asked for no edamame or corn (corn tortillas and popcorn are still fine).
 if (!S.noCornEdamame) { for (const w of ['edamame', 'corn on the cob', 'sweet corn', 'kernel corn']) if (!S.avoid.includes(w)) S.avoid.push(w); S.noCornEdamame = true; }
+// One-time: re-check categories of low-calorie foods scanned before (cocoa powder was filed as meat).
+if (!S.catFix2) { for (const f of Object.values(S.foods)) if (f.src === 'scan' && (f.catAuto || f.cat === 'protein') && (f.cal || 0) <= 25 && ['protein', 'bprotein', 'fat', 'snack', 'carb'].includes(f.cat)) { const g = guessCategory(f); if (g !== f.cat) { f.cat = g; f.catAuto = true; } } S.catFix2 = true; }
 // Drop plan items whose food no longer exists (e.g. removed from the catalog).
 if (S.plan) for (const d of S.plan.days) for (const m of d.meals) m.items = m.items.filter(x => getFoodSafe(x.id));
 function save() {
@@ -850,6 +852,9 @@ function priceText(f) { const c = servingCost(f); return f.ppl ? `${money(f.ppl)
 // Best guess at a food's type from its name and macros, so scanned foods can go straight into meal plans.
 function guessCategory(f) {
   const n = ((f.name || '') + ' ' + (f.brand || '')).toLowerCase(), cal = f.cal || 0;
+  if (/\b(cocoa|baking (soda|powder)|flour|sugar|cornstarch|yeast|extract|sprinkles|chocolate chips|gelatin|pudding mix|cake mix|frosting)\b/.test(n)) return 'other';
+  // Very low-calorie foods (spices, cocoa, sauces): the protein share is meaningless, so don't call them "meat".
+  if (cal > 0 && cal <= 25 && !/\b(chicken|beef|pork|turkey|fish|tuna|salmon|shrimp|egg|jerky|deli|ham)\b/.test(n)) return /lettuce|spinach|greens|celery|cucumber|pickles?/.test(n) ? 'veg' : 'other';
   if (/\b(bar|bars|chips|crisps|jerky|sticks?|crackers?|cookies?|popcorn|pretzels?|snacks?|trail mix|bites|puffs)\b/.test(n)) return 'snack';
   if (/\b(water|soda|juice|drink|coffee|tea|latte|milk|beverage|kombucha|lemonade|shake|sauce|dressing|ketchup|mustard|mayo|mayonnaise|syrup|seasonings?|spices?|oil|vinegar|creamer|broth|stock|salsa|cayenne|paprika|cumin|oregano|cinnamon|nutmeg|turmeric|ground pepper|black pepper|red pepper|peppercorns?|chili powder|garlic powder|onion powder|dried \w+|\w+ flakes)\b/.test(n)) return 'other';
   if (/yogurt|cottage|\beggs?\b|skyr/.test(n)) return 'bprotein';
@@ -1447,8 +1452,9 @@ function renderCostco() {
 /* ---------- Shopping list ---------- */
 const priceOf = id => S.prices[id] != null ? S.prices[id] : (PRICES[id] ? PRICES[id][0] : null);
 const AISLES = [['protein', 'Meat & seafood'], ['bprotein', 'Eggs & dairy'], ['veg', 'Produce'], ['fruit', 'Produce'], ['carb', 'Bread, grains & pantry'],
-  ['fat', 'Nuts, cheese & oils'], ['snack', 'Snacks & bars'], ['other', 'Drinks, sauces & more']];
-const aisleOf = f => (AISLES.find(([c]) => c === f.cat) || AISLES[AISLES.length - 1])[1];
+  ['fat', 'Nuts, cheese & oils'], ['snack', 'Snacks & bars'], ['_baking', 'Baking & spices'], ['other', 'Drinks, sauces & more']];
+const aisleOf = f => /\b(cocoa|baking (soda|powder)|flour|sugar|cornstarch|yeast|extract|vanilla|sprinkles|chocolate chips)\b/i.test(f.name || '') || (f.src !== 'costco' && spiceNameForFood(f)) ? 'Baking & spices'
+  : (AISLES.find(([c]) => c === f.cat) || AISLES[AISLES.length - 1])[1];
 function renderList() {
   const back = prevTab && prevTab !== 'list' ? prevTab : 'today';
   $('#hdr-extra').innerHTML = `<button class="btn alt sm" data-act="tab" data-t="${back}" aria-label="Back">‹ ${({ today: 'Today', scan: 'Scan', costco: 'Costco', plan: 'Meals', settings: 'More' })[back]}</button>`;
