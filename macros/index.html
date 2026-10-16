@@ -790,7 +790,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '6.6 (making this week: recipes → groceries → plan)';
+const APP_VERSION = '6.7 (egg scramble bowls)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1657,7 +1657,28 @@ const chipotleBowl = (meat) => {
       'Build 4 bowls: rice, beans, fajita veggies and the meat, then salsa, a spoon of Greek yogurt, a lime wedge and hot sauce. (Grams per bowl are in the notes.)',
     ] };
 };
-const SEED_RECIPES = () => [chipotleBowl('chicken'), chipotleBowl('steak'), CHILI_RECIPE];
+// Egg scramble bowl: eggs + egg whites + chicken sausage + veggies, with potatoes on days you want the carbs.
+const scrambleBowl = (potato) => ({ id: potato ? 'scramble-potato' : 'scramble', name: potato ? 'Egg Scramble Bowl with Potatoes' : 'Egg Scramble Bowl', servings: 1, meal: 'Breakfast', time: potato ? '20 min (10 min with prepped potatoes)' : '10 min',
+  notes: `One bowl. In grams: ${potato ? '≈ 170 g cooked potatoes (200 g raw) · ' : ''}≈ 230 g scramble (2 eggs + 180 g whites) · 57 g sausage · ≈ 120 g cooked veggies · 64 g salsa.\n${potato ? 'Meal prep: roast a week of potatoes on Sunday (1.4 kg raw = 7 bowls) — then it\'s a 10-minute breakfast.\n' : 'Need carbs today? Make the "with Potatoes" version instead.\n'}Make ahead: cook 4–5 bowls at once (keep the eggs a little soft), refrigerate, and reheat 60–90 seconds.\nOptional: 1 tbsp parmesan adds 20 cal and 1 g saturated fat. Skip cheddar — ¼ cup is about 5.5 g saturated fat.`,
+  ingredients: [
+    ...(potato ? [{ text: '200 g gold or red potatoes, diced 1.5 cm', id: 'pr24', sv: 1.41 }] : []),
+    { text: '2 large eggs', id: 'b1', sv: 1 },
+    { text: '180 g (¾ cup) liquid egg whites', id: 'b2', sv: 1.5 },
+    { text: '3 chicken breakfast sausage links (Amylu), sliced', id: 'e3', sv: 1 },
+    { text: '75 g bell pepper, diced', id: 'pr6', sv: 0.82 },
+    { text: '40 g onion, diced', id: 'pr15', sv: 0.5 },
+    { text: '30 g (1 cup) baby spinach', id: 'v3', sv: 0.33 },
+    { text: '4 tbsp salsa', id: 'sc7', sv: 2 },
+    { text: 'Cooking spray, salt, black pepper, garlic powder', id: null, sv: null, pantry: true },
+  ],
+  steps: [
+    ...(potato ? ['Potatoes: microwave the diced potatoes in a covered bowl with a splash of water 3–4 min until just tender, then crisp them in a nonstick pan with cooking spray, salt and pepper, 6–8 min. (Or warm up potatoes you roasted on prep day.) Move to your bowl.'] : []),
+    'Brown the sliced sausage in the nonstick pan over medium-high, 3–4 min. Set aside with the potatoes.',
+    'Add the pepper and onion with a little spray; cook 4–5 min until soft. Toss in the spinach for 30 seconds.',
+    'Whisk the eggs and egg whites with a pinch of salt, pepper and garlic powder. Turn the heat to medium-low, pour them in and gently push them around until just set, 2–3 min.',
+    'Pile the scramble and sausage into the bowl and top with salsa (and hot sauce if you like).',
+  ] });
+const SEED_RECIPES = () => [scrambleBowl(false), scrambleBowl(true), chipotleBowl('chicken'), chipotleBowl('steak'), CHILI_RECIPE];
 // Add recipes made for you (once each; deleting one keeps it deleted).
 S.recipes = S.recipes || []; S.seeded = S.seeded || (S.recipesSeeded ? ['chili'] : []);
 // You skip lettuce in the Chipotle bowls: take it out of copies already saved on this phone.
@@ -1728,7 +1749,7 @@ function renderRecipes() {
   let h = weekCard() + `<div class="row" style="margin-bottom:10px"><div class="small muted grow">Your favorites, with macros per serving.</div><button class="btn sm" data-act="rnew">+ New recipe</button></div>`;
   if (!rs.length) h += `<div class="empty">No recipes yet. Tap <b>+ New recipe</b> and paste the ingredients and steps.</div>`;
   for (const r of rs) { const m = recipeMacros(r).per;
-    h += `<div class="card tap" data-act="ropen" data-id="${esc(r.id)}"><div class="row"><h3 class="grow" style="margin:0">${esc(r.name)}</h3><span class="small muted">${r.servings} servings</span></div>
+    h += `<div class="card tap" data-act="ropen" data-id="${esc(r.id)}"><div class="row"><h3 class="grow" style="margin:0">${esc(r.name)}</h3><span class="small muted">${r.meal === 'Breakfast' ? '🍳 Breakfast · ' : ''}${r.servings} serving${r.servings === 1 ? '' : 's'}</span></div>
       <div class="small" style="margin-top:4px"><b>${Math.round(m.cal)} cal</b> · <span style="color:var(--p)">P${Math.round(m.p)}</span> C${Math.round(m.c)} F${Math.round(m.f)} · sat fat ${r1(m.sf)} g <span class="muted">per serving</span></div>
       ${r.time ? `<div class="small muted">⏱ ${esc(r.time)}</div>` : ''}
       <div style="margin-top:8px">${(S.week || []).some(w => w.rid === r.id) ? `<button class="btn sm" data-act="wkrm" data-id="${esc(r.id)}">✓ Making this week</button>` : `<button class="btn alt sm" data-act="wkadd" data-id="${esc(r.id)}">➕ Making this week</button>`}</div></div>`; }
@@ -1738,14 +1759,14 @@ function showRecipeCard(id) {
   const r = recipeById(id); if (!r) return;
   if (showRecipeCard.last !== id) recipeBatches = 1; showRecipeCard.last = id;
   const M = recipeMacros(r), m = M.per, b = recipeBatches, food = recipeFood(r), left = stockOf(food.id);
-  sheet(`<div class="sheet-head"><div class="grow"><h2>${esc(r.name)}</h2><div class="small muted">${r.servings} servings${r.time ? ' · ⏱ ' + esc(r.time) : ''}</div></div><button class="icon-btn" data-act="close">✕</button></div>
+  sheet(`<div class="sheet-head"><div class="grow"><h2>${esc(r.name)}</h2><div class="small muted">${r.meal === 'Breakfast' ? '🍳 Breakfast · ' : ''}${r.servings} serving${r.servings === 1 ? '' : 's'}${r.time ? ' · ⏱ ' + esc(r.time) : ''}</div></div><button class="icon-btn" data-act="close">✕</button></div>
     <div class="nut" style="margin-top:8px"><div><b>${Math.round(m.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${Math.round(m.p)}</b><span>protein g</span></div><div><b style="color:var(--c)">${Math.round(m.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${Math.round(m.f)}</b><span>fat g</span></div></div>
     <div class="small muted">Per serving · saturated fat ${r1(m.sf)} g · fiber ${Math.round(m.fb)} g · ${M.manual ? 'your numbers' : `calculated from ${M.counted} of ${M.total} ingredients`}</div>
     ${left != null ? `<div class="small" style="margin-top:6px">🏠 Leftovers in your kitchen: <b>${r1(left)} serving${left === 1 ? '' : 's'}</b></div>` : ''}
     <div class="row wrap" style="gap:6px;margin-top:10px">
       <div class="stepper"><button data-act="rbatch" data-id="${esc(r.id)}" data-d="-1" aria-label="Fewer batches">−</button><span style="min-width:34px;text-align:center"><b>${b}×</b></span><button data-act="rbatch" data-id="${esc(r.id)}" data-d="1" aria-label="More batches">+</button></div>
       <button class="btn sm grow" data-act="rshop" data-id="${esc(r.id)}">🛒 Shopping list</button></div>
-    <div class="small muted" style="margin-top:4px">Shows what you need to buy for ${b} batch${b === 1 ? '' : 'es'} (${r.servings * b} servings) and what you already have, before anything goes on your list.</div>
+    <div class="small muted" style="margin-top:4px">Shows what you need to buy for ${b} batch${b === 1 ? '' : 'es'} (${r.servings * b} serving${r.servings * b === 1 ? '' : 's'}) and what you already have, before anything goes on your list.</div>
     <div class="row" style="gap:6px;margin-top:8px"><button class="btn alt sm grow" data-act="open" data-id="${esc(food.id)}">🍽 Log a serving</button><button class="btn alt sm grow" data-act="rmade" data-id="${esc(r.id)}">🏠 I made it</button></div>
     <h3 style="margin:14px 0 4px;font-size:15px">Ingredients${b > 1 ? ` (1 batch — multiply by ${b})` : ''}</h3>
     <ul class="reasons" style="font-size:15px">${r.ingredients.map((i, ix) => { const f = i.id && getFood(i.id);
@@ -1761,6 +1782,7 @@ function editRecipe(id) {
     <label class="small muted">Name</label><input type="text" id="rname" value="${esc(r.name)}" placeholder="e.g. Turkey chili" style="margin-bottom:8px">
     <div class="row" style="gap:8px"><div class="grow"><label class="small muted">Servings it makes</label><input id="rserv" type="number" inputmode="numeric" min="1" value="${r.servings}"></div>
       <div class="grow"><label class="small muted">Time (optional)</label><input type="text" id="rtime" value="${esc(r.time || '')}" placeholder="45 min"></div></div>
+    <label class="small muted" style="display:block;margin-top:8px">It's for</label><select id="rmeal"><option value="" ${r.meal !== 'Breakfast' ? 'selected' : ''}>Lunch & dinner</option><option value="Breakfast" ${r.meal === 'Breakfast' ? 'selected' : ''}>Breakfast</option></select>
     <label class="small muted" style="display:block;margin-top:8px">Ingredients — one per line, amount first (e.g. “680 g top sirloin”, “2 cans black beans”, “1 tbsp olive oil”)</label>
     <textarea id="ring" rows="8" style="width:100%">${esc(r.ingredients.map(i => i.text).join('\n'))}</textarea>
     <label class="small muted" style="display:block;margin-top:8px">Steps — one per line</label>
@@ -1775,7 +1797,7 @@ function saveRecipe(id) {
   const name = $('#rname').value.trim(); if (!name) { toast('Give the recipe a name'); return; }
   const old = id ? recipeById(id) : null, lines = s => s.split('\n').map(x => x.replace(/^\s*([-•*]|\d+[.)])\s*/, '').trim()).filter(Boolean);
   const r = old || { id: uid() };
-  r.name = name; r.servings = Math.max(1, Math.round(+$('#rserv').value || 1)); r.time = $('#rtime').value.trim(); r.notes = $('#rnotes').value.trim();
+  r.name = name; r.meal = $('#rmeal').value || undefined; r.servings = Math.max(1, Math.round(+$('#rserv').value || 1)); r.time = $('#rtime').value.trim(); r.notes = $('#rnotes').value.trim();
   r.ingredients = lines($('#ring').value).map(t => linkLine(t, old && old.ingredients.find(i => i.text === t)));
   r.steps = lines($('#rsteps').value);
   const man = {}; for (const k of ['cal', 'p', 'c', 'f', 'sf']) { const v = $('#rm-' + k).value.trim(); if (v !== '' && +v >= 0) man[k] = +v; }
@@ -1878,14 +1900,15 @@ function vegServings(x) {
   const f = getFood(x.id); return f && f.cat === 'veg' ? x.sv : 0;
 }
 const weekSel = () => (S.week || []).filter(w => recipeById(w.rid));
-const weekServings = () => weekSel().reduce((a, w) => a + recipeById(w.rid).servings * w.b, 0);
+const weekServings = (bf = false) => weekSel().filter(w => (recipeById(w.rid).meal === 'Breakfast') === bf).reduce((a, w) => a + recipeById(w.rid).servings * w.b, 0);
 function weekCard() {
-  const wk = weekSel(), n = weekServings();
+  const wk = weekSel(), n = weekServings(), nb = weekServings(true);
   return `<div class="card" style="background:var(--soft)"><h2 style="margin:0 0 4px">🍳 This week I'm making</h2>
-    ${wk.length ? wk.map(w => { const r = recipeById(w.rid); return `<div class="item"><div class="grow"><div class="name">${esc(r.name)}</div><div class="meta">${r.servings * w.b} servings</div></div>
+    ${wk.length ? wk.map(w => { const r = recipeById(w.rid); return `<div class="item"><div class="grow"><div class="name">${esc(r.name)}</div><div class="meta">${r.meal === 'Breakfast' ? `${r.servings * w.b} breakfast${r.servings * w.b === 1 ? '' : 's'}` : `${r.servings * w.b} servings`}</div></div>
         <div class="stepper"><button data-act="wkb" data-id="${esc(r.id)}" data-d="-1" aria-label="Fewer batches">−</button><span style="min-width:30px;text-align:center"><b>${w.b}×</b></span><button data-act="wkb" data-id="${esc(r.id)}" data-d="1" aria-label="More batches">+</button></div>
         <button class="icon-btn" data-act="wkrm" data-id="${esc(r.id)}" aria-label="Remove">✕</button></div>`; }).join('') + `
-      <div class="small" style="margin:6px 0 8px"><b>${n} meals</b> — covers ${Math.min(14, n)} of the week's 14 lunches and dinners${n > 14 ? ` · ${n - 14} extra to freeze` : n < 14 ? ` · the other ${14 - n} are filled in for you` : ''}.</div>
+      <div class="small" style="margin:6px 0 8px">${n ? `<b>${n} lunches & dinners</b> — covers ${Math.min(14, n)} of 14${n > 14 ? ` · ${n - 14} extra to freeze` : n < 14 ? ` · the other ${14 - n} are filled in for you` : ''}.` : 'Lunches and dinners will be filled in for you.'}
+        ${nb ? `<br><b>${nb} breakfast${nb === 1 ? '' : 's'}</b> — covers ${Math.min(7, nb)} of 7${nb < 7 ? ` · the other ${7 - nb} are filled in for you` : ''}.` : ''}</div>
       <div class="row" style="gap:6px"><button class="btn sm grow" data-act="rshop" data-id="week">🛒 Check groceries</button><button class="btn sm grow" data-act="wkplan">🗓 Put them in my week</button></div>`
     : `<div class="small muted">Tap <b>➕ Making this week</b> on the recipes you're cooking. Then get one grocery check for all of them, and have them fill your lunches and dinners.</div>`}</div>`;
 }
@@ -1896,8 +1919,8 @@ function buildWeekFromRecipes() {
     const day = makeDay(pool, used, { prev });
     let last = null;
     day.meals = day.meals.map(m => {
-      if (m.meal !== 'Lunch' && m.meal !== 'Dinner') return m;
-      const c = left.filter(x => x.n > 0).sort((a, b) => ((a.r.id === last) - (b.r.id === last)) || (b.n - a.n))[0];
+      const isB = m.meal === 'Breakfast'; if (!isB && m.meal !== 'Lunch' && m.meal !== 'Dinner') return m;
+      const c = left.filter(x => x.n > 0 && (x.r.meal === 'Breakfast') === isB).sort((a, b) => ((a.r.id === last) - (b.r.id === last)) || (b.n - a.n))[0];
       if (!c) return m;
       c.n--; last = c.r.id; const food = recipeFood(c.r);
       return { meal: m.meal, key: 'recipe', recipe: c.r.id, title: c.r.name, label: 'Recipe', items: [{ id: food.id, sv: 1, step: 1, min: 1, max: 1, role: 'recipe' }] };
@@ -2707,7 +2730,7 @@ function mealLegend(m) {
 function mealVisual(m, size) {
   if (m.recipe && !mealPhoto(m)) { const r = recipeById(m.recipe); if (r) { // draw it from the recipe's ingredients, one serving's worth
     const items = r.ingredients.filter(i => i.id && i.sv != null && !i.pantry && getFood(i.id) && !/\b(lime|lemon|garlic|oil|worcestershire)\b/i.test(getFood(i.id).name) && foodKind(getFood(i.id)) !== 'generic').map(i => ({ id: i.id, sv: i.sv / r.servings }));
-    return mealPicture({ ...m, key: /chili|stew|soup|curry/i.test(r.name) ? 'stew' : /bowl/i.test(r.name) ? 'bowl' : 'plate', items }, size); } }
+    return mealPicture({ ...m, key: /chili|stew|soup|curry/i.test(r.name) ? 'stew' : /scramble|hash/i.test(r.name) ? 'hash' : /bowl/i.test(r.name) ? 'bowl' : 'plate', items }, size); } }
   const ph = mealPhoto(m);
   return ph ? `<img src="${ph}" alt="Your photo of ${esc(m.title || m.meal)}" style="width:100%;border-radius:12px;display:block;aspect-ratio:16/10;object-fit:cover">` : mealPicture(m, size);
 }
@@ -2814,7 +2837,7 @@ function renderPlan() {
       if (m.recipe) { const r = recipeById(m.recipe);
         h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal} · ${esc(m.title)} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
           <div class="tap" data-act="${r ? 'ropen' : 'none'}" data-id="${esc(m.recipe)}" style="margin:8px auto 4px;max-width:230px">${mealVisual(m, 'card')}</div>
-          <div class="small muted">📖 From your recipes · 1 serving${r ? ` (1/${r.servings} of a batch)` : ''}${planDay >= 4 ? ' · use a bowl from the freezer (cooked food keeps 4 days in the fridge)' : ''}</div>
+          <div class="small muted">📖 From your recipes · 1 serving${r && r.servings > 1 ? ` (1/${r.servings} of a batch)` : ''}${planDay >= 4 ? ' · use a bowl from the freezer (cooked food keeps 4 days in the fridge)' : ''}</div>
           <div class="row" style="margin-top:6px">${r ? `<button class="btn sm" data-act="ropen" data-id="${esc(r.id)}">📖 Recipe</button>` : ''}<button class="btn alt sm" data-act="logmeal" data-m="${mi}">Log this meal today</button></div></div>`;
         return; }
       h += `<div class="card meal"><div class="row"><h3 class="grow">${m.meal}${m.title ? ` · ${esc(m.title)}` : ''} <span style="color:var(--p)">· ${Math.round(mt.p)} g protein</span></h3><span class="small muted">${Math.round(mt.cal)} cal · C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
@@ -3015,9 +3038,9 @@ document.addEventListener('click', e => {
       if (inStore && pi.servings) changeStock(id, pi.servings * S.list[id].qty, true); // in the store: it's in your cart, so it's in your kitchen
       save(); toast(inStore ? 'In your cart — added to your kitchen' : 'Added to your shopping list'); openFood(id, { fromScan: true, focusPrice: inStore }); break; }
     case 'pview': planView = el.dataset.v; renderPlan(); break;
-    case 'wkadd': S.week = S.week || []; if (!S.week.some(w => w.rid === id)) S.week.push({ rid: id, b: 1 }); save(); renderPlan(); toast(`${recipeById(id).name} added to this week`); break;
+    case 'wkadd': S.week = S.week || []; if (!S.week.some(w => w.rid === id)) S.week.push({ rid: id, b: recipeById(id).meal === 'Breakfast' && recipeById(id).servings === 1 ? 7 : 1 }); /* a one-bowl breakfast: every morning */ save(); renderPlan(); toast(`${recipeById(id).name} added to this week`); break;
     case 'wkrm': S.week = (S.week || []).filter(w => w.rid !== id); save(); renderPlan(); break;
-    case 'wkb': { const w = (S.week || []).find(w => w.rid === id); if (w) w.b = Math.max(1, Math.min(6, w.b + +el.dataset.d)); save(); renderPlan(); break; }
+    case 'wkb': { const w = (S.week || []).find(w => w.rid === id); if (w) w.b = Math.max(1, Math.min(recipeById(id).meal === 'Breakfast' ? 14 : 6, w.b + +el.dataset.d)); save(); renderPlan(); break; }
     case 'wkplan': if (!weekSel().length) { toast('Pick a recipe first'); break; } buildWeekFromRecipes(); planView = 'plan'; renderPlan(); toast('Your week is built around your recipes'); break;
     case 'rnew': editRecipe(null); break;
     case 'ropen': showRecipeCard(id); break;
