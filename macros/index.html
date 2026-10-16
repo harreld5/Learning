@@ -858,7 +858,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '7.4 (easy-to-read shopping list)';
+const APP_VERSION = '7.5 (recipes show only what you need)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1861,16 +1861,26 @@ function renderRecipes() {
 }
 function showRecipeCard(id) {
   const r = recipeById(id); if (!r) return;
-  if (showRecipeCard.last !== id) recipeBatches = 1; showRecipeCard.last = id;
+  if (showRecipeCard.last !== id) { recipeBatches = 1; recipeSel = {}; } showRecipeCard.last = id;
   const M = recipeMacros(r), m = M.per, b = recipeBatches, food = recipeFood(r), left = stockOf(food.id);
+  const rows = recipeRows(r.id), sel = fullSel(rows), need = rows.filter(x => sel[x.key] === 'buy'), have = rows.filter(x => sel[x.key] === 'have');
+  const needBox = `<div class="card" style="margin:10px 0 6px;padding:10px 12px;border:2px solid var(--brand)">
+      <h3 style="margin:0 0 2px;font-size:17px">🛒 You need to get${need.length ? ` (${need.length})` : ''}</h3>
+      ${need.length ? need.map(x => { const mm = x.kind === 'extra' && x.label.match(/^(.*?)\s*\(([^)]*)\)\s*$/); return `<div class="item"><div class="grow"><div class="name">${x.kind === 'spice' ? '🧂 ' : ''}${esc(mm ? mm[1] : x.label)}</div><div class="meta">${esc([mm ? mm[2] : '', x.kind === 'extra' ? '' : x.note].filter(Boolean).join(' · '))}</div></div>
+          <button class="btn ghost sm" data-act="rhave" data-id="${esc(r.id)}" data-k="${esc(x.key)}">✓ Have it</button></div>`; }).join('')
+        : '<div class="small" style="padding:6px 0">Nothing — you have everything. Go cook! 🎉</div>'}
+      ${need.length ? `<button class="btn block" style="margin-top:8px" data-act="rcheckgo" data-id="${esc(r.id)}">Add ${need.length === 1 ? 'it' : `these ${need.length}`} to my shopping list</button>` : ''}
+      ${have.length ? `<div class="small muted" style="margin-top:8px">✅ <b>Already have (${have.length})</b> — taken off. Out of one? Tap it to put it back:</div>
+        <div class="chips" style="margin:4px 0 0">${have.map(x => `<button class="chip" style="font-size:13px;padding:4px 10px" data-act="rneedit" data-id="${esc(r.id)}" data-k="${esc(x.key)}">${esc(x.kind === 'extra' ? x.label.replace(/\s*\([^)]*\)\s*$/, '') : x.label)}</button>`).join('')}</div>` : ''}
+    </div>`;
   sheet(`<div class="sheet-head"><div class="grow"><h2>${esc(r.name)}</h2><div class="small muted">${r.meal === 'Breakfast' ? '🍳 Breakfast · ' : ''}${r.servings} serving${r.servings === 1 ? '' : 's'}${r.time ? ' · ⏱ ' + esc(r.time) : ''}</div></div><button class="icon-btn" data-act="close">✕</button></div>
     <div class="nut" style="margin-top:8px"><div><b>${Math.round(m.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${Math.round(m.p)}</b><span>protein g</span></div><div><b style="color:var(--c)">${Math.round(m.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${Math.round(m.f)}</b><span>fat g</span></div></div>
     <div class="small muted">Per serving · saturated fat ${r1(m.sf)} g · fiber ${Math.round(m.fb)} g · ${M.manual ? 'your numbers' : `calculated from ${M.counted} of ${M.total} ingredients`}</div>
     ${left != null ? `<div class="row" style="margin-top:6px;gap:6px"><div class="small grow">🏠 Leftovers in your kitchen: <b>${r1(left)} serving${left === 1 ? '' : 's'}</b></div>${left >= 1 && S.plan && r.meal !== 'Breakfast' ? `<button class="btn alt sm" data-act="leftovers2plan" data-id="${esc(r.id)}">🗓 Put leftovers in my plan</button>` : ''}</div>` : ''}
     <div class="row wrap" style="gap:6px;margin-top:10px">
       <div class="stepper"><button data-act="rbatch" data-id="${esc(r.id)}" data-d="-1" aria-label="Fewer batches">−</button><span style="min-width:34px;text-align:center"><b>${b}×</b></span><button data-act="rbatch" data-id="${esc(r.id)}" data-d="1" aria-label="More batches">+</button></div>
-      <button class="btn sm grow" data-act="rshop" data-id="${esc(r.id)}">🛒 Shopping list</button></div>
-    <div class="small muted" style="margin-top:4px">Shows what you need to buy for ${b} batch${b === 1 ? '' : 'es'} (${r.servings * b} serving${r.servings * b === 1 ? '' : 's'}) and what you already have, before anything goes on your list.</div>
+      <span class="small muted grow">${b} batch${b === 1 ? '' : 'es'} · ${r.servings * b} serving${r.servings * b === 1 ? '' : 's'}</span></div>
+    ${needBox}
     <div class="row" style="gap:6px;margin-top:8px"><button class="btn alt sm grow" data-act="open" data-id="${esc(food.id)}">🍽 Log a serving</button><button class="btn alt sm grow" data-act="rmade" data-id="${esc(r.id)}">🏠 I made it</button></div>
     <h3 style="margin:14px 0 4px;font-size:15px">Ingredients${b > 1 ? ` (1 batch — multiply by ${b})` : ''}</h3>
     <ul class="reasons" style="font-size:15px">${r.ingredients.map((i, ix) => { const f = i.id && getFood(i.id);
@@ -1945,6 +1955,16 @@ function recipeRows(rid) {
   for (const n of spices) { const e = spiceEntry(n); rows.push({ key: 's:' + n, kind: 'spice', label: n, have: !!e.have, note: e.have ? 'In your spice rack' : 'Not in your spice rack' }); }
   return rows;
 }
+// Your taps ("have it" / "put it back") over what the kitchen and spice rack say.
+const fullSel = rows => Object.fromEntries(rows.map(x => [x.key, recipeSel[x.key] || (x.have ? 'have' : 'buy')]));
+// Remember "have it" for next time (kitchen flag or spice rack), or undo it.
+function markHave(key, yes) {
+  recipeSel[key] = yes ? 'have' : 'buy';
+  const [kind, ...rest] = key.split(':'), v = rest.join(':');
+  if (kind === 'f' && stockOf(v) == null) { S.have = S.have || {}; if (yes) S.have[v] = true; else delete S.have[v]; }
+  if (kind === 's') spiceEntry(v).have = yes;
+  save();
+}
 function showRecipeCheck(rid) {
   const set = shopSet(rid), rows = recipeRows(rid), wk = rid === 'week';
   for (const x of rows) if (!(x.key in recipeSel)) recipeSel[x.key] = x.have ? 'have' : 'buy';
@@ -1956,8 +1976,8 @@ function showRecipeCheck(rid) {
   sheet(`<div class="sheet-head"><div class="grow"><h2>🛒 ${esc(title)}</h2><div class="small muted">${esc(sub)}</div></div><button class="icon-btn" data-act="${wk ? 'close' : 'ropen'}" data-id="${esc(rid)}" aria-label="Back">${wk ? '✕' : '‹'}</button></div>
     <div class="card" style="margin:8px 0;padding:10px 12px"><h3 style="margin:0 0 2px;font-size:16px">🛒 Need to buy (${buy.length})</h3>
       ${buy.length ? buy.map(row).join('') : '<div class="small muted" style="padding:6px 0">Nothing — you have everything! 🎉</div>'}</div>
-    <div class="card" style="margin:8px 0;padding:10px 12px;background:var(--bg)"><h3 style="margin:0 0 2px;font-size:16px">✅ Already have (${have.length})</h3>
-      ${have.length ? have.map(row).join('') : '<div class="small muted" style="padding:6px 0">Nothing marked yet. Tap “✓ I have it” on anything above that\'s already in your kitchen.</div>'}</div>
+    ${have.length ? `<div class="small muted" style="margin:8px 0 0">✅ <b>Already have (${have.length})</b> — taken off. Out of one? Tap it to put it back:</div>
+      <div class="chips" style="margin:4px 0 8px">${have.map(x => `<button class="chip" style="font-size:13px;padding:4px 10px" data-act="rcheck" data-id="${esc(rid)}" data-k="${esc(x.key)}">${esc(x.kind === 'extra' ? x.label.replace(/\s*\([^)]*\)\s*$/, '') : x.label)}</button>`).join('')}</div>` : ''}
     <div class="small muted" style="margin:4px 0 8px">Not sure? It's set to “need” unless your kitchen or spice rack says you have it. What you mark as “have” is remembered for next time.</div>
     <button class="btn block" data-act="rcheckgo" data-id="${esc(rid)}" ${buy.length ? '' : 'disabled'}>Add ${buy.length} item${buy.length === 1 ? '' : 's'} to my shopping list</button>`);
 }
@@ -3220,7 +3240,9 @@ document.addEventListener('click', e => {
     case 'rbatch': recipeBatches = Math.max(1, Math.min(6, recipeBatches + +el.dataset.d)); showRecipeCard(id); break;
     case 'rshop': recipeSel = {}; showRecipeCheck(id); break;
     case 'rcheck': recipeSel[el.dataset.k] = recipeSel[el.dataset.k] === 'buy' ? 'have' : 'buy'; showRecipeCheck(id); break;
-    case 'rcheckgo': recipeToList(id, recipeSel); break;
+    case 'rcheckgo': recipeToList(id, fullSel(recipeRows(id))); break;
+    case 'rhave': markHave(el.dataset.k, true); showRecipeCard(id); break;
+    case 'rneedit': markHave(el.dataset.k, false); showRecipeCard(id); break;
     case 'rmade': recipeMade(id); break;
     case 'rlink': e.preventDefault(); linkPicker(id, +el.dataset.i); break;
     case 'rlsearch': linkPicker(id, +el.dataset.i, $('#rlq').value.trim()); break;
