@@ -790,7 +790,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '6.4 (cocoa and spices in their own aisle)';
+const APP_VERSION = '6.5 (recipe shopping: need vs. have)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1518,8 +1518,13 @@ function renderList() {
 let listView = 'shop';
 const stockOf = id => S.stock && S.stock[id] != null ? S.stock[id] : null;
 function stockUnit(f) {
-  const per = /^(\d+)\s*(eggs?|bars?|tortillas?|slices?|links?|sticks?|pieces?|bagels?|rolls?|pouch(?:es)?|shakes?|patty|patties|bottles?|cans?|cups?|bowls?|trays?|burritos?|skewers?|meatballs?)\b/.exec(f.serving || '');
+  const sv = f.serving || '', per = /^(\d+)\s*(eggs?|bars?|tortillas?|slices?|links?|sticks?|pieces?|bagels?|rolls?|pouch(?:es)?|shakes?|patty|patties|bottles?|cans?|cups?|bowls?|trays?|burritos?|skewers?|meatballs?)\b/.exec(sv);
   if (isUnit(f) && per) return { u: per[2].replace(/s$|es$/, ''), per: +per[1] };
+  // Canned goods measured in cups: count cans (a 15 oz can holds about 1¾ cups).
+  const cups = /^(\d+\/\d+|\d+(?:\.\d+)?)\s*cups?\b/.exec(sv);
+  if (cups && /\bcanned\b|\bcans?\b/i.test(f.name || '') && !gramsFor(f, 1)) return { u: 'can', per: toNum(cups[1]) / 1.75 };
+  const each = /^(\d+)\s+(cloves?|heads?|bunch(?:es)?|lemons?|limes?|avocados?|onions?|peppers?|potatoes?|apples?|bananas?|oranges?)\b/.exec(sv) || (/^juice of (\d+) (lemon|lime)/.exec(sv));
+  if (each && !gramsFor(f, 1)) return { u: each[2].replace(/(es|s)$/, '').replace(/potato$/, 'potato'), per: +each[1] };
   const g = gramsFor(f, 1); if (g) return { u: 'g', per: g };
   const ml = servingMl(f); if (ml) return { u: 'ml', per: ml };
   return { u: 'servings', per: 1 };
@@ -1530,7 +1535,7 @@ function stockText(f, sv) {
   if (u.u === 'g') return gTxt(q);
   if (u.u === 'ml') return q >= 1000 ? `${(q / 1000).toFixed(1)} L` : `${Math.round(q)} ml`;
   if (u.u === 'servings') return `${r1(q)} serving${q === 1 ? '' : 's'}`;
-  const n = Math.round(q * 10) / 10; return `${n} ${u.u}${n === 1 ? '' : u.u.endsWith('h') ? 'es' : 's'}`;
+  const n = u.u === 'can' ? Math.ceil(q * 2 - 0.05) / 2 : Math.round(q * 10) / 10; return `${n} ${u.u}${n === 1 ? '' : /(h|o)$/.test(u.u) ? 'es' : 's'}`;
 }
 function changeStock(id, dsv, start) {
   S.stock = S.stock || {};
@@ -1739,7 +1744,7 @@ function showRecipeCard(id) {
     <div class="row wrap" style="gap:6px;margin-top:10px">
       <div class="stepper"><button data-act="rbatch" data-id="${esc(r.id)}" data-d="-1" aria-label="Fewer batches">−</button><span style="min-width:34px;text-align:center"><b>${b}×</b></span><button data-act="rbatch" data-id="${esc(r.id)}" data-d="1" aria-label="More batches">+</button></div>
       <button class="btn sm grow" data-act="rshop" data-id="${esc(r.id)}">🛒 Shopping list</button></div>
-    <div class="small muted" style="margin-top:4px">Adds what you need for ${b} batch${b === 1 ? '' : 'es'} (${r.servings * b} servings), minus what's already in your kitchen. Spices go on as one “check your pantry” reminder.</div>
+    <div class="small muted" style="margin-top:4px">Shows what you need to buy for ${b} batch${b === 1 ? '' : 'es'} (${r.servings * b} servings) and what you already have, before anything goes on your list.</div>
     <div class="row" style="gap:6px;margin-top:8px"><button class="btn alt sm grow" data-act="open" data-id="${esc(food.id)}">🍽 Log a serving</button><button class="btn alt sm grow" data-act="rmade" data-id="${esc(r.id)}">🏠 I made it</button></div>
     <h3 style="margin:14px 0 4px;font-size:15px">Ingredients${b > 1 ? ` (1 batch — multiply by ${b})` : ''}</h3>
     <ul class="reasons" style="font-size:15px">${r.ingredients.map((i, ix) => { const f = i.id && getFood(i.id);
@@ -1788,35 +1793,77 @@ function linkPicker(rid, ix, q = '') {
     <div class="row" style="gap:6px;margin-top:10px">${ing.id ? `<button class="btn ghost sm grow" data-act="rlpick" data-id="${esc(rid)}" data-i="${ix}" data-f="">Unlink</button>` : ''}
       <button class="btn ghost sm grow" data-act="rlpantry" data-id="${esc(rid)}" data-i="${ix}">${ing.pantry ? 'Not a pantry item' : 'Mark as pantry item (never on the list)'}</button></div>`);
 }
-function recipeToList(rid) {
-  const r = recipeById(rid), b = recipeBatches, have = [], pantry = [];
-  let added = 0; S.extra = S.extra || [];
-  const need = {};
+// What a recipe needs vs. what you already have (from your kitchen and spice rack).
+let recipeSel = {};
+function recipeRows(rid) {
+  const r = recipeById(rid), b = recipeBatches, rows = [], need = {}, texts = {};
   for (const i of r.ingredients) {
-    if (i.pantry) { pantry.push(parseAmount(i.text).rest.replace(/\(.*?\)/g, '').replace(/,.*/, '').trim() || i.text); continue; }
+    if (i.pantry) continue;
+    if (!i.id || !getFood(i.id)) { rows.push({ key: 'x:' + i.text, kind: 'extra', label: i.text, have: false, note: 'Not in your kitchen list' }); continue; }
+    need[i.id] = (need[i.id] || 0) + (i.sv == null ? 0 : i.sv * b); (texts[i.id] = texts[i.id] || []).push(i.text);
+  }
+  for (const [fid, sv] of Object.entries(need)) {
+    const f = getFood(fid), st = stockOf(fid), flag = S.have && S.have[fid], g = sv ? gramsFor(f, sv) : null;
+    const amt = sv ? stockText(f, sv) + (g && /\bcanned\b/i.test(f.name) ? ` (about ${Math.max(1, Math.round(g / 411))} can${Math.round(g / 411) > 1 ? 's' : ''})` : '') : '';
+    let have = false, note;
+    if (st != null && sv && st >= sv - 0.01) { have = true; note = `You have ${stockText(f, st)} · need ${amt}`; }
+    else if (st != null && st > 0.01) note = `You have ${stockText(f, st)} · need ${amt} — buy ${stockText(f, sv - st)} more`;
+    else if (flag) { have = true; note = `In your kitchen${amt ? ` · need ${amt}` : ''}`; }
+    else note = st != null ? `You're out · need ${amt}` : `Need ${amt || texts[fid][0]}`;
+    rows.push({ key: 'f:' + fid, kind: 'food', id: fid, label: shortName(f), have, note });
+  }
+  for (const n of [...new Set(r.ingredients.filter(i => i.pantry).flatMap(i => spiceNamesIn(i.text)))]) {
+    const e = spiceEntry(n); rows.push({ key: 's:' + n, kind: 'spice', label: n, have: !!e.have, note: e.have ? 'In your spice rack' : 'Not in your spice rack' });
+  }
+  return rows;
+}
+function showRecipeCheck(rid) {
+  const r = recipeById(rid), rows = recipeRows(rid), b = recipeBatches;
+  for (const x of rows) if (!(x.key in recipeSel)) recipeSel[x.key] = x.have ? 'have' : 'buy';
+  const buy = rows.filter(x => recipeSel[x.key] === 'buy'), have = rows.filter(x => recipeSel[x.key] === 'have');
+  const row = x => `<div class="item"><div class="grow"><div class="name">${x.kind === 'spice' ? '🧂 ' : ''}${esc(x.label)}</div><div class="meta">${esc(x.note)}</div></div>
+    <button class="btn ${recipeSel[x.key] === 'buy' ? 'ghost' : 'alt'} sm" data-act="rcheck" data-id="${esc(rid)}" data-k="${esc(x.key)}">${recipeSel[x.key] === 'buy' ? '✓ I have it' : '🛒 Need it'}</button></div>`;
+  sheet(`<div class="sheet-head"><div class="grow"><h2>🛒 Shopping for ${esc(r.name)}</h2><div class="small muted">${b > 1 ? `${b} batches · ` : ''}checked against your kitchen and spice rack</div></div><button class="icon-btn" data-act="ropen" data-id="${esc(rid)}" aria-label="Back">‹</button></div>
+    <div class="card" style="margin:8px 0;padding:10px 12px"><h3 style="margin:0 0 2px;font-size:16px">🛒 Need to buy (${buy.length})</h3>
+      ${buy.length ? buy.map(row).join('') : '<div class="small muted" style="padding:6px 0">Nothing — you have everything for this recipe! 🎉</div>'}</div>
+    <div class="card" style="margin:8px 0;padding:10px 12px;background:var(--bg)"><h3 style="margin:0 0 2px;font-size:16px">✅ Already have (${have.length})</h3>
+      ${have.length ? have.map(row).join('') : '<div class="small muted" style="padding:6px 0">Nothing marked yet. Tap “✓ I have it” on anything above that\'s already in your kitchen.</div>'}</div>
+    <div class="small muted" style="margin:4px 0 8px">Not sure? It's set to “need” unless your kitchen or spice rack says you have it. What you mark as “have” is remembered for next time.</div>
+    <button class="btn block" data-act="rcheckgo" data-id="${esc(rid)}" ${buy.length ? '' : 'disabled'}>Add ${buy.length} item${buy.length === 1 ? '' : 's'} to my shopping list</button>`);
+}
+function recipeToList(rid, sel = {}) {
+  const r = recipeById(rid), b = recipeBatches, have = [];
+  let added = 0; S.extra = S.extra || [];
+  const choice = (k, dflt) => sel[k] || dflt, need = {};
+  for (const i of r.ingredients) {
+    if (i.pantry) continue;
     if (!i.id || !getFood(i.id)) { // one line per item, listing every recipe that needs it
+      if (choice('x:' + i.text, 'buy') === 'have') { have.push(i.text); continue; }
       const x = S.extra.find(x => x.text.startsWith(i.text + ' — '));
       if (!x) { S.extra.push({ id: uid(), text: `${i.text} — ${r.name}`, got: false }); added++; } else if (!x.text.includes(r.name)) x.text += `, ${r.name}`;
       continue; }
     need[i.id] = (need[i.id] || 0) + (i.sv == null ? null : i.sv * b);
   }
   for (const [fid, sv] of Object.entries(need)) {
-    const f = getFood(fid), pi = packageInfo(f), st = stockOf(fid), L = S.list[fid] && S.list[fid].on ? S.list[fid] : null;
+    const f = getFood(fid), pi = packageInfo(f), st = stockOf(fid), L = S.list[fid] && S.list[fid].on ? S.list[fid] : null, c = sel['f:' + fid];
+    if (c === 'have') { if (st == null) { S.have = S.have || {}; S.have[fid] = true; } have.push(shortName(f)); continue; } // remembered for next time
     // Recipes add up: three recipes that each use half a pack of black beans need one pack, not three.
     S.rneed = S.rneed || {}; const total = (S.rneed[fid] || 0) + (sv || 0); S.rneed[fid] = total;
     const base = L ? (L.base != null ? L.base : (L.qty || 1)) : 0; // packs already on the list from the meal plan or by hand
-    const short = sv == null ? null : total - (st || 0);
-    const need = sv == null ? 1 : short > 0.01 ? (pi.servings ? Math.max(1, Math.ceil(short / pi.servings - 0.05)) : 1) : 0;
-    const qty = base + Math.max(L ? (L.qty || 1) - base : 0, need);
-    if (!need && (!L || qty === (L.qty || 1))) { have.push(shortName(f)); continue; }
+    let short = sv == null ? null : total - (st || 0);
+    if (c === 'buy' && short != null && short <= 0.01) short = sv; // you said you need it: buy enough for this recipe
+    const n = sv == null ? 1 : short > 0.01 ? (pi.servings ? Math.max(1, Math.ceil(short / pi.servings - 0.05)) : 1) : 0;
+    const qty = base + Math.max(L ? (L.qty || 1) - base : 0, n);
+    if (!n && (!L || qty === (L.qty || 1))) { have.push(shortName(f)); continue; }
     S.list[fid] = { ...(L || {}), on: true, got: false, qty, base }; added++;
+    if (S.have) delete S.have[fid];
   }
-  // Spices: only the ones not in your spice rack go on the list, in their own section.
-  const spices = [...new Set(r.ingredients.filter(i => i.pantry).flatMap(i => spiceNamesIn(i.text)))];
-  let haveSpices = 0;
-  for (const n of spices) { const e = spiceEntry(n); if (e.have) haveSpices++; else if (spiceToList(n, r.name)) added++; }
-  if (spices.length && haveSpices === spices.length) have.push('all the spices');
-  save(); toast(`${added} item${added === 1 ? '' : 's'} added${have.length ? ` · already have: ${have.join(', ')}` : ''}`);
+  // Spices: only the ones you need go on the list, in their own section.
+  for (const n of [...new Set(r.ingredients.filter(i => i.pantry).flatMap(i => spiceNamesIn(i.text)))]) {
+    const e = spiceEntry(n), c = sel['s:' + n] || (e.have ? 'have' : 'buy');
+    if (c === 'have') { e.have = true; have.push(n.toLowerCase()); } else { e.have = false; if (spiceToList(n, r.name)) added++; }
+  }
+  recipeSel = {}; save(); toast(`${added} item${added === 1 ? '' : 's'} added to your list${have.length ? ` · skipped ${have.length} you have` : ''}`);
   listView = 'shop'; go('list');
 }
 function recipeMade(rid) {
@@ -2908,7 +2955,9 @@ document.addEventListener('click', e => {
     case 'rsave': saveRecipe(id || null); break;
     case 'rdel': if (confirm('Delete this recipe?')) { S.recipes = S.recipes.filter(r => r.id !== id); delete S.foods['rcp-' + id]; if (S.stock) delete S.stock['rcp-' + id]; save(); closeSheet(); } break;
     case 'rbatch': recipeBatches = Math.max(1, Math.min(6, recipeBatches + +el.dataset.d)); showRecipeCard(id); break;
-    case 'rshop': recipeToList(id); break;
+    case 'rshop': recipeSel = {}; showRecipeCheck(id); break;
+    case 'rcheck': recipeSel[el.dataset.k] = recipeSel[el.dataset.k] === 'buy' ? 'have' : 'buy'; showRecipeCheck(id); break;
+    case 'rcheckgo': recipeToList(id, recipeSel); break;
     case 'rmade': recipeMade(id); break;
     case 'rlink': e.preventDefault(); linkPicker(id, +el.dataset.i); break;
     case 'rlsearch': linkPicker(id, +el.dataset.i, $('#rlq').value.trim()); break;
