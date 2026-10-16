@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '5.9 (fix: I have it after a scan)';
+const APP_VERSION = '6.0 (I have it: one tap, no questions)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1120,7 +1120,10 @@ function stopScan() {
   if ($('#scan-idle')) { $('#scan-idle').hidden = false; $('#guide').hidden = true; $('#stopbtn').hidden = true; }
 }
 function onCode(code) {
-  if (scan.busy) return; scan.busy = true;
+  if (scan.busy) return;
+  // Right after you close a result the same barcode is often still in view: wait until it's been gone a few seconds.
+  if (code === scan.lastCode && Date.now() - (scan.lastAt || 0) < 4000) { scan.lastAt = Date.now(); return; }
+  scan.busy = true; scan.lastCode = code; scan.lastAt = Date.now();
   if (navigator.vibrate) navigator.vibrate(60);
   stopScan();
   lookupBarcode(code);
@@ -1193,7 +1196,7 @@ function r1n(v) { return v == null ? null : r1(v); }
 /* ---------- food sheet ---------- */
 let sheetFood = null;
 function sheet(html) { $('#sheet-card').innerHTML = html; $('#sheet').hidden = false; }
-function closeSheet() { if (sheetFood && $('#pprice')) { savePriceFrom(sheetFood.id); save(); } $('#sheet').hidden = true; sheetFood = null; if (tab === 'scan') { scan.busy = false; if (S.camOk) startScan(); } else render(); }
+function closeSheet() { if (sheetFood && $('#pprice')) { savePriceFrom(sheetFood.id); save(); } $('#sheet').hidden = true; sheetFood = null; if (tab === 'scan') { scan.busy = false; scan.lastAt = Date.now(); if (S.camOk) startScan(); } else render(); }
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
 
 function openFood(id, opts = {}) {
@@ -1212,10 +1215,10 @@ function openFood(id, opts = {}) {
     ${opts.fromScan ? (() => { const st = stockOf(f.id), on = S.list[f.id] && S.list[f.id].on, got = on && S.list[f.id].got;
       return `<div class="row" style="gap:6px;margin-top:8px">
         <button class="btn alt sm grow" data-act="scanjust">🔎 Checking</button>
-        <button class="btn ${st != null ? '' : 'alt'} sm grow" data-act="scanhave" data-id="${esc(f.id)}">🏠 ${st != null ? 'Have ' + esc(stockText(f, st)) : 'I have it'}</button>
+        <button class="btn ${st != null || (S.have && S.have[f.id]) ? '' : 'alt'} sm grow" data-act="scanhave" data-id="${esc(f.id)}">🏠 ${st != null ? 'Have ' + esc(stockText(f, st)) : S.have && S.have[f.id] ? 'Have it ✓' : 'I have it'}</button>
         <button class="btn ${on ? '' : 'alt'} sm grow" data-act="scanget" data-id="${esc(f.id)}">🛒 ${got ? 'In cart ✓' : on ? 'On list ✓' : 'Getting it'}</button></div>
-      ${opts.askHave ? `<div class="card" style="margin:8px 0 0;padding:10px 12px;background:var(--soft)"><b>🏠 How much do you have?</b>
-        <div class="small muted">The package size isn't known for this one. Type how much is in it — the net weight on the label (like 454 g) or ${stockUnit(f).u === 'g' ? 'grams on your scale' : stockUnit(f).u === 'ml' ? 'ml (1 gallon = 3,785 ml)' : 'how many ' + stockUnit(f).u + 's'}.</div>${stockRow(f, true)}</div>` : ''}`; })() : ''}
+      ${opts.askHave ? `<div class="card" style="margin:8px 0 0;padding:10px 12px;background:var(--soft)"><b>✓ Marked as in your kitchen.</b>
+        <div class="small muted">Want “days left” and low-stock alerts for it? Type how much is in the package — the net weight on the label (like 454 g) or ${stockUnit(f).u === 'g' ? 'grams on your scale' : stockUnit(f).u === 'ml' ? 'ml (1 gallon = 3,785 ml)' : 'how many ' + unitWord(stockUnit(f).u) + ' are in it'}. Optional — it won't ask again.</div>${stockRow(f, true)}</div>` : ''}`; })() : ''}
     ${v.ok ? `<div class="small muted" style="margin-top:6px">Within all your per-serving limits.</div>` : (() => {
       const part = portionThatFits(f), swaps = approvedSwaps(f), pp = proteinPortion(f);
       const g = servingGrams(f), amt = pp ? `${svText(pp.sc)} serving${pp.sc > 1 ? 's' : ''}${g && S.units !== 'servings' ? ` (${fmtWeight(f, g * pp.sc)})` : ''}` : '';
@@ -1440,6 +1443,7 @@ function stockUnit(f) {
   const ml = servingMl(f); if (ml) return { u: 'ml', per: ml };
   return { u: 'servings', per: 1 };
 }
+const unitWord = u => u === 'g' ? 'grams' : u === 'ml' ? 'ml' : u === 'servings' ? 'servings' : u + 's';
 function stockText(f, sv) {
   const u = stockUnit(f), q = Math.max(0, sv) * u.per;
   if (u.u === 'g') return gTxt(q);
@@ -1460,28 +1464,28 @@ function dailyUse(id) {
 }
 function stockStatus(id) {
   const s = stockOf(id), use = dailyUse(id);
-  if (s == null) return { tracked: false, use };
+  if (s == null) return S.have && S.have[id] ? { tracked: false, haveOnly: true, use } : { tracked: false, use };
   const days = use ? s / use : null;
   return { tracked: true, s, use, days, out: s <= 0.001, low: s > 0.001 && days != null && days < 3 };
 }
 const lowItems = () => Object.keys(S.stock || {}).filter(id => getFood(id) && (stockStatus(id).out || stockStatus(id).low));
 function stockRow(f, compact) {
   const st = stockStatus(f.id), u = stockUnit(f), pi = packageInfo(f);
-  const tag = !st.tracked ? `<span class="small muted">Not tracked yet</span>`
+  const tag = st.haveOnly ? `<span class="small" style="color:var(--ok)">✓ In your kitchen <span class="muted">(amount not set)</span></span>` : !st.tracked ? `<span class="small muted">Not tracked yet</span>`
     : st.out ? `<span class="small" style="color:var(--bad);font-weight:700">Out — buy more</span>`
     : st.low ? `<span class="small" style="color:var(--warn);font-weight:700">Low — about ${Math.max(0, Math.floor(st.days * 10) / 10)} day${st.days >= 1 && st.days < 2 ? '' : 's'} left</span>`
     : st.days != null ? `<span class="small" style="color:var(--ok)">≈ ${Math.floor(st.days)} days left</span>` : '';
-  return `${compact ? '' : `<div style="margin-top:4px"><b style="font-size:17px">${st.tracked ? esc(stockText(f, st.s)) : '—'}</b> ${tag}</div>`}
+  return `${compact ? '' : `<div style="margin-top:4px">${st.haveOnly ? '' : `<b style="font-size:17px">${st.tracked ? esc(stockText(f, st.s)) : '—'}</b> `}${tag}</div>`}
     <div class="row" style="gap:6px;margin-top:6px">
-      <input type="number" inputmode="decimal" min="0" step="any" data-stockin="${esc(f.id)}" placeholder="${u.u === 'g' ? 'grams' : u.u === 'ml' ? 'ml' : u.u + 's'}" style="flex:1;min-width:70px;padding:6px 8px" aria-label="Amount you have">
+      <input type="number" inputmode="decimal" min="0" step="any" data-stockin="${esc(f.id)}" placeholder="${unitWord(u.u)}" style="flex:1;min-width:70px;padding:6px 8px" aria-label="Amount you have">
       <button class="btn alt sm" data-act="stockset" data-id="${esc(f.id)}">Set</button>
       ${pi.servings ? `<button class="btn alt sm" data-act="stockpkg" data-id="${esc(f.id)}">+ 1 package</button>` : ''}
-      ${st.tracked ? `<button class="btn ghost sm" data-act="stockrm" data-id="${esc(f.id)}" aria-label="Stop tracking">✕</button>` : ''}</div>`;
+      ${st.tracked || st.haveOnly ? `<button class="btn ghost sm" data-act="stockrm" data-id="${esc(f.id)}" aria-label="Stop tracking">✕</button>` : ''}</div>`;
 }
 function renderKitchen() {
   const planIds = S.plan ? [...new Set(S.plan.days.flatMap(d => d.meals.flatMap(m => m.items.map(x => x.id))))] : [];
-  const ids = [...new Set([...Object.keys(S.stock || {}), ...planIds])].filter(id => getFood(id));
-  const rank = id => { const st = stockStatus(id); return st.out ? 0 : st.low ? 1 : st.tracked ? 2 : 3; };
+  const ids = [...new Set([...Object.keys(S.stock || {}), ...Object.keys(S.have || {}), ...planIds])].filter(id => getFood(id));
+  const rank = id => { const st = stockStatus(id); return st.out ? 0 : st.low ? 1 : st.tracked || st.haveOnly ? 2 : 3; };
   ids.sort((a, b) => rank(a) - rank(b) || getFood(a).name.localeCompare(getFood(b).name));
   const low = lowItems();
   let h = `<div class="card"><div class="small muted">Weigh what you have (raw, as you bought it) or tap <b>+ 1 package</b>. It goes down when you log meals, and checking items off your shopping list adds them. “Days left” is based on your meal plan.</div>
@@ -1494,7 +1498,7 @@ function renderKitchen() {
 function setStockFrom(id) {
   const f = getFood(id), i = document.querySelector(`[data-stockin="${CSS.escape(id)}"]`), v = i ? i.value.trim() : '';
   if (v === '' || !(+v >= 0)) { toast(stockUnit(f).u === 'g' ? 'Type how many grams you have' : stockUnit(f).u === 'ml' ? 'Type how many ml you have' : 'Type how many you have'); return false; }
-  S.stock = S.stock || {}; S.stock[id] = +v / stockUnit(f).per; save(); toast(`${shortName(f)}: ${stockText(f, S.stock[id])} in your kitchen`); return true;
+  S.stock = S.stock || {}; S.stock[id] = +v / stockUnit(f).per; if (S.have) delete S.have[id]; save(); toast(`${shortName(f)}: ${stockText(f, S.stock[id])} in your kitchen`); return true;
 }
 
 /* ---------- My recipes: favorites for quick reference, with macros and a shopping list ---------- */
@@ -2135,7 +2139,7 @@ function usualPortion(f) {
 }
 function packageInfo(f) {
   const own = S.pkg[f.id];
-  const text = own ? (own.g ? `${r1(own.g / 453.6)} lb` : `${own.count} count`) : f.pkgText || (PRICES[f.id] ? PRICES[f.id][1] : '');
+  const text = own ? (own.g ? `${r1(own.g / 453.6)} lb` : own.count ? `${own.count} count` : own.ml ? `${Math.round(own.ml)} ml` : `${r1(own.sv)} servings`) : f.pkgText || (PRICES[f.id] ? PRICES[f.id][1] : '');
   const pk = own || (f.pkgG ? { g: f.pkgG } : parsePkg(text));
   let servings = null;
   const sg = servingGrams(f);
@@ -2148,6 +2152,8 @@ function packageInfo(f) {
     else if (each && sg) servings = pk.count * each[1] / sg; // e.g. 6 bell peppers
     else if (!/^(\d|\/)+\s*(tsp|tbsp|cups?|oz|fl|ml|g)\b/.test(sv)) servings = pk.count; // one serving per piece
   }
+  if (!servings && pk.sv) servings = pk.sv;
+  if (!servings && pk.ml && servingMl(f)) servings = pk.ml / servingMl(f);
   if (!servings) { // drinks: "1 gal" / "64 fl oz" packages with "1 cup (240 ml)" / "8 fl oz" servings
     const pml = pkgMl(text) || (f.pkgG && /ml|fl|gal|qt|\bl\b/i.test(text) ? f.pkgG : null), sml = servingMl(f);
     if (pml && sml) servings = pml / sml;
@@ -2742,9 +2748,10 @@ document.addEventListener('click', e => {
     case 'spiceout': { spiceEntry(el.dataset.name).have = false; spiceToList(el.dataset.name); save(); renderList(); toast(`${el.dataset.name} added to your shopping list`); break; }
     case 'spicelist': spiceToList(el.dataset.name); save(); renderList(); toast(`${el.dataset.name} added to your shopping list`); break;
     case 'spicedel': S.spices = spiceRack().filter(x => x.name !== el.dataset.name); save(); renderList(); break;
-    case 'scanhave': { const f = getFood(id), pi = packageInfo(f);
-      if (pi.servings) { changeStock(id, pi.servings, true); save(); toast(`In your kitchen: ${stockText(f, stockOf(id))}`); openFood(id, { fromScan: true }); }
-      else { openFood(id, { fromScan: true, askHave: true }); const i = document.querySelector(`[data-stockin="${CSS.escape(id)}"]`); if (i) i.focus(); }
+    case 'scanhave': { const f = getFood(id), pi = packageInfo(f), st = stockOf(id), had = S.have && S.have[id];
+      if (pi.servings) { changeStock(id, pi.servings, true); if (S.have) delete S.have[id]; save(); toast(st != null ? `Added another package — now ${stockText(f, stockOf(id))}` : `In your kitchen: ${stockText(f, stockOf(id))}`); openFood(id, { fromScan: true }); }
+      else if (st != null || had) { toast('Already in your kitchen ✓'); }
+      else { S.have = S.have || {}; S.have[id] = true; save(); toast('In your kitchen ✓'); openFood(id, { fromScan: true, askHave: true }); } // no amount needed; the box below is optional
       break; }
     case 'scanget': { const f = getFood(id), L = S.list[id], pi = packageInfo(f), inStore = !!S.scanToList;
       if (L && L.on && (L.got || !inStore)) { toast(L.got ? 'Already in your cart' : 'Already on your list'); break; }
@@ -2769,11 +2776,11 @@ document.addEventListener('click', e => {
     case 'kview': listView = el.dataset.v; renderList(); break;
     case 'stockset': if (openFood.last && openFood.last.askHave && sheetFood && !packageInfo(getFood(id)).servings) { // remember it as the package size, so next time one tap adds it
         const f = getFood(id), u = stockUnit(f), v = +((document.querySelector(`[data-stockin="${CSS.escape(id)}"]`) || {}).value || 0);
-        if (v > 0 && u.u === 'g') S.pkg[id] = { g: v }; else if (v > 0 && u.u !== 'servings' && u.u !== 'ml') S.pkg[id] = { count: v };
+        if (v > 0) S.pkg[id] = u.u === 'g' ? { g: v } : u.u === 'ml' ? { ml: v } : u.u === 'servings' ? { sv: v } : { count: v };
       }
       if (setStockFrom(id)) { if (sheetFood) openFood(id, { fromScan: !!(openFood.last && openFood.last.fromScan) }); else renderList(); } break;
     case 'stockpkg': { const f = getFood(id), pi = packageInfo(f); changeStock(id, pi.servings, true); save(); toast(`Added 1 package: now ${stockText(f, stockOf(id))}`); if (sheetFood) openFood(id); else renderList(); break; }
-    case 'stockrm': delete S.stock[id]; save(); toast('Stopped tracking ' + shortName(getFood(id))); if (sheetFood) openFood(id); else renderList(); break;
+    case 'stockrm': delete S.stock[id]; if (S.have) delete S.have[id]; save(); toast('Stopped tracking ' + shortName(getFood(id))); if (sheetFood) openFood(id); else renderList(); break;
     case 'low2list': {
       const ids = lowItems(), days = S.plan ? S.plan.days.length : 7;
       for (const fid of ids) { const f = getFood(fid), pi = packageInfo(f), short = Math.max(0, dailyUse(fid) * Math.max(days, 7) - (stockOf(fid) || 0));
