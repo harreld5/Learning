@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '5.2 (bowls without lettuce)';
+const APP_VERSION = '5.3 (recipes share one shopping list)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1691,18 +1691,27 @@ function recipeToList(rid) {
   const need = {};
   for (const i of r.ingredients) {
     if (i.pantry) { pantry.push(parseAmount(i.text).rest.replace(/\(.*?\)/g, '').replace(/,.*/, '').trim() || i.text); continue; }
-    if (!i.id || !getFood(i.id)) { if (!S.extra.some(x => x.text.startsWith(i.text))) { S.extra.push({ id: uid(), text: `${i.text} — ${r.name}`, got: false }); added++; } continue; }
+    if (!i.id || !getFood(i.id)) { // one line per item, listing every recipe that needs it
+      const x = S.extra.find(x => x.text.startsWith(i.text + ' — '));
+      if (!x) { S.extra.push({ id: uid(), text: `${i.text} — ${r.name}`, got: false }); added++; } else if (!x.text.includes(r.name)) x.text += `, ${r.name}`;
+      continue; }
     need[i.id] = (need[i.id] || 0) + (i.sv == null ? null : i.sv * b);
   }
   for (const [fid, sv] of Object.entries(need)) {
-    const f = getFood(fid), pi = packageInfo(f), st = stockOf(fid);
-    const short = sv == null ? null : sv - (st || 0);
-    if (short != null && short <= 0.01) { have.push(shortName(f)); continue; }
-    const qty = short != null && pi.servings ? Math.max(1, Math.ceil(short / pi.servings - 0.05)) : 1;
-    const cur = S.list[fid] && S.list[fid].on ? (S.list[fid].qty || 1) : 0;
-    S.list[fid] = { ...(S.list[fid] || {}), on: true, got: false, qty: cur + qty }; added++;
+    const f = getFood(fid), pi = packageInfo(f), st = stockOf(fid), L = S.list[fid] && S.list[fid].on ? S.list[fid] : null;
+    // Recipes add up: three recipes that each use half a pack of black beans need one pack, not three.
+    S.rneed = S.rneed || {}; const total = (S.rneed[fid] || 0) + (sv || 0); S.rneed[fid] = total;
+    const base = L ? (L.base != null ? L.base : (L.qty || 1)) : 0; // packs already on the list from the meal plan or by hand
+    const short = sv == null ? null : total - (st || 0);
+    const need = sv == null ? 1 : short > 0.01 ? (pi.servings ? Math.max(1, Math.ceil(short / pi.servings - 0.05)) : 1) : 0;
+    const qty = base + Math.max(L ? (L.qty || 1) - base : 0, need);
+    if (!need && (!L || qty === (L.qty || 1))) { have.push(shortName(f)); continue; }
+    S.list[fid] = { ...(L || {}), on: true, got: false, qty, base }; added++;
   }
-  if (pantry.length) { const t = `Check your pantry for ${r.name}: ${pantry.join(', ')}`; if (!S.extra.some(x => x.text === t)) S.extra.push({ id: uid(), text: t, got: false }); }
+  if (pantry.length) { // a single pantry reminder that grows as you add recipes
+    const x = S.extra.find(x => x.pantry), items = new Set([...(x ? x.items : []), ...pantry.map(p => p.toLowerCase())]);
+    const text = `Check your pantry: ${[...items].join(', ')}`;
+    if (x) { x.items = [...items]; x.text = text; } else S.extra.push({ id: uid(), text, got: false, pantry: true, items: [...items] }); }
   save(); toast(`${added} item${added === 1 ? '' : 's'} added${have.length ? ` · already have: ${have.join(', ')}` : ''}`);
   listView = 'shop'; go('list');
 }
@@ -2643,7 +2652,7 @@ document.addEventListener('click', e => {
     case 'log': { const sv = +$('#sv').value || 1; logFood(sheetFood, sv, $('#meal').value); toast(`Logged ${r1(sv)} × ${sheetFood.name}`); closeSheet(); if (tab === 'scan') go('today'); break; }
     case 'togglelist': {
       const f = sheetFood, L = S.list[f.id];
-      if (L && L.on) delete S.list[f.id];
+      if (L && L.on) { delete S.list[f.id]; if (S.rneed) delete S.rneed[f.id]; }
       else { S.list[f.id] = { on: true, got: false, qty: 1 }; }
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
@@ -2703,8 +2712,8 @@ document.addEventListener('click', e => {
     case 'cview': costcoView = el.dataset.v; renderCostco(); break;
     case 'qty': { const L = S.list[id]; if (L) { L.qty = Math.max(1, (L.qty || 1) + +el.dataset.d); save(); renderList(); } break; }
     case 'cfilter': costcoFilter = el.dataset.v; renderCostco(); break;
-    case 'cleargot': for (const k in S.list) if (S.list[k].got) delete S.list[k]; S.extra = (S.extra || []).filter(x => !x.got); save(); renderList(); break;
-    case 'clearlist': if (confirm('Clear your whole shopping list?')) { S.list = {}; S.extra = []; save(); renderList(); } break;
+    case 'cleargot': for (const k in S.list) if (S.list[k].got) { delete S.list[k]; if (S.rneed) delete S.rneed[k]; } S.extra = (S.extra || []).filter(x => !x.got); save(); renderList(); break;
+    case 'clearlist': if (confirm('Clear your whole shopping list?')) { S.list = {}; S.extra = []; S.rneed = {}; save(); renderList(); } break;
     case 'pdays': S.planOpts.days = +el.dataset.v; save(); renderPlan(); break;
     case 'pmode': S.planOpts.mode = el.dataset.v; save(); renderPlan(); break;
     case 'pprepdays': S.planOpts.prepDays = +el.dataset.v; save(); renderPlan(); break;
@@ -2744,7 +2753,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const el = e.target; if (!el.matches('input[type=checkbox][data-act]')) return;
   const id = el.dataset.id;
-  if (el.dataset.act === 'listtoggle') { if (el.checked) S.list[id] = { on: true, got: false }; else delete S.list[id]; save(); }
+  if (el.dataset.act === 'listtoggle') { if (el.checked) S.list[id] = { on: true, got: false }; else { delete S.list[id]; if (S.rneed) delete S.rneed[id]; } save(); }
   if (el.dataset.act === 'xgot') { const x = (S.extra || []).find(x => x.id === id); if (x) { x.got = el.checked; save(); renderList(); } }
   if (el.dataset.act === 'got' && S.list[id]) {
     S.list[id].got = el.checked;
