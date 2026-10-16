@@ -858,7 +858,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '7.3 (restaurant database: 60+ orders)';
+const APP_VERSION = '7.4 (easy-to-read shopping list)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1537,6 +1537,21 @@ const AISLES = [['protein', 'Meat & seafood'], ['bprotein', 'Eggs & dairy'], ['v
   ['fat', 'Nuts, cheese & oils'], ['snack', 'Snacks & bars'], ['_baking', 'Baking & spices'], ['other', 'Drinks, sauces & more']];
 const aisleOf = f => /\b(cocoa|baking (soda|powder)|flour|sugar|cornstarch|yeast|extract|vanilla|sprinkles|chocolate chips)\b/i.test(f.name || '') || (f.src !== 'costco' && spiceNameForFood(f)) ? 'Baking & spices'
   : (AISLES.find(([c]) => c === f.cat) || AISLES[AISLES.length - 1])[1];
+// "Chipotle-Style Chicken Bowls" → "Chipotle Chicken Bowls"; long lists get "+2 more".
+function shortRecipes(names) {
+  let n = [...new Set(names.map(x => x.trim().replace(/-Style\b/, '').replace(/\s+Bowls?\b/i, '')).filter(Boolean))];
+  n = n.filter(x => !n.some(y => y !== x && x.startsWith(y + ' '))); // "Egg Scramble" covers "Egg Scramble with Potatoes"
+  return n.length > 3 ? n.slice(0, 2).join(', ') + ` +${n.length - 2} more` : n.join(', ');
+}
+// One clean line per item: name, how many to grab, and what it's for.
+function simpleRow(f) {
+  const L = S.list[f.id], qty = L.qty || 1;
+  const why = [S.rneed && S.rneed[f.id] ? 'need ' + stockText(f, S.rneed[f.id]) : L.need ? `plan needs ≈ ${r1(L.need)} servings` : '', L.for && L.for.length ? 'for ' + shortRecipes(L.for) : ''].filter(Boolean).join(' · ');
+  return `<div class="item"><input type="checkbox" data-act="got" data-id="${esc(f.id)}" ${L.got ? 'checked' : ''} aria-label="Got it" style="width:22px;height:22px">
+    <div class="grow tap" data-act="open" data-id="${esc(f.id)}" style="${L.got ? 'text-decoration:line-through;opacity:.6' : ''}"><div class="name">${esc(shortName(f))}</div>${why ? `<div class="meta">${esc(why)}</div>` : ''}</div>
+    <span style="font-weight:700;white-space:nowrap;background:var(--soft);border-radius:999px;padding:4px 10px;font-size:14px">${qty} pack${qty === 1 ? '' : 's'}</span>
+    <button class="icon-btn" data-act="listrm" data-id="${esc(f.id)}" aria-label="Remove from list">✕</button></div>`;
+}
 function renderList() {
   const back = prevTab && prevTab !== 'list' ? prevTab : 'today';
   $('#hdr-extra').innerHTML = `<button class="btn alt sm" data-act="tab" data-t="${back}" aria-label="Back">‹ ${({ today: 'Today', scan: 'Scan', costco: 'Costco', plan: 'Meals', settings: 'More' })[back]}</button>`;
@@ -1552,20 +1567,24 @@ function renderList() {
       <div class="row"><div class="grow"><div class="small muted">Estimated total · ${count} item${count === 1 ? '' : 's'}</div><div class="big-left">${money(total)}</div></div>
       <div class="small" style="text-align:right"><span class="muted">In cart</span> <b>${money(inCart)}</b><br><span class="muted">Left to buy</span> <b>${money(total - inCart)}</b></div></div>
       ${ids.length || (S.extra || []).length ? `<div class="row" style="gap:6px;margin-top:8px"><button class="btn ghost sm grow" data-act="cleargot">Remove checked</button><button class="btn danger sm grow" data-act="clearlist">🗑 Clear whole list</button></div>` : ''}
-      ${missing ? `<div class="small" style="color:var(--warn);margin-top:6px">${missing} item${missing === 1 ? ' has' : 's have'} no price yet — type one in to include ${missing === 1 ? 'it' : 'them'}.</div>` : ''}</div>`;
+      ${missing && S.listMode === 'prices' ? `<div class="small" style="color:var(--warn);margin-top:6px">${missing} item${missing === 1 ? ' has' : 's have'} no price yet — type one in to include ${missing === 1 ? 'it' : 'them'}.</div>` : ''}</div>`;
   const extra = S.extra || [];
   if (!ids.length && !extra.length) {
     h += `<div class="empty">Your shopping list is empty.<br>Tick items on the <b>Costco</b> tab, tap <b>+ Shopping list</b> on any food, or add a whole meal plan.</div>
       <div class="row"><button class="btn alt grow" data-act="tab" data-t="costco">Browse Costco items</button><button class="btn alt grow" data-act="tab" data-t="plan">Meal plan</button></div>`;
     $('#view').innerHTML = h; return;
   }
+  const simple = S.listMode !== 'prices';
+  h += `<div class="chips" style="margin:0 0 8px"><button class="chip ${simple ? 'on' : ''}" data-act="listmode" data-v="simple">📝 Easy to read</button><button class="chip ${simple ? '' : 'on'}" data-act="listmode" data-v="prices">💲 Prices & amounts</button></div>`;
   const groups = {};
   for (const id of ids) { const f = getFood(id); (groups[aisleOf(f)] = groups[aisleOf(f)] || []).push(f); }
   for (const [, aisle] of AISLES.filter((a, i, arr) => arr.findIndex(b => b[1] === a[1]) === i)) {
     const fs = groups[aisle]; if (!fs) continue;
     const sub = fs.reduce((a, f) => a + (line(f.id) || 0), 0);
+    fs.sort((a, b) => (S.list[a.id].got - S.list[b.id].got) || a.name.localeCompare(b.name));
+    if (simple) { h += `<div class="card"><h2 style="margin:0 0 2px">${aisle}</h2>${fs.map(simpleRow).join('')}</div>`; continue; }
     h += `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${aisle}</h2><span class="small muted">${money(sub)}</span></div>
-      ${fs.sort((a, b) => (S.list[a.id].got - S.list[b.id].got) || a.name.localeCompare(b.name)).map(f => {
+      ${fs.map(f => {
         const L = S.list[f.id], pr = priceOf(f.id), qty = L.qty || 1, pkg = PRICES[f.id] ? PRICES[f.id][1] : '';
         return `<div class="item" style="align-items:flex-start"><input type="checkbox" data-act="got" data-id="${esc(f.id)}" ${L.got ? 'checked' : ''} aria-label="Got it" style="margin-top:3px">
           <div class="grow"><div class="row" style="align-items:flex-start;gap:6px"><div class="name tap grow" data-act="open" data-id="${esc(f.id)}" style="${L.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(f.name)}</div>
@@ -1580,11 +1599,12 @@ function renderList() {
       }).join('')}</div>`;
   }
   const spiceItems = extra.filter(x => x.spice), otherItems = extra.filter(x => !x.spice);
-  const xrow = x => `<div class="item"><input type="checkbox" data-act="xgot" data-id="${esc(x.id)}" ${x.got ? 'checked' : ''} aria-label="Got it">
-      <div class="grow name" style="${x.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(x.text)}</div><button class="icon-btn" data-act="xdel" data-id="${esc(x.id)}" aria-label="Remove">✕</button></div>`;
+  const xrow = x => { const [main, forWhat] = x.text.split(' — '), m = main.match(/^(.*?)\s*\(([^)]*)\)\s*$/), nameTxt = m ? m[1] : main;
+    const sub = [m ? m[2] : '', forWhat ? 'For ' + shortRecipes(forWhat.split(', ')) : ''].filter(Boolean).join(' · ');
+    return `<div class="item"><input type="checkbox" data-act="xgot" data-id="${esc(x.id)}" ${x.got ? 'checked' : ''} aria-label="Got it" style="width:22px;height:22px">
+      <div class="grow" style="${x.got ? 'text-decoration:line-through;opacity:.6' : ''}"><div class="name">${esc(nameTxt)}</div>${sub ? `<div class="meta">${esc(sub)}</div>` : ''}</div><button class="icon-btn" data-act="xdel" data-id="${esc(x.id)}" aria-label="Remove">✕</button></div>`; };
   if (spiceItems.length) h += `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🧂 Spices & seasonings</h2><button class="btn ghost sm" data-act="kview" data-v="spices">My spice rack</button></div>${spiceItems.map(xrow).join('')}</div>`;
-  if (otherItems.length) h += `<div class="card"><h2 style="margin:0">📝 Other items</h2>${otherItems.map(x => `<div class="item"><input type="checkbox" data-act="xgot" data-id="${esc(x.id)}" ${x.got ? 'checked' : ''} aria-label="Got it">
-      <div class="grow name" style="${x.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(x.text)}</div><button class="icon-btn" data-act="xdel" data-id="${esc(x.id)}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
+  if (otherItems.length) h += `<div class="card"><h2 style="margin:0">📝 Other items</h2>${otherItems.map(xrow).join('')}</div>`;
   h += `<div class="row" style="margin-bottom:8px"><button class="btn ghost grow sm" data-act="cleargot">Remove checked</button><button class="btn danger grow sm" data-act="clearlist">Clear list</button></div>
     <div class="small muted" style="text-align:center;margin-bottom:16px">Prices are Lodi Costco estimates from costco.com and Same-Day (Instacart), which can run a little higher than in the store. Tap a price to change it.</div>`;
   $('#view').innerHTML = h;
@@ -1911,7 +1931,7 @@ function recipeRows(rid) {
       if (!i.id || !getFood(i.id)) { (extras[i.text] = extras[i.text] || []).push(r.name); continue; }
       need[i.id] = (need[i.id] || 0) + (i.sv == null ? 0 : i.sv * b); (texts[i.id] = texts[i.id] || []).push(i.text);
     } }
-  for (const [t, names] of Object.entries(extras)) rows.push({ key: 'x:' + t, kind: 'extra', label: t, have: false, note: rid === 'week' ? `For ${[...new Set(names)].join(', ')}` : 'Not in your kitchen list' });
+  for (const [t, names] of Object.entries(extras)) rows.push({ key: 'x:' + t, kind: 'extra', label: t, have: false, note: rid === 'week' ? `For ${shortRecipes(names)}` : 'Not in your kitchen list' });
   for (const [fid, sv] of Object.entries(need)) {
     const f = getFood(fid), st = stockOf(fid), flag = S.have && S.have[fid], g = sv ? gramsFor(f, sv) : null;
     const amt = sv ? stockText(f, sv) + (g && /\bcanned\b/i.test(f.name) ? ` (about ${Math.max(1, Math.round(g / 411))} can${Math.round(g / 411) > 1 ? 's' : ''})` : '') : '';
@@ -1929,8 +1949,8 @@ function showRecipeCheck(rid) {
   const set = shopSet(rid), rows = recipeRows(rid), wk = rid === 'week';
   for (const x of rows) if (!(x.key in recipeSel)) recipeSel[x.key] = x.have ? 'have' : 'buy';
   const buy = rows.filter(x => recipeSel[x.key] === 'buy'), have = rows.filter(x => recipeSel[x.key] === 'have');
-  const row = x => `<div class="item"><div class="grow"><div class="name">${x.kind === 'spice' ? '🧂 ' : ''}${esc(x.label)}</div><div class="meta">${esc(x.note)}</div></div>
-    <button class="btn ${recipeSel[x.key] === 'buy' ? 'ghost' : 'alt'} sm" data-act="rcheck" data-id="${esc(rid)}" data-k="${esc(x.key)}">${recipeSel[x.key] === 'buy' ? '✓ I have it' : '🛒 Need it'}</button></div>`;
+  const row = x => { const m = x.kind === 'extra' && x.label.match(/^(.*?)\s*\(([^)]*)\)\s*$/); return `<div class="item"><div class="grow"><div class="name">${x.kind === 'spice' ? '🧂 ' : ''}${esc(m ? m[1] : x.label)}</div><div class="meta">${esc([m ? m[2] : '', x.note].filter(Boolean).join(' · '))}</div></div>
+    <button class="btn ${recipeSel[x.key] === 'buy' ? 'ghost' : 'alt'} sm" data-act="rcheck" data-id="${esc(rid)}" data-k="${esc(x.key)}">${recipeSel[x.key] === 'buy' ? '✓ I have it' : '🛒 Need it'}</button></div>`; };
   const title = wk ? 'Groceries for this week' : `Shopping for ${recipeById(rid).name}`;
   const sub = wk ? set.map(w => `${recipeById(w.rid).name}${w.b > 1 ? ' ×' + w.b : ''}`).join(' · ') : `${set[0].b > 1 ? `${set[0].b} batches · ` : ''}checked against your kitchen and spice rack`;
   sheet(`<div class="sheet-head"><div class="grow"><h2>🛒 ${esc(title)}</h2><div class="small muted">${esc(sub)}</div></div><button class="icon-btn" data-act="${wk ? 'close' : 'ropen'}" data-id="${esc(rid)}" aria-label="Back">${wk ? '✕' : '‹'}</button></div>
@@ -1942,7 +1962,7 @@ function showRecipeCheck(rid) {
     <button class="btn block" data-act="rcheckgo" data-id="${esc(rid)}" ${buy.length ? '' : 'disabled'}>Add ${buy.length} item${buy.length === 1 ? '' : 's'} to my shopping list</button>`);
 }
 function recipeToList(rid, sel = {}) {
-  const have = [], need = {};
+  const have = [], need = {}, forR = {};
   let added = 0; S.extra = S.extra || [];
   const spices = new Map();
   for (const { rid: id, b } of shopSet(rid)) { const r = recipeById(id);
@@ -1954,6 +1974,7 @@ function recipeToList(rid, sel = {}) {
         if (!x) { S.extra.push({ id: uid(), text: `${i.text} — ${r.name}`, got: false }); added++; } else if (!x.text.includes(r.name)) x.text += `, ${r.name}`;
         continue; }
       need[i.id] = (need[i.id] || 0) + (i.sv == null ? 0 : i.sv * b); // an unknown amount still puts the item on the list
+      (forR[i.id] = forR[i.id] || new Set()).add(r.name);
     } }
   for (const [fid, sv0] of Object.entries(need)) {
     const sv = sv0 || null, f = getFood(fid), pi = packageInfo(f), st = stockOf(fid), L = S.list[fid] && S.list[fid].on ? S.list[fid] : null, c = sel['f:' + fid];
@@ -1966,7 +1987,7 @@ function recipeToList(rid, sel = {}) {
     const n = sv == null ? 1 : short > 0.01 ? (pi.servings ? Math.max(1, Math.ceil(short / pi.servings - 0.05)) : 1) : 0;
     const qty = base + Math.max(L ? (L.qty || 1) - base : 0, n);
     if (!n && (!L || qty === (L.qty || 1))) { have.push(shortName(f)); continue; }
-    S.list[fid] = { ...(L || {}), on: true, got: false, qty, base }; added++;
+    S.list[fid] = { ...(L || {}), on: true, got: false, qty, base, for: [...new Set([...((L && L.for) || []), ...forR[fid]])] }; added++;
     if (S.have) delete S.have[fid];
   }
   // Spices: only the ones you need go on the list, in their own section.
@@ -3249,6 +3270,7 @@ document.addEventListener('click', e => {
     case 'resetfood': { const fid = sheetFood.id; delete S.foods[fid]; save(); openFood(fid); break; }
     case 'delfood': if (confirm('Delete this saved food?')) { delete S.foods[sheetFood.id]; delete S.list[sheetFood.id]; save(); closeSheet(); } break;
     case 'cview': costcoView = el.dataset.v; renderCostco(); break;
+    case 'listmode': S.listMode = el.dataset.v; save(); renderList(); break;
     case 'listrm': { const n = shortName(getFood(id)); delete S.list[id]; if (S.rneed) delete S.rneed[id]; save(); renderList(); toast(`Removed ${n}`); break; }
     case 'qty': { const L = S.list[id]; if (L) { L.qty = Math.max(1, (L.qty || 1) + +el.dataset.d); save(); renderList(); } break; }
     case 'cfilter': costcoFilter = el.dataset.v; renderCostco(); break;
