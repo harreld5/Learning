@@ -783,6 +783,17 @@ const CATALOG = CATALOG_RAW.map(([id, name, cat, serving, cal, p, c, f, s, fb, o
 const BOUGHT = new Set(['dm15', 'rc1', 'dm6', 'rc2', 'e19', 'pr7', 'rc3', 'bk2', 'dr40', 'rc4', 'rc5', 'rc6', 'e5', 'rc7', 'c11', 'pr16', 'rc14', 'b1', 'pr29', 'rc8', 'f2', 'rc9',
   'pr33', 'a3', 'pt30', 'rc10', 'c8', 'f1', 'pr35', 'rc11', 'rc12', 'cz7', 'rc13', 'sc10',
   'br6', 'a1', 'cs2', 'pt5', 'fz6', 'ch1', 'pr26', 'j2', 'cs4', 'm16', 'sc14', 'm25', 'e14', 'pr4', 'pr27', 'pr32', 'pt1', 'm14', 'sc7', 'nb1', 'm28', 'pr15', 'e25', 'br5', 'v8', 'bk3', 'pr41', 'cf1', 'pt34', 'yg3', 'dm4', 'b4', 'k3', 'rc15', 'rc16', 'rc17', 'rc18', 'rc19', 'rc20', 'rc21', 'rc22', 'rc23', 'rc24', 'rc25', 'rc26', 'rc27', 'rc28', 'rc29', 'rc30', 'rc31', 'rc32', 'rc33', 'rc34', 'rc35', 'rc36', 'rc37', 'rc38', 'rc39', 'rc40']);
+// Restaurant meals that fit your goals (approximate, from each restaurant's published nutrition; changes to the order change the numbers).
+const RESTAURANT_MEALS = [
+  ['rm1', 'Chipotle', 'Chicken Bowl — light rice', 'Bowl: chicken, light white rice, black beans, fajita veggies, fresh tomato salsa. Skip cheese, sour cream and queso.', 460, 42, 51, 11, 3.5, 5, 10],
+  ['rm2', 'Chipotle', 'Double Chicken Bowl — no rice', 'Bowl: double chicken, black beans, fajita veggies, fresh tomato salsa (or green tomatillo salsa). No rice.', 535, 72, 31, 16, 6, 4, 9],
+  ['rm3', 'Chipotle', 'Double Steak Bowl — light rice', 'Bowl: double steak, light white rice, black beans, fajita veggies, fresh tomato salsa. Skip cheese and sour cream.', 580, 52, 53, 16, 5.5, 5, 10],
+  ['rm4', 'Panda Express', 'Grilled Teriyaki Chicken + Super Greens (bowl)', 'Bowl with Super Greens as the base and Grilled Teriyaki Chicken. Ask for the teriyaki sauce on the side and use about half.', 390, 42, 18, 16, 3.5, 10, 4],
+  ['rm5', 'Panda Express', 'Double Teriyaki Chicken + Super Greens (plate)', 'Plate: Super Greens as the side, two Grilled Teriyaki Chicken entrées. Sauce on the side — use about half.', 690, 78, 26, 29, 6.5, 18, 4],
+  ['rm6', 'Chick-fil-A', '12-ct Grilled Nuggets + Kale Crunch', '12-count Grilled Nuggets with a Kale Crunch side. Zesty Buffalo sauce adds only 25 cal; skip Chick-fil-A sauce (140 cal).', 320, 41, 10, 13.5, 2, 4, 2],
+  ['rm7', 'Chick-fil-A', '12-ct Grilled Nuggets + Fruit Cup', '12-count Grilled Nuggets with a medium Fruit Cup. Zesty Buffalo or a little BBQ for dipping.', 270, 39, 19, 4.5, 1, 14, 2],
+].map(([id, brand, name, order, cal, p, c, f, sf, s, fb]) => ({ id, brand, name, order, cal, p, c, f, sf, s, fb, serving: '1 order', cat: 'other', src: 'restaurant', whole: true }));
+CATALOG.push(...RESTAURANT_MEALS);
 const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
 
 // Package prices at the Lodi Costco (costco.com and Costco Same-Day, Oct 2026): id -> [price, package]. Prices change; tap a price to edit it.
@@ -790,7 +801,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '6.9 (game-day chili, leftovers into the plan)';
+const APP_VERSION = '7.0 (eating out: approved restaurant meals)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -891,7 +902,20 @@ function toast(msg) {
 function carbsOf(f) { return S.rules.net ? Math.max(0, (f.c || 0) - (f.fb || 0)) : f.c; }
 
 /* ================= approved / not approved ================= */
+// Restaurant meals are judged as a whole meal (about a third of your day), not by the single-serving limits.
+function mealVerdict(f) {
+  const T = S.targets, L = { cal: Math.round(T.cal * 0.35), c: Math.round(T.c * 0.4), sf: r1(sfTarget() * 0.4), p: Math.round(T.p * 0.2), s: Math.max(20, (S.rules.s.v || 10) * 2) };
+  const fails = [], why = [], add = (short, long) => { fails.push(short); why.push({ short, long }); };
+  if ((f.cal || 0) > L.cal) add(`Too many calories for one meal (${Math.round(f.cal)}, about ${L.cal} max)`, `A meal should be about a third of your ${T.cal} daily calories.`);
+  if ((f.c || 0) > L.c) add(`Too many carbs for one meal (${Math.round(f.c)} g, about ${L.c} g max)`, 'Ask for light rice or no rice, or skip the tortilla or bun.');
+  if ((f.sf || 0) > L.sf) add(`Too much saturated fat (${r1(f.sf)} g, about ${L.sf} g max)`, 'Usually cheese, sour cream, queso, butter or fried meat — skip one of those.');
+  if ((f.p || 0) < L.p) add(`Not enough protein for a meal (${Math.round(f.p)} g, aim for ${L.p} g+)`, 'Add double meat or a protein side.');
+  if ((f.s || 0) > L.s) add(`Too much sugar (${Math.round(f.s)} g, about ${L.s} g max)`, 'Usually the sauce — get it on the side and use half.');
+  if (avoidedWord(f)) add(`Contains “${avoidedWord(f)}”`, 'It matches your foods-to-avoid list.');
+  return { ok: !fails.length, fails, why, meal: true };
+}
 function verdict(f, scale = 1) {
+  if (f.src === 'restaurant' && scale === 1) return mealVerdict(f);
   const r = S.rules, fails = [], why = [], T = S.targets, n = Math.max(1, S.servingsPerDay);
   // Spices and other near-zero-calorie foods: a missing number on the label doesn't matter.
   const tiny = (f.cal != null && f.cal * scale <= 10 && !f.noServing) || (f.src !== 'costco' && spiceNameForFood(f));
@@ -1069,7 +1093,7 @@ function renderToday() {
     <div class="small" style="margin-top:6px;color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</div></div>
     ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
     ${isToday ? todaysMealsCard() : ''}
-    <div class="row" style="margin-bottom:12px"><button class="btn alt grow" data-act="find">🔎 Ate something else? Search for it</button></div>
+    <div class="row" style="margin-bottom:12px;gap:6px"><button class="btn alt grow" data-act="find">🔎 Ate something else?</button><button class="btn alt grow" data-act="eatout">🍔 Eating out</button></div>
     ${list.length ? `<h3 style="margin:4px 4px 8px;font-size:15px">What you've logged</h3>` : ''}`;
   for (const m of MEALS) {
     const es = list.filter(e => e.meal === m); if (!es.length) continue;
@@ -1286,7 +1310,8 @@ function openFood(id, opts = {}) {
   sheet(`<div class="sheet-head">${f.img ? `<img src="${esc(f.img)}" alt="" style="width:52px;height:52px;object-fit:contain;border-radius:8px;background:#fff">` : ''}
       <div class="grow"><h2>${esc(f.name)}</h2><div class="small muted">${esc(f.brand || (f.src === 'costco' ? 'Costco catalog' : ''))}${f.barcode ? ' · ' + esc(f.barcode) : ''}</div></div>
       <button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
-    <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">per serving</span></div>
+    <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">${f.src === 'restaurant' ? 'as a meal' : 'per serving'}</span></div>
+    ${f.order ? `<div class="small" style="margin-top:6px"><b>How to order:</b> ${esc(f.order)}</div><div class="small muted">Approximate, from the restaurant's nutrition info. Changing the order changes the numbers.</div>` : ''}
     ${opts.fromScan && spiceNameForFood(f) ? (() => { const sp = spiceNameForFood(f), e = spiceRack().find(x => x.name === sp), onL = (S.extra || []).find(x => x.spice === sp);
       return `<div class="small muted" style="margin-top:8px">🧂 Spice & seasoning — <b>${esc(sp)}</b></div><div class="row" style="gap:6px;margin-top:4px">
         <button class="btn alt sm grow" data-act="scanjust">🔎 Checking</button>
@@ -1299,7 +1324,7 @@ function openFood(id, opts = {}) {
         <button class="btn ${on ? '' : 'alt'} sm grow" data-act="scanget" data-id="${esc(f.id)}">🛒 ${got ? 'In cart ✓' : on ? 'On list ✓' : 'Getting it'}</button></div>
       ${opts.askHave ? `<div class="card" style="margin:8px 0 0;padding:10px 12px;background:var(--soft)"><b>✓ Marked as in your kitchen.</b>
         <div class="small muted">Want “days left” and low-stock alerts for it? Type how much is in the package — the net weight on the label (like 454 g) or ${stockUnit(f).u === 'g' ? 'grams on your scale' : stockUnit(f).u === 'ml' ? 'ml (1 gallon = 3,785 ml)' : 'how many ' + unitWord(stockUnit(f).u) + ' are in it'}. Optional — it won't ask again.</div>${stockRow(f, true)}</div>` : ''}`; })() : ''}
-    ${v.ok ? `<div class="small muted" style="margin-top:6px">Within all your per-serving limits.</div>` : (() => {
+    ${v.ok ? `<div class="small muted" style="margin-top:6px">${f.src === 'restaurant' ? 'Fits your goals as a meal.' : 'Within all your per-serving limits.'}</div>` : (() => {
       const part = portionThatFits(f), swaps = approvedSwaps(f), pp = proteinPortion(f);
       const g = servingGrams(f), amt = pp ? `${svText(pp.sc)} serving${pp.sc > 1 ? 's' : ''}${g && S.units !== 'servings' ? ` (${fmtWeight(f, g * pp.sc)})` : ''}` : '';
       return `<div style="margin-top:8px"><b class="small">Why it's not approved</b>
@@ -1311,8 +1336,8 @@ function openFood(id, opts = {}) {
         ${swaps.length ? `<div class="small" style="margin-top:6px">Approved swaps: ${swaps.map(g => `<button class="chip" data-act="open" data-id="${esc(g.id)}">${esc(g.name)}</button>`).join(' ')}</div>` : ''}</div>`;
     })()}
     ${f.ppl || priceOf(f.id) != null ? `<div class="small muted" style="margin-top:8px">💲 ${priceOf(f.id) != null ? `${money(priceOf(f.id))}${PRICES[f.id] ? ' · ' + esc(PRICES[f.id][1]) : ''}` : ''}${f.ppl ? `${priceOf(f.id) != null ? ' · ' : ''}${priceText(f)}` : ''} <span class="small">(Lodi Costco estimate)</span></div>` : ''}
-    ${f.src !== 'costco' ? `<div class="small muted" style="margin-top:8px">${f.src === 'scan' ? '📷 In your Costco inventory · ' : ''}Type: <b>${esc((CATS[f.cat] || CATS.other).label)}</b>${f.catAuto ? ' (guessed — tap Edit to change)' : ''}</div>` : ''}
-    ${(() => { const pi = packageInfo(f), unit = /raw/.test(f.serving || '') ? ' raw' : '';
+    ${f.src !== 'costco' && f.src !== 'restaurant' ? `<div class="small muted" style="margin-top:8px">${f.src === 'scan' ? '📷 In your Costco inventory · ' : ''}Type: <b>${esc((CATS[f.cat] || CATS.other).label)}</b>${f.catAuto ? ' (guessed — tap Edit to change)' : ''}</div>` : ''}
+    ${f.src === 'restaurant' ? '' : (() => { const pi = packageInfo(f), unit = /raw/.test(f.serving || '') ? ' raw' : '';
       const per = S.units !== 'servings' && servingGrams(f) && !/\d\s*g\)/.test(f.serving || '') ? ` (${fmtWeight(f, servingGrams(f))}${unit})` : '';
       return `<div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)"><b class="small">📦 What one package makes</b>
         ${pi.servings ? `<div class="small" style="margin-top:4px">${pi.text ? esc(pi.text) + ' → ' : ''}<b>≈ ${Math.floor(pi.servings)} servings</b> of ${esc(f.serving)}${per}${pi.portion && Math.abs(pi.portion - 1) > 0.05 ? ` · <b>≈ ${Math.floor(pi.meals)} meals</b> at your usual ${esc(amountText(f, pi.portion))}` : ''}.</div>` : `<div class="small muted" style="margin-top:4px">Enter the package size from the label to see how many servings and meals it makes.</div>`}
@@ -1329,7 +1354,7 @@ function openFood(id, opts = {}) {
       <div class="stepper"><button data-act="sv" data-d="-0.5">−</button><input type="number" id="sv" value="${sv}" step="0.25" min="0.25" inputmode="decimal"><button data-act="sv" data-d="0.5">+</button></div>
       <select id="meal" style="width:auto;flex:1">${MEALS.map(m => `<option ${m === (opts.meal || defaultMeal()) ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
     <button class="btn block" data-act="log">Log it</button>
-    <div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)">
+    <div ${f.src === 'restaurant' ? 'hidden' : ''}><div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)">
       <div class="row"><b class="small grow">🏠 In my kitchen</b></div>${stockRow(f)}</div>
     <div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)">
       <div class="row"><b class="small grow">🛒 Shopping list</b>${onList ? `<span class="small" style="color:var(--ok)">✓ On your list</span>` : ''}</div>
@@ -1338,7 +1363,7 @@ function openFood(id, opts = {}) {
         <div class="stepper"><button data-act="sqty" data-d="-1" aria-label="Fewer">−</button><span id="sqty" style="min-width:22px;text-align:center;font-weight:700">${onList ? (S.list[f.id].qty || 1) : 1}</span><button data-act="sqty" data-d="1" aria-label="More">+</button></div>
         <button class="btn sm grow" data-act="addlist">${onList ? 'Update' : 'Add to list'}</button></div>
       ${priceOf(f.id) == null ? `<div class="small muted" style="margin-top:4px">Type the shelf price so your list total includes it.</div>` : (PRICES[f.id] && S.prices[f.id] == null ? `<div class="small muted" style="margin-top:4px">Listed price — change it if the shelf tag is different.</div>` : '')}
-    </div>
+    </div></div>
     <div class="row" style="margin-top:8px">${onList ? `<button class="btn alt grow sm" data-act="togglelist">Remove from list</button>` : ''}
       <button class="btn alt grow sm" data-act="edit">Edit</button>
       <button class="btn ${S.excluded[f.id] ? 'danger' : 'alt'} sm" data-act="exclude">${S.excluded[f.id] ? '🚫 Never use' : '🚫'}</button>
@@ -2044,7 +2069,7 @@ function renderSpices() {
 function planPool() {
   // Sauces are typed "other" but meal templates need them (salsa for tacos, teriyaki for stir-fry...); they're pantry items, so the shopping-list filter skips them.
   const sauce = f => f.cat === 'other' && /salsa|picante|teriyaki|bachan|yoshida|marinara|pasta sauce|balsamic|sweet jalape|cholula|tapatio|hot sauce/i.test(f.name || '');
-  return allFoods().filter(f => !f.kids && f.src !== 'recipe' && f.cat && (f.cat !== 'other' || sauce(f)) && f.cal != null && verdict(f).ok && (sauce(f) || !S.planOpts.onlyList || (S.list[f.id] && S.list[f.id].on)));
+  return allFoods().filter(f => !f.kids && f.src !== 'recipe' && f.src !== 'restaurant' && f.cat && (f.cat !== 'other' || sauce(f)) && f.cal != null && verdict(f).ok && (sauce(f) || !S.planOpts.onlyList || (S.list[f.id] && S.list[f.id].on)));
 }
 function weightedPick(arr, used) {
   if (!arr.length) return null;
@@ -2807,9 +2832,33 @@ function planTotals(day) {
   const list = day.meals.flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
   return totals(list);
 }
-const planSwitch = () => `<div class="chips" style="margin-bottom:10px"><button class="chip ${planView === 'plan' ? 'on' : ''}" data-act="pview" data-v="plan">🗓 My plan</button><button class="chip ${planView === 'recipes' ? 'on' : ''}" data-act="pview" data-v="recipes">📖 My recipes (${(S.recipes || []).length})</button></div>`;
+const planSwitch = () => `<div class="chips" style="margin-bottom:10px"><button class="chip ${planView === 'plan' ? 'on' : ''}" data-act="pview" data-v="plan">🗓 My plan</button><button class="chip ${planView === 'recipes' ? 'on' : ''}" data-act="pview" data-v="recipes">📖 Recipes (${(S.recipes || []).length})</button><button class="chip ${planView === 'out' ? 'on' : ''}" data-act="pview" data-v="out">🍔 Eating out</button></div>`;
+function renderEatingOut() {
+  const meals = allFoods().filter(f => f.src === 'restaurant'), byR = {};
+  for (const f of meals) (byR[f.brand || 'Other'] = byR[f.brand || 'Other'] || []).push(f);
+  let h = `<div class="card" style="background:var(--soft)"><div class="small">Orders that fit your goals <b>as a meal</b> (about a third of your day). Numbers are approximate, from each restaurant's nutrition info — if you change the order, check their app. Tap one to log it.</div>
+    <button class="btn alt sm" style="margin-top:8px" data-act="rmnew">+ Add a restaurant meal</button></div>`;
+  for (const [brand, fs] of Object.entries(byR)) {
+    h += `<div class="card"><h2 style="margin:0 0 4px">${esc(brand)}</h2>${fs.map(f => { const v = verdict(f);
+      return `<div class="item" style="align-items:flex-start"><div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
+        <div class="meta"><b>${Math.round(f.cal)} cal</b> · <span style="color:var(--p)">P${Math.round(f.p)}</span> C${Math.round(f.c)} F${Math.round(f.f)} · sat fat ${r1(f.sf || 0)} g</div>
+        ${f.order ? `<div class="small muted" style="margin-top:2px">${esc(f.order)}</div>` : ''}${v.ok ? '' : `<div class="small" style="color:var(--warn);margin-top:2px">${esc(v.fails[0])}</div>`}</div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span class="badge ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ Fits' : '✕'}</span>${S.foods[f.id] ? `<button class="icon-btn" data-act="rmdel" data-id="${esc(f.id)}" aria-label="Remove">✕</button>` : ''}</div></div>`; }).join('')}</div>`;
+  }
+  return h;
+}
+function restaurantForm() {
+  sheet(`<div class="sheet-head"><h2>Add a restaurant meal</h2><button class="icon-btn" data-act="close">✕</button></div>
+    <div class="small muted" style="margin-bottom:8px">Find the numbers in the restaurant's app or website (most chains list nutrition for every item and add-on).</div>
+    <label class="small muted">Restaurant</label><input type="text" id="rmbrand" placeholder="e.g. Subway">
+    <label class="small muted" style="display:block;margin-top:6px">Meal</label><input type="text" id="rmname" placeholder="e.g. Rotisserie chicken protein bowl">
+    <label class="small muted" style="display:block;margin-top:6px">How I order it (optional)</label><input type="text" id="rmorder" placeholder="e.g. double chicken, no cheese, light dressing">
+    <div class="grid2" style="margin-top:8px">${[['cal', 'Calories'], ['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g'], ['sf', 'Saturated fat g'], ['s', 'Sugar g']].map(([k, l]) => `<label class="field">${l}<input type="number" inputmode="decimal" step="any" min="0" id="rm-${k}"></label>`).join('')}</div>
+    <button class="btn block" style="margin-top:12px" data-act="rmsave">Save</button>`);
+}
 function renderPlan() {
   if (planView === 'recipes') { $('#view').innerHTML = planSwitch() + renderRecipes(); return; }
+  if (planView === 'out') { $('#view').innerHTML = planSwitch() + renderEatingOut(); return; }
   // A plan saved by an older planner gets rebuilt with the current one, keeping the same number of days.
   const keepShape = () => { if (S.plan.prep) { S.planOpts.mode = 'prep'; S.planOpts.prepDays = S.plan.prep; } else { S.planOpts.mode = 'daily'; S.planOpts.days = S.plan.days.length > 1 ? 7 : 1; } };
   if (S.plan && S.plan.planner !== PLANNER_VERSION && planPool().length >= 3) {
@@ -3058,6 +3107,13 @@ document.addEventListener('click', e => {
       if (inStore && pi.servings) changeStock(id, pi.servings * S.list[id].qty, true); // in the store: it's in your cart, so it's in your kitchen
       save(); toast(inStore ? 'In your cart — added to your kitchen' : 'Added to your shopping list'); openFood(id, { fromScan: true, focusPrice: inStore }); break; }
     case 'pview': planView = el.dataset.v; renderPlan(); break;
+    case 'eatout': planView = 'out'; go('plan'); break;
+    case 'rmnew': restaurantForm(); break;
+    case 'rmsave': { const v = k => { const x = $('#rm-' + k).value.trim(); return x === '' ? null : +x; }, name = $('#rmname').value.trim(), brand = $('#rmbrand').value.trim();
+      if (!name || v('cal') == null) { toast('Add at least the meal name and calories'); break; }
+      const nid = 'rm-' + uid(); S.foods[nid] = { id: nid, name, brand: brand || 'Other', order: $('#rmorder').value.trim(), serving: '1 order', cal: v('cal'), p: v('p') || 0, c: v('c') || 0, f: v('f') || 0, sf: v('sf') || 0, s: v('s') || 0, fb: 0, cat: 'other', src: 'restaurant', whole: true };
+      save(); closeSheet(); planView = 'out'; renderPlan(); toast(verdict(S.foods[nid]).ok ? '✓ Saved — it fits as a meal' : 'Saved — see why it doesn\'t fit'); break; }
+    case 'rmdel': delete S.foods[id]; save(); renderPlan(); break;
     case 'wkadd': S.week = S.week || []; if (!S.week.some(w => w.rid === id)) S.week.push({ rid: id, b: recipeById(id).meal === 'Breakfast' && recipeById(id).servings === 1 ? weekDays() : 1, inPlan: !recipeById(id).occasion }); /* a one-bowl breakfast: every morning */ save(); renderPlan(); toast(`${recipeById(id).name} added to this week`); break;
     case 'wkrm': S.week = (S.week || []).filter(w => w.rid !== id); save(); renderPlan(); break;
     case 'wkb': { const w = (S.week || []).find(w => w.rid === id); if (w) w.b = Math.max(1, Math.min(recipeById(id).meal === 'Breakfast' ? 14 : 6, w.b + +el.dataset.d)); save(); renderPlan(); break; }
