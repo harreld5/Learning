@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '5.1 (Chipotle-style bowls)';
+const APP_VERSION = '5.2 (bowls without lettuce)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1520,7 +1520,7 @@ const CHILI_RECIPE = { id: 'chili', name: 'Lean Beef & Black Bean Chili', servin
 const chipotleBowl = (meat) => {
   const steak = meat === 'steak';
   return { id: steak ? 'chipotle-steak' : 'chipotle-chicken', name: `Chipotle-Style ${steak ? 'Steak' : 'Chicken'} Bowls`, servings: 4, time: `${steak ? '2' : '1'} hr marinating + 40 min cooking`,
-    notes: `Each bowl (grams, cooked): ${steak ? '≈ 128 g steak (170 g raw)' : '≈ 150 g chicken (200 g raw)'} · 90 g cilantro-lime rice · 60 g black beans · 110 g fajita veggies · 47 g (1 cup) romaine · 64 g (4 tbsp) salsa · 30 g (2 tbsp) Greek yogurt as "sour cream" · lime wedge and hot sauce.\nMeal prep: keeps 4 days in the fridge. Pack the lettuce, salsa and yogurt separately so the bowl reheats well.\nOptional guacamole: one Kirkland guac cup adds 100 cal, 9 g fat, 1.5 g saturated fat. Cheese: 1 tbsp at most (¼ cup ≈ 5 g saturated fat).`,
+    notes: `Each bowl (grams, cooked): ${steak ? '≈ 128 g steak (170 g raw)' : '≈ 150 g chicken (200 g raw)'} · 90 g cilantro-lime rice · 60 g black beans · 110 g fajita veggies · 64 g (4 tbsp) salsa · 30 g (2 tbsp) Greek yogurt as "sour cream" · lime wedge and hot sauce.\nMeal prep: keeps 4 days in the fridge. Pack the salsa and yogurt separately so the bowl reheats well.\nOptional guacamole: one Kirkland guac cup adds 100 cal, 9 g fat, 1.5 g saturated fat. Cheese: 1 tbsp at most (¼ cup ≈ 5 g saturated fat).`,
     ingredients: [
       steak ? { text: '680 g (1.5 lb) top sirloin steak', id: 'm34', sv: 6 } : { text: '800 g (1.75 lb) boneless skinless chicken thighs', id: 'ch1', sv: 7.05 },
       { text: '2 chipotle peppers in adobo + 1 tbsp of the adobo sauce (7 oz can, Mexican aisle)', id: null, sv: null, extra: true },
@@ -1532,7 +1532,6 @@ const chipotleBowl = (meat) => {
       { text: '½ can (15 oz) black beans, drained and rinsed', id: 'c11', sv: 1.75 },
       { text: '300 g (2) bell peppers, sliced in strips', id: 'pr6', sv: 3.26 },
       { text: '200 g (1 large) onion, sliced in strips', id: 'pr15', sv: 2.5 },
-      { text: '4 cups chopped romaine', id: 'pr1', sv: 2 },
       { text: '1 cup salsa (Tatemada or any fresh salsa)', id: 'sc7', sv: 8 },
       { text: '120 g nonfat Greek yogurt (instead of sour cream)', id: 'b3', sv: 0.706 },
       { text: '1 tsp ground cumin', id: 'pt18', sv: 1, pantry: true },
@@ -1547,12 +1546,14 @@ const chipotleBowl = (meat) => {
             : 'Chicken: heat a cast-iron pan or grill over medium-high. Cook 5–6 min per side until 175°F inside (thighs stay juicy at this temperature). Rest 5 min, then chop into bite-size pieces.',
       'Fajita veggies: in the same hot pan, add the other ½ tbsp oil and the peppers and onion. Cook 6–8 min on high until charred at the edges; season with a pinch of oregano and salt.',
       'Beans: warm with a pinch of cumin, salt and a splash of water.',
-      'Build 4 bowls: rice, beans, fajita veggies, the meat, then lettuce, salsa, a spoon of Greek yogurt, a lime wedge and hot sauce. (Grams per bowl are in the notes.)',
+      'Build 4 bowls: rice, beans, fajita veggies and the meat, then salsa, a spoon of Greek yogurt, a lime wedge and hot sauce. (Grams per bowl are in the notes.)',
     ] };
 };
 const SEED_RECIPES = () => [chipotleBowl('chicken'), chipotleBowl('steak'), CHILI_RECIPE];
 // Add recipes made for you (once each; deleting one keeps it deleted).
 S.recipes = S.recipes || []; S.seeded = S.seeded || (S.recipesSeeded ? ['chili'] : []);
+// You skip lettuce in the Chipotle bowls: take it out of copies already saved on this phone.
+if (!S.noLettuceBowls) { for (const r of S.recipes) if (/^chipotle-/.test(r.id)) { const fresh = SEED_RECIPES().find(x => x.id === r.id); r.ingredients = r.ingredients.filter(i => !/romaine|lettuce/i.test(i.text)); if (fresh) { r.notes = fresh.notes; r.steps = fresh.steps; } } S.noLettuceBowls = true; }
 for (const r of SEED_RECIPES().reverse()) if (!S.seeded.includes(r.id)) { if (!S.recipes.some(x => x.id === r.id)) S.recipes.unshift(JSON.parse(JSON.stringify(r))); S.seeded.push(r.id); }
 const PANTRY_RE = /\b(salt|cumin|paprika|oregano|chili powder|garlic powder|onion powder|cinnamon|thyme|rosemary|basil|bay lea\w*|seasoning|cayenne|spices?|herbs?|cocoa|baking (soda|powder)|vanilla|cooking spray|water|nutmeg|ginger powder|red pepper flakes)\b/;
 const ING_SKIP = new Set('diced chopped minced fresh large medium small boneless skinless organic kirkland can cans drained rinsed optional raw cut cubes cubed into and the with of for to taste or sliced peeled seeded about plus more divided package packages bag bags jar jars whole piece pieces clove cloves cup cups tbsp tsp each inch'.split(' '));
