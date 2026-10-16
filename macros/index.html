@@ -792,6 +792,14 @@ const RESTAURANT_MEALS = [
   ['rm5', 'Panda Express', 'Double Teriyaki Chicken + Super Greens (plate)', 'Plate: Super Greens as the side, two Grilled Teriyaki Chicken entrées. Sauce on the side — use about half.', 690, 78, 26, 29, 6.5, 18, 4],
   ['rm6', 'Chick-fil-A', '12-ct Grilled Nuggets + Kale Crunch', '12-count Grilled Nuggets with a Kale Crunch side. Zesty Buffalo sauce adds only 25 cal; skip Chick-fil-A sauce (140 cal).', 320, 41, 10, 13.5, 2, 4, 2],
   ['rm7', 'Chick-fil-A', '12-ct Grilled Nuggets + Fruit Cup', '12-count Grilled Nuggets with a medium Fruit Cup. Zesty Buffalo or a little BBQ for dipping.', 270, 39, 19, 4.5, 1, 14, 2],
+  ['rm8', 'Chipotle', 'Chicken Bowl — full rice, no beans', 'Bowl: chicken, white or brown rice, fajita veggies, fresh tomato salsa. No beans, cheese or sour cream.', 435, 36, 49, 11.5, 3.5, 4, 4],
+  ['rm9', 'Panda Express', 'Teriyaki Chicken + half brown rice / half Super Greens', 'Bowl: half brown rice, half Super Greens, Grilled Teriyaki Chicken. Sauce on the side — use about half.', 555, 44, 56, 16.5, 3.5, 10, 5],
+  ['rm10', 'Subway', 'Double Rotisserie Chicken Protein Bowl', 'Protein bowl with double rotisserie-style chicken, all the veggies, no cheese. Dress it with mustard, red wine vinegar or salsa (skip mayo, ranch and chipotle southwest).', 350, 59, 10, 13, 4.5, 4, 3],
+  ['rm11', 'Starbucks', 'Spinach Feta Wrap + Turkey Bacon Egg White Sandwich', 'Breakfast: one Spinach, Feta & Egg White Wrap and one Turkey Bacon, Cheddar & Egg White Sandwich. Black coffee, or a latte with nonfat milk.', 520, 37, 62, 13, 6, 6, 6],
+  ['rm12', "Chili's", '6 oz Sirloin with Grilled Avocado & Asparagus', '6 oz sirloin with grilled avocado; choose steamed broccoli or asparagus as the side (no fries or loaded potato).', 330, 38, 12, 16, 4, 3, 5],
+  ['rm13', 'Any steakhouse', '6 oz Sirloin + Plain Baked Potato + Veggies (estimate)', '6 oz sirloin or filet, a medium baked potato with salsa or a spoon of sour cream (no butter or cheese), steamed vegetables. Skip the bread basket.', 540, 52, 45, 15, 5.5, 4, 6],
+  ['rm14', 'Mexican restaurant', 'Chicken Fajitas, 2 Corn Tortillas (estimate)', 'Chicken fajitas with peppers and onions, 2 corn tortillas, salsa and pico. No cheese, sour cream, rice or chips (or a small handful of chips).', 540, 52, 35, 18, 4, 6, 6],
+  ['rm15', 'Sushi restaurant', 'Sashimi (10 pc) + 1 Salmon or Tuna Roll (estimate)', '10 pieces of salmon/tuna sashimi and one simple salmon or tuna roll (no tempura, cream cheese or spicy mayo). Light on the soy sauce.', 600, 63, 45, 14, 3, 5, 2],
 ].map(([id, brand, name, order, cal, p, c, f, sf, s, fb]) => ({ id, brand, name, order, cal, p, c, f, sf, s, fb, serving: '1 order', cat: 'other', src: 'restaurant', whole: true }));
 CATALOG.push(...RESTAURANT_MEALS);
 const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
@@ -801,7 +809,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '7.0 (eating out: approved restaurant meals)';
+const APP_VERSION = '7.1 (more restaurant meals)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -2845,6 +2853,13 @@ function renderEatingOut() {
         ${f.order ? `<div class="small muted" style="margin-top:2px">${esc(f.order)}</div>` : ''}${v.ok ? '' : `<div class="small" style="color:var(--warn);margin-top:2px">${esc(v.fails[0])}</div>`}</div>
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span class="badge ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ Fits' : '✕'}</span>${S.foods[f.id] ? `<button class="icon-btn" data-act="rmdel" data-id="${esc(f.id)}" aria-label="Remove">✕</button>` : ''}</div></div>`; }).join('')}</div>`;
   }
+  h += `<div class="card" style="background:var(--bg)"><h2 style="margin:0 0 4px">⚠️ Hard to fit</h2><div class="small">
+    <p style="margin:4px 0"><b>In-N-Out:</b> even a Double-Double protein style is about 17 g saturated fat (the cheese and spread). A plain protein-style hamburger is low in protein.</p>
+    <p style="margin:4px 0"><b>Taco Bell:</b> the Cantina Chicken Bowl is about 24 g protein and 7 g saturated fat — short on protein for the calories.</p>
+    <p style="margin:4px 0"><b>Jersey Mike's:</b> a turkey & provolone sub in a tub is about 38 g fat. If you go, skip the cheese and oil and get extra turkey.</p>
+    <p style="margin:4px 0"><b>McDonald's:</b> an Egg McMuffin is only about 17 g protein; most other items are fried or high in saturated fat.</p>
+    <p style="margin:4px 0"><b>Costco food court:</b> the chicken bake and pizza are very high in calories and saturated fat. A rotisserie chicken from inside the store is the better grab.</p>
+    <p class="muted" style="margin:4px 0">Anywhere: grilled, not fried · double the meat · light or no rice/bun · skip cheese, sour cream and creamy sauces · sauce on the side.</p></div></div>`;
   return h;
 }
 function restaurantForm() {
