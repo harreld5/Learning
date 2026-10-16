@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '6.1 (scanned spices go to the spice rack)';
+const APP_VERSION = '6.2 (better barcode reading, photo of barcode)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -845,7 +845,7 @@ function priceText(f) { const c = servingCost(f); return f.ppl ? `${money(f.ppl)
 function guessCategory(f) {
   const n = ((f.name || '') + ' ' + (f.brand || '')).toLowerCase(), cal = f.cal || 0;
   if (/\b(bar|bars|chips|crisps|jerky|sticks?|crackers?|cookies?|popcorn|pretzels?|snacks?|trail mix|bites|puffs)\b/.test(n)) return 'snack';
-  if (/\b(water|soda|juice|drink|coffee|tea|latte|milk|beverage|kombucha|lemonade|shake|sauce|dressing|ketchup|mustard|mayo|mayonnaise|syrup|seasoning|spice|oil|vinegar|creamer|broth|stock|salsa)\b/.test(n)) return 'other';
+  if (/\b(water|soda|juice|drink|coffee|tea|latte|milk|beverage|kombucha|lemonade|shake|sauce|dressing|ketchup|mustard|mayo|mayonnaise|syrup|seasonings?|spices?|oil|vinegar|creamer|broth|stock|salsa|cayenne|paprika|cumin|oregano|cinnamon|nutmeg|turmeric|ground pepper|black pepper|red pepper|peppercorns?|chili powder|garlic powder|onion powder|dried \w+|\w+ flakes)\b/.test(n)) return 'other';
   if (/yogurt|cottage|\beggs?\b|skyr/.test(n)) return 'bprotein';
   if (/broccoli|spinach|lettuce|salad|kale|green beans?|carrots?|peppers?|cauliflower|zucchini|asparagus|vegetables?|veggies?|cabbage|mushrooms?|tomato/.test(n)) return 'veg';
   if (/apples?|banana|berr|grapes?|oranges?|mango|peach|pears?|melon|kiwi|cherr|pineapple|plums?/.test(n) && cal < 150) return 'fruit';
@@ -1054,11 +1054,14 @@ function renderScan() {
       <span class="small muted grow" id="scan-status"></span></div>
     <div class="card" style="padding:10px 14px"><label class="switch" style="border:0;padding:0"><input type="checkbox" id="scantolist" ${S.scanToList ? 'checked' : ''}>
       <span class="grow"><b>🛒 Shopping mode</b> <span class="small muted">(turn on at Costco)</span><br><span class="small muted">Everything I scan goes on my list, and “Getting it” checks it off as in my cart and adds it to my kitchen.</span></span></label></div>
+    <div class="card"><h2>📸 Photo of the barcode</h2><div class="small muted" style="margin-bottom:8px">Best for curved, shiny or small labels (spice jars, cans). Take a close, sharp photo of just the barcode.</div>
+      <label class="btn alt block" style="text-align:center">📸 Take a photo of the barcode<input type="file" id="barcodephoto" accept="image/*" capture="environment" hidden></label></div>
     <div class="card"><h2>Type the barcode</h2><div class="row"><input type="text" inputmode="numeric" id="manual-code" placeholder="e.g. 096619123456" autocomplete="off">
       <button class="btn" data-act="lookup">Look up</button></div>
       <div class="small muted" style="margin-top:6px">Nutrition comes from Open Food Facts, a free public food database. Only the barcode number is sent.</div></div>
     <div class="card"><h2>No barcode?</h2><div class="row"><button class="btn alt grow" data-act="find">Search by name</button><button class="btn alt grow" data-act="newfood">Enter label</button></div></div>`;
   $('#scantolist').addEventListener('change', e => { S.scanToList = e.target.checked; save(); });
+  $('#barcodephoto').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) decodeBarcodePhoto(f); });
   if (S.camOk) startScan();
 }
 async function startScan() {
@@ -1068,7 +1071,12 @@ async function startScan() {
   scan.active = true; scan.busy = false;
   $('#scan-idle').hidden = true; $('#guide').hidden = false; $('#stopbtn').hidden = false;
   status('Starting camera…');
-  const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+  const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false };
+  // Sharper reads on small or curved labels: keep refocusing and zoom in a little so you can hold the phone a bit farther back.
+  const tune = async () => { try { const tr = video.srcObject && video.srcObject.getVideoTracks()[0], cap = tr && tr.getCapabilities ? tr.getCapabilities() : {}, adv = {};
+    if ((cap.focusMode || []).includes('continuous')) adv.focusMode = 'continuous';
+    if (cap.zoom && cap.zoom.max >= 2) adv.zoom = Math.min(cap.zoom.max, 2);
+    if (Object.keys(adv).length) await tr.applyConstraints({ advanced: [adv] }); } catch (e) {} };
   try {
     let native = null;
     if ('BarcodeDetector' in window) {
@@ -1081,7 +1089,7 @@ async function startScan() {
     if (native) {
       scan.stream = await navigator.mediaDevices.getUserMedia(constraints);
       if (!scan.active) return stopScan();
-      video.srcObject = scan.stream; await video.play();
+      video.srcObject = scan.stream; await video.play(); tune();
       const tick = async () => {
         if (!scan.active) return;
         try { const r = await native.detect(video); if (r.length) return onCode(r[0].rawValue); } catch (e) {}
@@ -1094,16 +1102,41 @@ async function startScan() {
       const hints = new Map();
       const F = ZXing.BarcodeFormat;
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
-      scan.reader = new ZXing.BrowserMultiFormatReader(hints, 200);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      scan.reader = new ZXing.BrowserMultiFormatReader(hints, 150);
       await scan.reader.decodeFromConstraints(constraints, video, res => { if (res && scan.active) onCode(res.getText()); });
+      tune();
     }
     S.camOk = true; save();
-    status('Scanning… hold steady about 6 inches away.');
+    status('Scanning… hold steady 6–10 inches away with the bars straight up and down. Curved or shiny jar? Use 📸 Photo of barcode.');
   } catch (e) {
     stopScan();
     status(e && e.name === 'NotAllowedError' ? 'Camera blocked. Allow camera access for this app in your phone settings, or type the barcode below.'
       : 'Could not start the camera. You can type the barcode below.');
   }
+}
+// Read a barcode from a still photo (works better than live video on curved or glossy labels).
+async function decodeBarcodePhoto(file) {
+  stopScan(); toast('Reading the barcode…');
+  const url = URL.createObjectURL(file), img = new Image();
+  try {
+    await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = url; });
+    if ('BarcodeDetector' in window) { try { const r = await new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] }).detect(img); if (r.length) return lookupBarcode(r[0].rawValue); } catch (e) {} }
+    await loadZxing();
+    const h = new Map(), F = ZXing.BarcodeFormat; h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]); h.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    const reader = new ZXing.BrowserMultiFormatReader(h);
+    // Try the photo as taken, then turned sideways, then shrunk (very large photos can be too noisy).
+    const tries = [0, 90, 'small'];
+    for (const t of tries) {
+      const cv = document.createElement('canvas'), sc = t === 'small' ? Math.min(1, 1000 / Math.max(img.width, img.height)) : Math.min(1, 2000 / Math.max(img.width, img.height));
+      const w = Math.round(img.width * sc), hh = Math.round(img.height * sc), rot = t === 90;
+      cv.width = rot ? hh : w; cv.height = rot ? w : hh; const cx = cv.getContext('2d');
+      if (rot) { cx.translate(cv.width / 2, cv.height / 2); cx.rotate(Math.PI / 2); cx.drawImage(img, -w / 2, -hh / 2, w, hh); } else cx.drawImage(img, 0, 0, w, hh);
+      try { const res = await reader.decodeFromImageUrl(cv.toDataURL('image/jpeg', 0.92)); return lookupBarcode(res.getText()); } catch (e) {}
+    }
+    toast("Couldn't read that barcode — try a closer, sharper photo, or type the numbers under the bars");
+  } catch (e) { toast("Couldn't open that photo"); }
+  finally { URL.revokeObjectURL(url); }
 }
 let zxingLoading;
 function loadZxing() {
@@ -1779,14 +1812,15 @@ const NOT_SPICE = /\b(protein|chips?|crackers?|nuts?|bars?|chicken|beef|pork|tur
 function spiceNameForFood(f) {
   if (!f) return null;
   const brand = (f.brand || '').toLowerCase(), raw = (f.name || '').toLowerCase();
-  if (['veg', 'fruit', 'protein', 'bprotein', 'carb', 'snack', 'fat'].includes(f.cat) || /\b(fresh|peeled|bulbs?|cloves? of)\b/.test(raw)) return null; // fresh garlic or onions aren't spices
+  const strong = /\b(seasonings?|spices?|ground|powder|dried|flakes|rub|cayenne|paprika|cumin|oregano|cinnamon|nutmeg|turmeric|curry|chili powder|peppercorns?|black pepper|white pepper|red pepper|lemon pepper|garlic salt|onion salt|seasoned salt|sea salt|kosher salt|adobo|saz[oó]n|taj[ií]n|old bay|herbes)\b/.test(raw);
+  if (!strong && (['veg', 'fruit', 'protein', 'bprotein', 'carb', 'snack', 'fat'].includes(f.cat) || /\b(fresh|peeled|bulbs?|cloves? of)\b/.test(raw))) return null; // fresh garlic, onions or bell peppers aren't spices
   if (NOT_SPICE.test(raw) || !SPICE_WORDS.test(raw + ' ' + brand)) return null;
   if (!f.noServing && (f.cal || 0) > 25) return null; // a serving of a spice is a few calories
   const clean = raw.replace(brand, ' ').replace(/\b(mccormick|badia|spice islands|tones|kirkland( signature)?|simply organic|organic|morton|lawry'?s|the spice hunter|great value|signature select|o organics|trader joe'?s|365|pure|premium|gourmet|all natural|natural|100%|fine|coarse|grinder|shaker|bottle|jar|net wt.*|\d+(\.\d+)?\s*(oz|g|lb)s?)\b/g, ' ').replace(/[^\p{L}'& ]+/gu, ' ').replace(/\s+/g, ' ').trim();
   if (/^(sea |kosher |iodized |pink himalayan |himalayan pink )?salt$/.test(clean)) return 'Salt';
   if (/^(ground |cracked |whole )?black pepper(corns?)?$|^peppercorns?$/.test(clean)) return 'Black pepper';
   const strict = SPICE_ALIASES.filter(([re, n]) => n !== 'Salt' && n !== 'Black pepper');
-  const hit = clean.split(' ').length <= 3 && strict.find(([re]) => re.test(clean));
+  const hit = clean.split(' ').length <= 4 && strict.find(([re]) => re.test(clean));
   if (hit) return hit[1];
   const nice = !clean || /^(seasonings?|spices?|seasoning mix|blend)$/.test(clean) ? raw.replace(/\s+/g, ' ').trim() : clean; // "Old Bay Seasoning" keeps its name
   return nice.charAt(0).toUpperCase() + nice.slice(1);
@@ -1801,10 +1835,11 @@ function spiceToList(name, forWhat) {
 }
 // Spices you scanned before the rack knew about scans: move them from the kitchen into the rack (once each).
 function syncScannedSpices() {
-  S.spiceSynced = S.spiceSynced || {};
+  S.spiceSynced2 = S.spiceSynced2 || {};
   for (const id of new Set([...Object.keys(S.have || {}), ...Object.keys(S.stock || {})])) {
-    if (S.spiceSynced[id]) continue; S.spiceSynced[id] = true;
-    const sp = spiceNameForFood(getFood(id)); if (!sp) continue;
+    if (S.spiceSynced2[id]) continue; S.spiceSynced2[id] = true;
+    const f = getFood(id), sp = spiceNameForFood(f); if (!sp) continue;
+    if (f.cat === 'veg' && S.foods[id]) S.foods[id].cat = 'other';
     const e = spiceEntry(sp); e.have = true; e.ids = [...new Set([...(e.ids || []), id])];
     if (S.have) delete S.have[id]; if (S.stock) delete S.stock[id];
   }
@@ -2787,7 +2822,8 @@ document.addEventListener('click', e => {
     case 'spicelist': spiceToList(el.dataset.name); save(); renderList(); toast(`${el.dataset.name} added to your shopping list`); break;
     case 'spicedel': S.spices = spiceRack().filter(x => x.name !== el.dataset.name); save(); renderList(); break;
     case 'scanhave': { const f = getFood(id), pi = packageInfo(f), st = stockOf(id), had = S.have && S.have[id], sp = spiceNameForFood(f);
-      if (sp) { const e = spiceEntry(sp); e.have = true; e.ids = [...new Set([...(e.ids || []), id])]; save(); toast(`🧂 ${sp} is in your spice rack`); openFood(id, { fromScan: true }); break; }
+      if (sp) { const e = spiceEntry(sp); e.have = true; e.ids = [...new Set([...(e.ids || []), id])]; if (S.have) delete S.have[id]; if (S.stock) delete S.stock[id]; if (f.cat === 'veg') f.cat = 'other';
+        save(); toast(`🧂 ${sp} is in your spice rack`); openFood(id, { fromScan: true }); break; }
       if (pi.servings) { changeStock(id, pi.servings, true); if (S.have) delete S.have[id]; save(); toast(st != null ? `Added another package — now ${stockText(f, stockOf(id))}` : `In your kitchen: ${stockText(f, stockOf(id))}`); openFood(id, { fromScan: true }); }
       else if (st != null || had) { toast('Already in your kitchen ✓'); }
       else { S.have = S.have || {}; S.have[id] = true; save(); toast('In your kitchen ✓'); openFood(id, { fromScan: true, askHave: true }); } // no amount needed; the box below is optional
