@@ -800,6 +800,16 @@ const RESTAURANT_MEALS = [
   ['rm13', 'Any steakhouse', '6 oz Sirloin + Plain Baked Potato + Veggies (estimate)', '6 oz sirloin or filet, a medium baked potato with salsa or a spoon of sour cream (no butter or cheese), steamed vegetables. Skip the bread basket.', 540, 52, 45, 15, 5.5, 4, 6],
   ['rm14', 'Mexican restaurant', 'Chicken Fajitas, 2 Corn Tortillas (estimate)', 'Chicken fajitas with peppers and onions, 2 corn tortillas, salsa and pico. No cheese, sour cream, rice or chips (or a small handful of chips).', 540, 52, 35, 18, 4, 6, 6],
   ['rm15', 'Sushi restaurant', 'Sashimi (10 pc) + 1 Salmon or Tuna Roll (estimate)', '10 pieces of salmon/tuna sashimi and one simple salmon or tuna roll (no tempura, cream cheese or spicy mayo). Light on the soy sauce.', 600, 63, 45, 14, 3, 5, 2],
+  ['rm16', 'Poke shop', 'Poke Bowl — double fish, half rice / half greens (estimate)', 'Half rice, half greens, double salmon or ahi, cucumber, onion, seaweed, light shoyu or ponzu. Skip spicy mayo, eel sauce, crispy onions and avocado-heavy toppings.', 520, 45, 50, 14, 2.5, 8, 5],
+  ['rm17', 'Mediterranean / gyro place', 'Chicken Kebab Plate (estimate)', 'Chicken kebab or chicken shawarma plate with rice and salad, tzatziki on the side. Skip hummus and falafel (chickpeas), and skip the pita or eat half.', 650, 50, 60, 20, 4, 6, 5],
+  ['rm18', 'Chinese restaurant', 'Chicken or Beef & Broccoli, ¾ cup Steamed Rice (estimate)', 'Chicken & broccoli (or beef & broccoli) with sauce on the side, ¾ cup steamed rice. Skip fried rice, chow mein, egg rolls and anything breaded or sweet & sour.', 580, 45, 55, 18, 3.5, 10, 4],
+  ['rm19', 'Pho / Vietnamese', 'Chicken Pho with extra chicken, half noodles (estimate)', 'Chicken pho, ask for extra chicken and half the noodles, load up on bean sprouts, basil and lime. Go light on hoisin. (Broth is salty — drink about half.)', 520, 45, 55, 8, 2, 6, 3],
+  ['rm20', 'Indian restaurant', 'Tandoori Chicken + small rice + raita (estimate)', 'Tandoori chicken (or chicken tikka, not tikka masala), ¾ cup basmati rice, raita or salad. Skip naan, butter chicken and creamy curries.', 600, 55, 50, 18, 5, 6, 3],
+  ['rm21', 'BBQ joint', 'Smoked Turkey or Chicken (½ lb) + Green Beans (estimate)', '½ lb smoked turkey or chicken breast, green beans or coleslaw (vinegar style), sauce on the side. Skip brisket, ribs, mac & cheese and cornbread.', 520, 62, 30, 15, 4, 12, 5],
+  ['rm22', 'Italian restaurant', 'Grilled Chicken + Broccoli, no pasta (estimate)', 'Grilled chicken breast with steamed broccoli or vegetables and a side salad (dressing on the side). Skip pasta, cream sauces, cheese and breadsticks.', 480, 52, 18, 20, 5, 5, 6],
+  ['rm23', 'Breakfast diner', 'Egg White Omelet with ham or chicken + fruit + dry toast (estimate)', 'Egg white omelet with ham or chicken, peppers, onions and spinach (light or no cheese), fruit cup and 1 slice dry wheat toast. Skip hash browns and bacon.', 500, 45, 45, 14, 5, 15, 5],
+  ['rm24', 'Burger place', 'Grilled Chicken Sandwich, no mayo or cheese + side salad (estimate)', 'Grilled (not crispy) chicken sandwich, no mayo or cheese — mustard, lettuce, tomato, onion. Side salad with light dressing instead of fries.', 500, 38, 45, 15, 3.5, 9, 5],
+  ['rm25', 'Taco shop', '3 Chicken or Carne Asada Street Tacos (estimate)', '3 street tacos on corn tortillas with chicken (or carne asada), onion, cilantro, salsa and lime. No cheese or crema. Add a side of beans instead of rice if you want more.', 480, 38, 40, 16, 4.5, 3, 6],
 ].map(([id, brand, name, order, cal, p, c, f, sf, s, fb]) => ({ id, brand, name, order, cal, p, c, f, sf, s, fb, serving: '1 order', cat: 'other', src: 'restaurant', whole: true }));
 CATALOG.push(...RESTAURANT_MEALS);
 const CATALOG_BY_ID = Object.fromEntries(CATALOG.map(f => [f.id, f]));
@@ -809,7 +819,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '7.1 (more restaurant meals)';
+const APP_VERSION = '7.2 (eating out anywhere: 25 orders)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -2841,11 +2851,14 @@ function planTotals(day) {
   return totals(list);
 }
 const planSwitch = () => `<div class="chips" style="margin-bottom:10px"><button class="chip ${planView === 'plan' ? 'on' : ''}" data-act="pview" data-v="plan">🗓 My plan</button><button class="chip ${planView === 'recipes' ? 'on' : ''}" data-act="pview" data-v="recipes">📖 Recipes (${(S.recipes || []).length})</button><button class="chip ${planView === 'out' ? 'on' : ''}" data-act="pview" data-v="out">🍔 Eating out</button></div>`;
+let eatFilter = 'all';
+const isGenericPlace = b => /restaurant|shop|place|joint|diner|steakhouse|vietnamese/i.test(b || '');
 function renderEatingOut() {
-  const meals = allFoods().filter(f => f.src === 'restaurant'), byR = {};
+  const meals = allFoods().filter(f => f.src === 'restaurant' && (eatFilter === 'all' || (eatFilter === 'any') === isGenericPlace(f.brand))), byR = {};
   for (const f of meals) (byR[f.brand || 'Other'] = byR[f.brand || 'Other'] || []).push(f);
   let h = `<div class="card" style="background:var(--soft)"><div class="small">Orders that fit your goals <b>as a meal</b> (about a third of your day). Numbers are approximate, from each restaurant's nutrition info — if you change the order, check their app. Tap one to log it.</div>
-    <button class="btn alt sm" style="margin-top:8px" data-act="rmnew">+ Add a restaurant meal</button></div>`;
+    <button class="btn alt sm" style="margin-top:8px" data-act="rmnew">+ Add a restaurant meal</button></div>
+    <div class="chips" style="margin-bottom:10px">${[['all', 'All'], ['chains', '🍔 Fast food chains'], ['any', '🍽 Any restaurant']].map(([k, l]) => `<button class="chip ${eatFilter === k ? 'on' : ''}" data-act="eatfilter" data-v="${k}">${l}</button>`).join('')}</div>`;
   for (const [brand, fs] of Object.entries(byR)) {
     h += `<div class="card"><h2 style="margin:0 0 4px">${esc(brand)}</h2>${fs.map(f => { const v = verdict(f);
       return `<div class="item" style="align-items:flex-start"><div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
@@ -3123,6 +3136,7 @@ document.addEventListener('click', e => {
       save(); toast(inStore ? 'In your cart — added to your kitchen' : 'Added to your shopping list'); openFood(id, { fromScan: true, focusPrice: inStore }); break; }
     case 'pview': planView = el.dataset.v; renderPlan(); break;
     case 'eatout': planView = 'out'; go('plan'); break;
+    case 'eatfilter': eatFilter = el.dataset.v; renderPlan(); break;
     case 'rmnew': restaurantForm(); break;
     case 'rmsave': { const v = k => { const x = $('#rm-' + k).value.trim(); return x === '' ? null : +x; }, name = $('#rmname').value.trim(), brand = $('#rmbrand').value.trim();
       if (!name || v('cal') == null) { toast('Add at least the meal name and calories'); break; }
