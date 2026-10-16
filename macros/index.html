@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '6.0 (I have it: one tap, no questions)';
+const APP_VERSION = '6.1 (scanned spices go to the spice rack)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -882,10 +882,13 @@ function carbsOf(f) { return S.rules.net ? Math.max(0, (f.c || 0) - (f.fb || 0))
 /* ================= approved / not approved ================= */
 function verdict(f, scale = 1) {
   const r = S.rules, fails = [], why = [], T = S.targets, n = Math.max(1, S.servingsPerDay);
+  // Spices and other near-zero-calorie foods: a missing number on the label doesn't matter.
+  const tiny = (f.cal != null && f.cal * scale <= 10 && !f.noServing) || (f.src !== 'costco' && spiceNameForFood(f));
   const carbLabel = r.net ? 'Net carbs' : 'Carbs';
   const check = (rule, raw, label, unit, isMin, short, long) => {
     if (!rule.on) return;
     if (raw == null || isNaN(raw)) {
+      if (tiny) return;
       fails.push(`${label} not listed — tap Edit to enter it`);
       why.push({ short: `${label} not listed`, long: `The nutrition data is missing ${label.toLowerCase()}. Tap Edit and copy it from the package label.`, missing: true });
       return;
@@ -1212,7 +1215,12 @@ function openFood(id, opts = {}) {
       <div class="grow"><h2>${esc(f.name)}</h2><div class="small muted">${esc(f.brand || (f.src === 'costco' ? 'Costco catalog' : ''))}${f.barcode ? ' · ' + esc(f.barcode) : ''}</div></div>
       <button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">per serving</span></div>
-    ${opts.fromScan ? (() => { const st = stockOf(f.id), on = S.list[f.id] && S.list[f.id].on, got = on && S.list[f.id].got;
+    ${opts.fromScan && spiceNameForFood(f) ? (() => { const sp = spiceNameForFood(f), e = spiceRack().find(x => x.name === sp), onL = (S.extra || []).find(x => x.spice === sp);
+      return `<div class="small muted" style="margin-top:8px">🧂 Spice & seasoning — <b>${esc(sp)}</b></div><div class="row" style="gap:6px;margin-top:4px">
+        <button class="btn alt sm grow" data-act="scanjust">🔎 Checking</button>
+        <button class="btn ${e && e.have ? '' : 'alt'} sm grow" data-act="scanhave" data-id="${esc(f.id)}">🧂 ${e && e.have ? 'In my rack ✓' : 'I have it'}</button>
+        <button class="btn ${onL ? '' : 'alt'} sm grow" data-act="scanget" data-id="${esc(f.id)}">🛒 ${onL && onL.got ? 'In cart ✓' : onL ? 'On list ✓' : 'Getting it'}</button></div>`; })()
+    : opts.fromScan ? (() => { const st = stockOf(f.id), on = S.list[f.id] && S.list[f.id].on, got = on && S.list[f.id].got;
       return `<div class="row" style="gap:6px;margin-top:8px">
         <button class="btn alt sm grow" data-act="scanjust">🔎 Checking</button>
         <button class="btn ${st != null || (S.have && S.have[f.id]) ? '' : 'alt'} sm grow" data-act="scanhave" data-id="${esc(f.id)}">🏠 ${st != null ? 'Have ' + esc(stockText(f, st)) : S.have && S.have[f.id] ? 'Have it ✓' : 'I have it'}</button>
@@ -1483,6 +1491,7 @@ function stockRow(f, compact) {
       ${st.tracked || st.haveOnly ? `<button class="btn ghost sm" data-act="stockrm" data-id="${esc(f.id)}" aria-label="Stop tracking">✕</button>` : ''}</div>`;
 }
 function renderKitchen() {
+  syncScannedSpices();
   const planIds = S.plan ? [...new Set(S.plan.days.flatMap(d => d.meals.flatMap(m => m.items.map(x => x.id))))] : [];
   const ids = [...new Set([...Object.keys(S.stock || {}), ...Object.keys(S.have || {}), ...planIds])].filter(id => getFood(id));
   const rank = id => { const st = stockStatus(id); return st.out ? 0 : st.low ? 1 : st.tracked || st.haveOnly ? 2 : 3; };
@@ -1764,6 +1773,24 @@ function spiceNamesIn(text) {
   }
   return out;
 }
+// Is a scanned product a spice or seasoning? Returns its spice-rack name ("McCormick Ground Cumin" → "Ground cumin"), or null.
+const SPICE_WORDS = /\b(seasonings?|spices?|rub|powder|ground|dried|flakes|salt|peppercorns?|black pepper|white pepper|paprika|cumin|oregano|cinnamon|nutmeg|turmeric|curry|chili|chile|garlic|onion|thyme|rosemary|basil|parsley|dill|bay lea\w*|sage|allspice|cloves|cardamom|coriander|herbes?|herbs|adobo|saz[oó]n|taj[ií]n|lemon pepper|everything bagel|msg|bouillon|cayenne|marjoram|tarragon|fennel|mustard seed|sesame seed|italian|cajun|creole|jerk|steak seasoning|old bay|montreal|lawry|mccormick|badia|spice islands|tones|simply organic|morton|kinder'?s)\b/;
+const NOT_SPICE = /\b(protein|chips?|crackers?|nuts?|bars?|chicken|beef|pork|turkey|fish|salmon|shrimp|cheese|bread|tortillas?|pasta|noodles?|ramen|soup|sauce|dressing|ketchup|mayo|butter|oil|milk|yogurt|cereal|cookies?|candy|chocolate bar|drink|juice|tea|coffee|soda|water|snack|jerky|popcorn|pretzels?|hummus|salsa|dip|baking mix|cake|pancake|frozen|meal|bowl|burrito|pizza|naan|pita|flatbread|rolls?)\b/;
+function spiceNameForFood(f) {
+  if (!f) return null;
+  const brand = (f.brand || '').toLowerCase(), raw = (f.name || '').toLowerCase();
+  if (['veg', 'fruit', 'protein', 'bprotein', 'carb', 'snack', 'fat'].includes(f.cat) || /\b(fresh|peeled|bulbs?|cloves? of)\b/.test(raw)) return null; // fresh garlic or onions aren't spices
+  if (NOT_SPICE.test(raw) || !SPICE_WORDS.test(raw + ' ' + brand)) return null;
+  if (!f.noServing && (f.cal || 0) > 25) return null; // a serving of a spice is a few calories
+  const clean = raw.replace(brand, ' ').replace(/\b(mccormick|badia|spice islands|tones|kirkland( signature)?|simply organic|organic|morton|lawry'?s|the spice hunter|great value|signature select|o organics|trader joe'?s|365|pure|premium|gourmet|all natural|natural|100%|fine|coarse|grinder|shaker|bottle|jar|net wt.*|\d+(\.\d+)?\s*(oz|g|lb)s?)\b/g, ' ').replace(/[^\p{L}'& ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (/^(sea |kosher |iodized |pink himalayan |himalayan pink )?salt$/.test(clean)) return 'Salt';
+  if (/^(ground |cracked |whole )?black pepper(corns?)?$|^peppercorns?$/.test(clean)) return 'Black pepper';
+  const strict = SPICE_ALIASES.filter(([re, n]) => n !== 'Salt' && n !== 'Black pepper');
+  const hit = clean.split(' ').length <= 3 && strict.find(([re]) => re.test(clean));
+  if (hit) return hit[1];
+  const nice = !clean || /^(seasonings?|spices?|seasoning mix|blend)$/.test(clean) ? raw.replace(/\s+/g, ' ').trim() : clean; // "Old Bay Seasoning" keeps its name
+  return nice.charAt(0).toUpperCase() + nice.slice(1);
+}
 function spiceEntry(name) { const rack = spiceRack(); let s = rack.find(x => x.name.toLowerCase() === name.toLowerCase()); if (!s) { s = { name, have: false, custom: true }; rack.push(s); } return s; }
 // Put a spice on the shopping list (its own section), unless it's already there.
 function spiceToList(name, forWhat) {
@@ -1772,7 +1799,18 @@ function spiceToList(name, forWhat) {
   if (x) { if (forWhat && !x.text.includes(forWhat)) x.text += `, ${forWhat}`; return false; }
   S.extra.push({ id: uid(), text: forWhat ? `${name} — ${forWhat}` : name, spice: name, got: false }); return true;
 }
+// Spices you scanned before the rack knew about scans: move them from the kitchen into the rack (once each).
+function syncScannedSpices() {
+  S.spiceSynced = S.spiceSynced || {};
+  for (const id of new Set([...Object.keys(S.have || {}), ...Object.keys(S.stock || {})])) {
+    if (S.spiceSynced[id]) continue; S.spiceSynced[id] = true;
+    const sp = spiceNameForFood(getFood(id)); if (!sp) continue;
+    const e = spiceEntry(sp); e.have = true; e.ids = [...new Set([...(e.ids || []), id])];
+    if (S.have) delete S.have[id]; if (S.stock) delete S.stock[id];
+  }
+}
 function renderSpices() {
+  syncScannedSpices();
   const rack = spiceRack(), haveList = rack.filter(s => s.have).sort((a, b) => a.name.localeCompare(b.name)), needList = rack.filter(s => !s.have).sort((a, b) => a.name.localeCompare(b.name));
   const row = s => { const onList = (S.extra || []).some(x => x.spice === s.name && !x.got);
     return `<div class="item"><input type="checkbox" data-act="spicehave" data-name="${esc(s.name)}" ${s.have ? 'checked' : ''} aria-label="I have ${esc(s.name)}">
@@ -2745,15 +2783,20 @@ document.addEventListener('click', e => {
     case 'kitchen': listView = 'kitchen'; go('list'); break;
     case 'scanjust': closeSheet(); break;
     case 'spiceadd': { const n = $('#newspice').value.trim(); if (!n) { toast('Type a spice name'); break; } const nice = n.charAt(0).toUpperCase() + n.slice(1); spiceEntry(nice).have = true; save(); renderList(); toast(`${nice} added to your spice rack`); break; }
-    case 'spiceout': { spiceEntry(el.dataset.name).have = false; spiceToList(el.dataset.name); save(); renderList(); toast(`${el.dataset.name} added to your shopping list`); break; }
+    case 'spiceout': { const e = spiceEntry(el.dataset.name); e.have = false; for (const fid of e.ids || []) { if (S.have) delete S.have[fid]; if (S.stock) delete S.stock[fid]; } spiceToList(el.dataset.name); save(); renderList(); toast(`${el.dataset.name} added to your shopping list`); break; }
     case 'spicelist': spiceToList(el.dataset.name); save(); renderList(); toast(`${el.dataset.name} added to your shopping list`); break;
     case 'spicedel': S.spices = spiceRack().filter(x => x.name !== el.dataset.name); save(); renderList(); break;
-    case 'scanhave': { const f = getFood(id), pi = packageInfo(f), st = stockOf(id), had = S.have && S.have[id];
+    case 'scanhave': { const f = getFood(id), pi = packageInfo(f), st = stockOf(id), had = S.have && S.have[id], sp = spiceNameForFood(f);
+      if (sp) { const e = spiceEntry(sp); e.have = true; e.ids = [...new Set([...(e.ids || []), id])]; save(); toast(`🧂 ${sp} is in your spice rack`); openFood(id, { fromScan: true }); break; }
       if (pi.servings) { changeStock(id, pi.servings, true); if (S.have) delete S.have[id]; save(); toast(st != null ? `Added another package — now ${stockText(f, stockOf(id))}` : `In your kitchen: ${stockText(f, stockOf(id))}`); openFood(id, { fromScan: true }); }
       else if (st != null || had) { toast('Already in your kitchen ✓'); }
       else { S.have = S.have || {}; S.have[id] = true; save(); toast('In your kitchen ✓'); openFood(id, { fromScan: true, askHave: true }); } // no amount needed; the box below is optional
       break; }
-    case 'scanget': { const f = getFood(id), L = S.list[id], pi = packageInfo(f), inStore = !!S.scanToList;
+    case 'scanget': { const f = getFood(id), L = S.list[id], pi = packageInfo(f), inStore = !!S.scanToList, sp = spiceNameForFood(f);
+      if (sp) { const e = spiceEntry(sp); e.ids = [...new Set([...(e.ids || []), id])];
+        if (inStore) { e.have = true; const x = (S.extra || []).find(x => x.spice === sp); if (x) x.got = true; toast(`🧂 ${sp} — in your cart and your spice rack`); }
+        else toast(spiceToList(sp) ? `🧂 ${sp} added to your shopping list` : `🧂 ${sp} is already on your list`);
+        save(); openFood(id, { fromScan: true }); break; }
       if (L && L.on && (L.got || !inStore)) { toast(L.got ? 'Already in your cart' : 'Already on your list'); break; }
       S.list[id] = { ...(L || {}), on: true, got: inStore, qty: (L && L.on && L.qty) || 1 };
       if (inStore && pi.servings) changeStock(id, pi.servings * S.list[id].qty, true); // in the store: it's in your cart, so it's in your kitchen
