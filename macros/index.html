@@ -60,7 +60,7 @@ main { padding: 0 16px 16px; max-width: 640px; margin: 0 auto; }
 .btn.block { width: 100%; }
 .btn:disabled { opacity: .5; }
 .icon-btn { border: 0; background: transparent; padding: 6px 8px; border-radius: 8px; color: var(--muted); font-size: 18px; }
-input[type=text], input[type=number], input[type=search], select {
+input[type=text], input[type=number], input[type=search], select, textarea {
   width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); min-width: 0; }
 label.field { display: block; font-size: 13px; color: var(--muted); }
 label.field > input, label.field > select { margin-top: 4px; font-size: 16px; color: var(--ink); }
@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '4.9 (kitchen inventory)';
+const APP_VERSION = '5.0 (my recipes)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -793,7 +793,7 @@ function defaults() {
     servingsPerDay: 5,
     rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, sf: { on: true, v: 4.5 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
     foods: {}, list: {}, log: {}, plan: null, prices: {}, pkg: {}, units: 'mixed',
-    planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5, style: 'variety' }, stock: {},
+    planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5, style: 'variety' }, stock: {}, recipes: [], extra: [],
     avoid: ['chickpea', 'garbanzo', 'hummus', 'falafel', 'edamame', 'corn on the cob', 'sweet corn', 'kernel corn'], excluded: {},
     calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose', tg: false, pf: true },
   };
@@ -1377,7 +1377,8 @@ function renderList() {
       <div class="row"><div class="grow"><div class="small muted">Estimated total · ${count} item${count === 1 ? '' : 's'}</div><div class="big-left">${money(total)}</div></div>
       <div class="small" style="text-align:right"><span class="muted">In cart</span> <b>${money(inCart)}</b><br><span class="muted">Left to buy</span> <b>${money(total - inCart)}</b></div></div>
       ${missing ? `<div class="small" style="color:var(--warn);margin-top:6px">${missing} item${missing === 1 ? ' has' : 's have'} no price yet — type one in to include ${missing === 1 ? 'it' : 'them'}.</div>` : ''}</div>`;
-  if (!ids.length) {
+  const extra = S.extra || [];
+  if (!ids.length && !extra.length) {
     h += `<div class="empty">Your shopping list is empty.<br>Tick items on the <b>Costco</b> tab, tap <b>+ Shopping list</b> on any food, or add a whole meal plan.</div>
       <div class="row"><button class="btn alt grow" data-act="tab" data-t="costco">Browse Costco items</button><button class="btn alt grow" data-act="tab" data-t="plan">Meal plan</button></div>`;
     $('#view').innerHTML = h; return;
@@ -1401,6 +1402,8 @@ function renderList() {
             </div>${S.prices[f.id] != null ? `<div class="small muted" style="margin-top:2px">Your price${PRICES[f.id] ? ` (listed ${money(PRICES[f.id][0])})` : ''}</div>` : ''}</div></div>`;
       }).join('')}</div>`;
   }
+  if (extra.length) h += `<div class="card"><h2 style="margin:0">📝 Other items</h2>${extra.map(x => `<div class="item"><input type="checkbox" data-act="xgot" data-id="${esc(x.id)}" ${x.got ? 'checked' : ''} aria-label="Got it">
+      <div class="grow name" style="${x.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(x.text)}</div><button class="icon-btn" data-act="xdel" data-id="${esc(x.id)}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
   h += `<div class="row" style="margin-bottom:8px"><button class="btn ghost grow sm" data-act="cleargot">Remove checked</button><button class="btn danger grow sm" data-act="clearlist">Clear list</button></div>
     <div class="small muted" style="text-align:center;margin-bottom:16px">Prices are Lodi Costco estimates from costco.com and Same-Day (Instacart), which can run a little higher than in the store. Tap a price to change it.</div>`;
   $('#view').innerHTML = h;
@@ -1477,11 +1480,206 @@ function setStockFrom(id) {
   S.stock = S.stock || {}; S.stock[id] = +v / stockUnit(f).per; save(); toast(`${shortName(f)}: ${stockText(f, S.stock[id])} in your kitchen`); return true;
 }
 
+/* ---------- My recipes: favorites for quick reference, with macros and a shopping list ---------- */
+let planView = 'plan', recipeBatches = 1;
+// Ingredients link to Costco foods (id + servings of that food) so macros and the shopping list work; pantry items (spices) never go on the list.
+const CHILI_RECIPE = { id: 'chili', name: 'Lean Beef & Black Bean Chili', servings: 8, time: 'About 3 hr (mostly simmering)', notes: 'About 450 g per bowl: weigh the finished chili (minus the pot) and divide by 8. Keeps 4 days in the fridge; freeze bowls 5–8. Toppings that fit: cilantro, green onion, lime, jalapeño, hot sauce, 2 tbsp nonfat Greek yogurt instead of sour cream. Go easy on cheese (¼ cup ≈ 5 g saturated fat). For a bigger meal, serve over 150 g baked potato.',
+  ingredients: [
+    { text: '680 g (1.5 lb) top sirloin steak, cut in 2 cm cubes', id: 'm34', sv: 6 },
+    { text: '680 g (1.5 lb) eye round roast, cut in 2 cm cubes', id: 'm22', sv: 6 },
+    { text: '2 cans (15 oz) black beans, drained and rinsed', id: 'c11', sv: 7 },
+    { text: '2 cans (14.5 oz) diced tomatoes', id: 'cn1', sv: 11 },
+    { text: '1 can (15 oz) tomato sauce', id: 'sc15', sv: 11.3 },
+    { text: '480 ml (2 cups) bone broth', id: 'rc8', sv: 2 },
+    { text: '300 g (2 medium) yellow onions, diced', id: 'pr15', sv: 3.75 },
+    { text: '300 g (2) bell peppers, diced', id: 'pr6', sv: 3.26 },
+    { text: '2 jalapeños, seeded and minced (optional)', id: null, sv: null },
+    { text: '6 cloves garlic, minced', id: 'pr22', sv: 6 },
+    { text: '1 tbsp olive oil', id: 'a4', sv: 1 },
+    { text: '1 tbsp Worcestershire sauce', id: 'pt16', sv: 3 },
+    { text: '1 lime', id: 'rc35', sv: 1 },
+    { text: '3 tbsp chili powder', id: 'pt18', sv: 9, pantry: true },
+    { text: '1 tbsp ground cumin', id: 'pt18', sv: 3, pantry: true },
+    { text: '2 tsp smoked paprika', id: 'pt18', sv: 2, pantry: true },
+    { text: '2 tsp dried oregano', id: 'pt18', sv: 2, pantry: true },
+    { text: '1 tbsp unsweetened cocoa powder (optional)', id: null, sv: null, pantry: true },
+    { text: '2 tsp salt, 1 tsp black pepper, ½ tsp cayenne (optional)', id: null, sv: null, pantry: true },
+  ],
+  steps: [
+    'Trim the beef and cut both cuts into 2 cm cubes. Pat dry and toss with 1 tsp of the salt and the pepper.',
+    'Heat the oil in a Dutch oven over high heat. Brown the beef in 3 batches, 3–4 min each — don’t crowd it, or it steams instead of browning. Set aside.',
+    'Lower to medium. Cook the onions, peppers and jalapeños 6–8 min until soft, scraping up the brown bits. Add the garlic for 1 min.',
+    'Add the chili powder, cumin, paprika, oregano, cocoa and cayenne; stir 60 seconds until fragrant.',
+    'Pour in the broth and scrape the bottom clean. Add the diced tomatoes, tomato sauce, Worcestershire and the beef with its juices. Bring to a boil, then simmer gently, partly covered, for 2 hours (stir every 20–30 min) until the beef is tender.',
+    'Stir in the beans and simmer 30 min uncovered to thicken.',
+    'Squeeze in the lime, taste and add the rest of the salt as needed. Even better the next day.',
+    'Slow cooker: do steps 1–4 in a pan, then everything but the beans on LOW 7–8 hr; beans for the last 30 min. Instant Pot: sear on Sauté, then HIGH pressure 35 min, natural release 15 min, stir in the beans.',
+  ] };
+// Start the recipe box with the chili.
+if (!S.recipesSeeded) { S.recipes = S.recipes || []; if (!S.recipes.some(r => r.id === 'chili')) S.recipes.unshift(JSON.parse(JSON.stringify(CHILI_RECIPE))); S.recipesSeeded = true; }
+const PANTRY_RE = /\b(salt|cumin|paprika|oregano|chili powder|garlic powder|onion powder|cinnamon|thyme|rosemary|basil|bay lea\w*|seasoning|cayenne|spices?|herbs?|cocoa|baking (soda|powder)|vanilla|cooking spray|water|nutmeg|ginger powder|red pepper flakes)\b/;
+const ING_SKIP = new Set('diced chopped minced fresh large medium small boneless skinless organic kirkland can cans drained rinsed optional raw cut cubes cubed into and the with of for to taste or sliced peeled seeded about plus more divided package packages bag bags jar jars whole piece pieces clove cloves cup cups tbsp tsp each inch'.split(' '));
+const EACH_GRAMS = [[/sweet potato/, 130], [/potato/, 213], [/onion/, 150], [/bell pepper|pepper/, 150], [/tomato/, 120], [/apple/, 180], [/banana/, 118], [/avocado/, 150], [/zucchini/, 200], [/carrot/, 60], [/cucumber/, 300], [/chicken breast/, 230], [/thigh/, 110]];
+// "680 g top sirloin" → amount + unit + the food words.
+function parseAmount(text) {
+  const t = text.toLowerCase().replace(/½/g, ' 1/2').replace(/¼/g, ' 1/4').replace(/¾/g, ' 3/4').replace(/⅓/g, ' 1/3').trim();
+  const m = /^(\d+\s+\d\/\d|\d+\/\d+|\d*\.?\d+)\s*(kg|g|grams?|oz|ounces?|lbs?|pounds?|cups?|tbsp|tablespoons?|tsp|teaspoons?|ml|l|cans?|cloves?|each|large|medium|small|pieces?|slices?|eggs?)?\b\.?\s*(.*)$/.exec(t);
+  if (!m) return { qty: null, unit: '', rest: t };
+  const qty = m[1].includes(' ') ? m[1].split(/\s+/).reduce((a, b) => a + toNum(b), 0) : toNum(m[1]);
+  return { qty, unit: (m[2] || '').replace(/s$/, '').replace(/^(gram)$/, 'g').replace(/^(ounce)$/, 'oz').replace(/^(pound)$/, 'lb').replace(/^tablespoon$/, 'tbsp').replace(/^teaspoon$/, 'tsp'), rest: m[3], canOz: (/\((\d+(?:\.\d+)?)\s*oz\)/.exec(t) || [])[1] };
+}
+function matchFood(rest) {
+  const words = rest.replace(/\([^)]*\)/g, ' ').split(/[^a-z]+/).filter(w => w.length >= 3 && !ING_SKIP.has(w));
+  if (!words.length) return null;
+  let best = null, bs = 0;
+  for (const f of allFoods()) {
+    if (f.kids || f.alcohol || f.src === 'recipe') continue;
+    // Only the food's main name counts: "Sardines in Olive Oil" is not olive oil, "Garlic Naan" is not garlic.
+    const main = nm(f).split(/\s+(?:in|with)\s+|\s*\(/)[0], hits = words.filter(w => new RegExp(`\\b${w.replace(/s$/, '')}`).test(main)).length;
+    if (!hits || hits / words.length < 0.5) continue;
+    const extra = main.split(/[^a-z]+/).filter(w => w.length >= 3 && !/^(kirkland|signature|organic|choice|prime|fresh|frozen|the|and)$/.test(w)).length - hits;
+    const sc = hits * 10 - Math.max(0, extra) * 1.5 + (BOUGHT.has(f.id) ? 2 : 0) + (verdict(f).ok ? 1 : 0) - (f.sf || 0) / 10; // ties go to the leaner food
+    if (sc > bs) { bs = sc; best = f; }
+  }
+  return best;
+}
+// How many servings of food f an ingredient line amounts to (null if it can't tell).
+function servingsFromLine(text, f) {
+  const a = parseAmount(text); if (a.qty == null || !f) return null;
+  const sg = servingGrams(f), sv = f.serving || '', n = nm(f);
+  const W = { g: 1, kg: 1000, oz: 28.35, lb: 453.6 };
+  if (W[a.unit]) return sg ? a.qty * W[a.unit] / sg : null;
+  const vol = { cup: 48, tbsp: 3, tsp: 1, ml: 0.2, l: 203 }, base = /^(\d+\/\d+|\d+(?:\.\d+)?)\s*(cups?|tbsp|tsp)\b/.exec(sv);
+  const baseTsp = base ? toNum(base[1]) * vol[base[2].replace(/s$/, '')] : null;
+  if (vol[a.unit]) return baseTsp ? a.qty * vol[a.unit] / baseTsp : null;
+  if (a.unit === 'can') { if (a.canOz && sg) return a.qty * a.canOz * 28.35 / sg; if (baseTsp) return a.qty * 1.75 * 48 / baseTsp; return sg ? a.qty * 425 / sg : null; }
+  const cnt = /^(\d+(?:\.\d+)?)\s*([a-z]+)/.exec(sv);
+  if (cnt && !/^(g|oz|lb|cups?|tbsp|tsp|ml|fl)$/.test(cnt[2])) return a.qty / +cnt[1];
+  const each = EACH_GRAMS.find(([re]) => re.test(n)); if (each && sg) return a.qty * each[1] / sg;
+  return null;
+}
+function linkLine(text, keep) {
+  const pantry = PANTRY_RE.test(text.toLowerCase()) && !/bell pepper|jalape/.test(text.toLowerCase());
+  if (keep && keep.id) return { text, id: keep.id, sv: servingsFromLine(text, getFood(keep.id)), pantry: keep.pantry ?? pantry, picked: keep.picked };
+  const f = pantry ? null : matchFood(parseAmount(text).rest);
+  return { text, id: f ? f.id : null, sv: f ? servingsFromLine(text, f) : null, pantry };
+}
+function recipeMacros(r) {
+  const t = { cal: 0, p: 0, c: 0, f: 0, sf: 0, s: 0, fb: 0 }; let counted = 0;
+  for (const i of r.ingredients) { const f = i.id && getFood(i.id); if (!f || i.sv == null) continue; counted++; for (const k in t) t[k] += (f[k] || 0) * i.sv; }
+  const per = {}; for (const k in t) per[k] = t[k] / Math.max(1, r.servings);
+  return { per: r.manual ? { ...per, ...r.manual } : per, counted, total: r.ingredients.filter(i => !/optional/i.test(i.text) || i.id).length, manual: !!r.manual };
+}
+// A loggable food for one serving, so it works with the food sheet, logging and your kitchen.
+function recipeFood(r) {
+  const m = recipeMacros(r).per, id = 'rcp-' + r.id;
+  S.foods[id] = { ...(S.foods[id] || {}), id, name: r.name, cat: 'other', src: 'recipe', serving: `1 serving (1/${r.servings} of the recipe)`, cal: Math.round(m.cal), p: r1(m.p), c: r1(m.c), f: r1(m.f), sf: r1(m.sf), s: r1(m.s), fb: r1(m.fb) };
+  return S.foods[id];
+}
+const recipeById = id => (S.recipes || []).find(r => r.id === id);
+function renderRecipes() {
+  const rs = S.recipes || [];
+  let h = `<div class="row" style="margin-bottom:10px"><div class="small muted grow">Your favorites, with macros per serving and a shopping list when you want to make one.</div><button class="btn sm" data-act="rnew">+ New recipe</button></div>`;
+  if (!rs.length) h += `<div class="empty">No recipes yet. Tap <b>+ New recipe</b> and paste the ingredients and steps.</div>`;
+  for (const r of rs) { const m = recipeMacros(r).per;
+    h += `<div class="card tap" data-act="ropen" data-id="${esc(r.id)}"><div class="row"><h3 class="grow" style="margin:0">${esc(r.name)}</h3><span class="small muted">${r.servings} servings</span></div>
+      <div class="small" style="margin-top:4px"><b>${Math.round(m.cal)} cal</b> · <span style="color:var(--p)">P${Math.round(m.p)}</span> C${Math.round(m.c)} F${Math.round(m.f)} · sat fat ${r1(m.sf)} g <span class="muted">per serving</span></div>
+      ${r.time ? `<div class="small muted">⏱ ${esc(r.time)}</div>` : ''}</div>`; }
+  return h;
+}
+function showRecipeCard(id) {
+  const r = recipeById(id); if (!r) return;
+  if (showRecipeCard.last !== id) recipeBatches = 1; showRecipeCard.last = id;
+  const M = recipeMacros(r), m = M.per, b = recipeBatches, food = recipeFood(r), left = stockOf(food.id);
+  sheet(`<div class="sheet-head"><div class="grow"><h2>${esc(r.name)}</h2><div class="small muted">${r.servings} servings${r.time ? ' · ⏱ ' + esc(r.time) : ''}</div></div><button class="icon-btn" data-act="close">✕</button></div>
+    <div class="nut" style="margin-top:8px"><div><b>${Math.round(m.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${Math.round(m.p)}</b><span>protein g</span></div><div><b style="color:var(--c)">${Math.round(m.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${Math.round(m.f)}</b><span>fat g</span></div></div>
+    <div class="small muted">Per serving · saturated fat ${r1(m.sf)} g · fiber ${Math.round(m.fb)} g · ${M.manual ? 'your numbers' : `calculated from ${M.counted} of ${M.total} ingredients`}</div>
+    ${left != null ? `<div class="small" style="margin-top:6px">🏠 Leftovers in your kitchen: <b>${r1(left)} serving${left === 1 ? '' : 's'}</b></div>` : ''}
+    <div class="row wrap" style="gap:6px;margin-top:10px">
+      <div class="stepper"><button data-act="rbatch" data-id="${esc(r.id)}" data-d="-1" aria-label="Fewer batches">−</button><span style="min-width:34px;text-align:center"><b>${b}×</b></span><button data-act="rbatch" data-id="${esc(r.id)}" data-d="1" aria-label="More batches">+</button></div>
+      <button class="btn sm grow" data-act="rshop" data-id="${esc(r.id)}">🛒 Shopping list</button></div>
+    <div class="small muted" style="margin-top:4px">Adds what you need for ${b} batch${b === 1 ? '' : 'es'} (${r.servings * b} servings), minus what's already in your kitchen. Spices go on as one “check your pantry” reminder.</div>
+    <div class="row" style="gap:6px;margin-top:8px"><button class="btn alt sm grow" data-act="open" data-id="${esc(food.id)}">🍽 Log a serving</button><button class="btn alt sm grow" data-act="rmade" data-id="${esc(r.id)}">🏠 I made it</button></div>
+    <h3 style="margin:14px 0 4px;font-size:15px">Ingredients${b > 1 ? ` (1 batch — multiply by ${b})` : ''}</h3>
+    <ul class="reasons" style="font-size:15px">${r.ingredients.map((i, ix) => { const f = i.id && getFood(i.id);
+      return `<li style="margin-bottom:4px">${esc(i.text)}<br><span class="small ${f ? 'muted' : ''}" style="${f ? '' : 'color:var(--warn)'}">${i.pantry ? '🧂 pantry' + (f ? ' · ' : '') : ''}${f ? `🔗 ${esc(shortName(f))}${i.sv == null ? ' · amount not counted' : ''}` : i.pantry ? '' : '⚠ not linked'} <a href="#" data-act="rlink" data-id="${esc(r.id)}" data-i="${ix}">${f ? 'change' : 'link to a food'}</a></span></li>`; }).join('')}</ul>
+    <h3 style="margin:14px 0 4px;font-size:15px">Steps</h3><ol class="reasons" style="font-size:15px">${r.steps.map(x => `<li style="margin-bottom:6px">${esc(x)}</li>`).join('')}</ol>
+    ${r.notes ? `<h3 style="margin:14px 0 4px;font-size:15px">Notes</h3><div class="small" style="white-space:pre-wrap">${esc(r.notes)}</div>` : ''}
+    <div class="row" style="gap:6px;margin-top:14px"><button class="btn alt sm grow" data-act="redit" data-id="${esc(r.id)}">✏️ Edit</button><button class="btn danger sm" data-act="rdel" data-id="${esc(r.id)}">Delete</button></div>`);
+}
+function editRecipe(id) {
+  const r = id ? recipeById(id) : { name: '', servings: 4, time: '', notes: '', ingredients: [], steps: [] };
+  const mm = r.manual || {};
+  sheet(`<div class="sheet-head"><div class="grow"><h2>${id ? 'Edit recipe' : 'New recipe'}</h2></div><button class="icon-btn" data-act="close">✕</button></div>
+    <label class="small muted">Name</label><input type="text" id="rname" value="${esc(r.name)}" placeholder="e.g. Turkey chili" style="margin-bottom:8px">
+    <div class="row" style="gap:8px"><div class="grow"><label class="small muted">Servings it makes</label><input id="rserv" type="number" inputmode="numeric" min="1" value="${r.servings}"></div>
+      <div class="grow"><label class="small muted">Time (optional)</label><input type="text" id="rtime" value="${esc(r.time || '')}" placeholder="45 min"></div></div>
+    <label class="small muted" style="display:block;margin-top:8px">Ingredients — one per line, amount first (e.g. “680 g top sirloin”, “2 cans black beans”, “1 tbsp olive oil”)</label>
+    <textarea id="ring" rows="8" style="width:100%">${esc(r.ingredients.map(i => i.text).join('\n'))}</textarea>
+    <label class="small muted" style="display:block;margin-top:8px">Steps — one per line</label>
+    <textarea id="rsteps" rows="6" style="width:100%">${esc(r.steps.join('\n'))}</textarea>
+    <label class="small muted" style="display:block;margin-top:8px">Notes (optional)</label>
+    <textarea id="rnotes" rows="3" style="width:100%">${esc(r.notes || '')}</textarea>
+    <div class="small muted" style="margin-top:8px">Macros are worked out from the ingredients it can match to your Costco foods. Know the real numbers? Enter them per serving (optional):</div>
+    <div class="row" style="gap:6px;margin-top:4px">${[['cal', 'cal'], ['p', 'protein'], ['c', 'carbs'], ['f', 'fat'], ['sf', 'sat fat']].map(([k, l]) => `<input type="number" inputmode="decimal" step="any" min="0" id="rm-${k}" value="${mm[k] ?? ''}" placeholder="${l}" style="padding:7px 6px">`).join('')}</div>
+    <button class="btn block" style="margin-top:12px" data-act="rsave" data-id="${esc(id || '')}">Save recipe</button>`);
+}
+function saveRecipe(id) {
+  const name = $('#rname').value.trim(); if (!name) { toast('Give the recipe a name'); return; }
+  const old = id ? recipeById(id) : null, lines = s => s.split('\n').map(x => x.replace(/^\s*([-•*]|\d+[.)])\s*/, '').trim()).filter(Boolean);
+  const r = old || { id: uid() };
+  r.name = name; r.servings = Math.max(1, Math.round(+$('#rserv').value || 1)); r.time = $('#rtime').value.trim(); r.notes = $('#rnotes').value.trim();
+  r.ingredients = lines($('#ring').value).map(t => linkLine(t, old && old.ingredients.find(i => i.text === t)));
+  r.steps = lines($('#rsteps').value);
+  const man = {}; for (const k of ['cal', 'p', 'c', 'f', 'sf']) { const v = $('#rm-' + k).value.trim(); if (v !== '' && +v >= 0) man[k] = +v; }
+  r.manual = man.cal != null ? man : null;
+  S.recipes = S.recipes || []; if (!old) S.recipes.unshift(r);
+  recipeFood(r); save(); toast('Recipe saved'); showRecipeCard(r.id);
+}
+function linkPicker(rid, ix, q = '') {
+  const r = recipeById(rid), ing = r.ingredients[ix];
+  const query = q || parseAmount(ing.text).rest.replace(/\([^)]*\)/g, '').split(/[^a-z]+/).filter(w => w.length >= 3 && !ING_SKIP.has(w)).join(' ');
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const res = allFoods().filter(f => !f.kids && f.src !== 'recipe' && words.every(w => nm(f).includes(w))).slice(0, 30);
+  sheet(`<div class="sheet-head"><div class="grow"><h2>Link an ingredient</h2><div class="small muted">${esc(ing.text)}</div></div><button class="icon-btn" data-act="ropen" data-id="${esc(rid)}" aria-label="Back">‹</button></div>
+    <div class="row" style="gap:6px"><input type="text" id="rlq" value="${esc(query)}" placeholder="Search foods" class="grow"><button class="btn sm" data-act="rlsearch" data-id="${esc(rid)}" data-i="${ix}">Search</button></div>
+    <div style="margin-top:8px">${res.length ? res.map(f => `<div class="item tap" data-act="rlpick" data-id="${esc(rid)}" data-i="${ix}" data-f="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div><div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal</div></div></div>`).join('') : '<div class="empty">No matches — try fewer words.</div>'}</div>
+    <div class="row" style="gap:6px;margin-top:10px">${ing.id ? `<button class="btn ghost sm grow" data-act="rlpick" data-id="${esc(rid)}" data-i="${ix}" data-f="">Unlink</button>` : ''}
+      <button class="btn ghost sm grow" data-act="rlpantry" data-id="${esc(rid)}" data-i="${ix}">${ing.pantry ? 'Not a pantry item' : 'Mark as pantry item (never on the list)'}</button></div>`);
+}
+function recipeToList(rid) {
+  const r = recipeById(rid), b = recipeBatches, have = [], pantry = [];
+  let added = 0; S.extra = S.extra || [];
+  const need = {};
+  for (const i of r.ingredients) {
+    if (i.pantry) { pantry.push(parseAmount(i.text).rest.replace(/\(.*?\)/g, '').replace(/,.*/, '').trim() || i.text); continue; }
+    if (!i.id || !getFood(i.id)) { if (!S.extra.some(x => x.text.startsWith(i.text))) { S.extra.push({ id: uid(), text: `${i.text} — ${r.name}`, got: false }); added++; } continue; }
+    need[i.id] = (need[i.id] || 0) + (i.sv == null ? null : i.sv * b);
+  }
+  for (const [fid, sv] of Object.entries(need)) {
+    const f = getFood(fid), pi = packageInfo(f), st = stockOf(fid);
+    const short = sv == null ? null : sv - (st || 0);
+    if (short != null && short <= 0.01) { have.push(shortName(f)); continue; }
+    const qty = short != null && pi.servings ? Math.max(1, Math.ceil(short / pi.servings - 0.05)) : 1;
+    const cur = S.list[fid] && S.list[fid].on ? (S.list[fid].qty || 1) : 0;
+    S.list[fid] = { ...(S.list[fid] || {}), on: true, got: false, qty: cur + qty }; added++;
+  }
+  if (pantry.length) { const t = `Check your pantry for ${r.name}: ${pantry.join(', ')}`; if (!S.extra.some(x => x.text === t)) S.extra.push({ id: uid(), text: t, got: false }); }
+  save(); toast(`${added} item${added === 1 ? '' : 's'} added${have.length ? ` · already have: ${have.join(', ')}` : ''}`);
+  listView = 'shop'; go('list');
+}
+function recipeMade(rid) {
+  const r = recipeById(rid), b = recipeBatches, food = recipeFood(r);
+  let used = 0; for (const i of r.ingredients) if (i.id && i.sv != null && !i.pantry && changeStock(i.id, -i.sv * b)) used++;
+  changeStock(food.id, r.servings * b, true); save();
+  toast(`${r.servings * b} servings of leftovers added to your kitchen${used ? ` · ${used} ingredient${used === 1 ? '' : 's'} taken out` : ''}`); showRecipeCard(rid);
+}
+
 /* ---------- Meal plan ---------- */
 function planPool() {
   // Sauces are typed "other" but meal templates need them (salsa for tacos, teriyaki for stir-fry...); they're pantry items, so the shopping-list filter skips them.
   const sauce = f => f.cat === 'other' && /salsa|picante|teriyaki|bachan|yoshida|marinara|pasta sauce|balsamic|sweet jalape|cholula|tapatio|hot sauce/i.test(f.name || '');
-  return allFoods().filter(f => !f.kids && f.cat && (f.cat !== 'other' || sauce(f)) && f.cal != null && verdict(f).ok && (sauce(f) || !S.planOpts.onlyList || (S.list[f.id] && S.list[f.id].on)));
+  return allFoods().filter(f => !f.kids && f.src !== 'recipe' && f.cat && (f.cat !== 'other' || sauce(f)) && f.cal != null && verdict(f).ok && (sauce(f) || !S.planOpts.onlyList || (S.list[f.id] && S.list[f.id].on)));
 }
 function weightedPick(arr, used) {
   if (!arr.length) return null;
@@ -1819,7 +2017,14 @@ function packageInfo(f) {
   let servings = null;
   const sg = servingGrams(f);
   if (pk.g && sg) servings = pk.g / sg;
-  else if (pk.count) { const per = /^(\d+)\s*(eggs?|bars?|tortillas?|slices?|links?|sticks?|pieces?|bagels?|rolls?|pouch|shakes?|patty|bottles?|cans?|wedges?|cups?\s*\()/.exec(f.serving || ''); servings = pk.count / (per ? +per[1] : 1); }
+  else if (pk.count) {
+    const sv = f.serving || '', per = /^(\d+)\s*(eggs?|bars?|tortillas?|slices?|links?|sticks?|pieces?|bagels?|rolls?|pouch|shakes?|patty|bottles?|cans?|wedges?|cups?\s*\()/.exec(sv);
+    const cups = /^(\d+\/\d+|\d+(?:\.\d+)?)\s*cups?\b/.exec(sv), each = EACH_GRAMS.find(([re]) => re.test(nm(f)));
+    if (per) servings = pk.count / +per[1];
+    else if (cups && /\bcan/i.test(text + ' ' + f.name)) servings = pk.count * 1.75 / toNum(cups[1]); // a 15 oz can holds about 1¾ cups
+    else if (each && sg) servings = pk.count * each[1] / sg; // e.g. 6 bell peppers
+    else if (!/^(\d|\/)+\s*(tsp|tbsp|cups?|oz|fl|ml|g)\b/.test(sv)) servings = pk.count; // one serving per piece
+  }
   if (!servings || !isFinite(servings)) return { text, servings: null };
   const portion = usualPortion(f);
   return { text, servings, portion, meals: servings / portion, own: !!own };
@@ -2208,7 +2413,9 @@ function planTotals(day) {
   const list = day.meals.flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
   return totals(list);
 }
+const planSwitch = () => `<div class="chips" style="margin-bottom:10px"><button class="chip ${planView === 'plan' ? 'on' : ''}" data-act="pview" data-v="plan">🗓 Meal plan</button><button class="chip ${planView === 'recipes' ? 'on' : ''}" data-act="pview" data-v="recipes">📖 My recipes (${(S.recipes || []).length})</button></div>`;
 function renderPlan() {
+  if (planView === 'recipes') { $('#view').innerHTML = planSwitch() + renderRecipes(); return; }
   // A plan saved by an older planner gets rebuilt with the current one, keeping the same number of days.
   const keepShape = () => { if (S.plan.prep) { S.planOpts.mode = 'prep'; S.planOpts.prepDays = S.plan.prep; } else { S.planOpts.mode = 'daily'; S.planOpts.days = S.plan.days.length > 1 ? 7 : 1; } };
   if (S.plan && S.plan.planner !== PLANNER_VERSION && planPool().length >= 3) {
@@ -2223,7 +2430,7 @@ function renderPlan() {
   }
   const pool = planPool(), T = S.targets, o = S.planOpts;
   const listCount = Object.values(S.list).filter(l => l.on).length;
-  let h = `<div class="card"><div class="small muted" style="margin-bottom:8px">Builds meals only from <b>approved</b> Costco items, sized to hit ${T.cal} cal · P${T.p} C${T.c} F${T.f}.</div>
+  let h = planSwitch() + `<div class="card"><div class="small muted" style="margin-bottom:8px">Builds meals only from <b>approved</b> Costco items, sized to hit ${T.cal} cal · P${T.p} C${T.c} F${T.f}.</div>
     <label class="switch"><input type="checkbox" id="pf" ${o.pf ? 'checked' : ''}><span class="grow"><b>Protein-forward meals</b><br><span class="small muted">Every meal is built around a protein and gets its share of your ${T.p} g; snacks are protein snacks.</span></span></label>
     <div class="chips" style="margin-bottom:6px"><button class="chip ${o.style !== 'bowls' ? 'on' : ''}" data-act="pstyle" data-v="variety">🍳 Variety</button><button class="chip ${o.style === 'bowls' ? 'on' : ''}" data-act="pstyle" data-v="bowls">🍚 Simple bowls</button></div>
     ${o.style === 'bowls' ? `<div class="small muted" style="margin-bottom:8px">Eggs for breakfast; lunch and dinner are rice + chicken or beef + vegetables, in grams. About ${snackReserve().cal} cal and ${snackReserve().p} g protein are left open for snacks — scan them to see if they fit.</div>` : ''}
@@ -2403,6 +2610,21 @@ document.addEventListener('click', e => {
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
     case 'kitchen': listView = 'kitchen'; go('list'); break;
+    case 'pview': planView = el.dataset.v; renderPlan(); break;
+    case 'rnew': editRecipe(null); break;
+    case 'ropen': showRecipeCard(id); break;
+    case 'redit': editRecipe(id); break;
+    case 'rsave': saveRecipe(id || null); break;
+    case 'rdel': if (confirm('Delete this recipe?')) { S.recipes = S.recipes.filter(r => r.id !== id); delete S.foods['rcp-' + id]; if (S.stock) delete S.stock['rcp-' + id]; save(); closeSheet(); } break;
+    case 'rbatch': recipeBatches = Math.max(1, Math.min(6, recipeBatches + +el.dataset.d)); showRecipeCard(id); break;
+    case 'rshop': recipeToList(id); break;
+    case 'rmade': recipeMade(id); break;
+    case 'rlink': e.preventDefault(); linkPicker(id, +el.dataset.i); break;
+    case 'rlsearch': linkPicker(id, +el.dataset.i, $('#rlq').value.trim()); break;
+    case 'rlpick': { const r = recipeById(id), ing = r.ingredients[+el.dataset.i], fid = el.dataset.f;
+      ing.id = fid || null; ing.sv = fid ? servingsFromLine(ing.text, getFood(fid)) : null; ing.picked = true; recipeFood(r); save(); showRecipeCard(id); break; }
+    case 'rlpantry': { const r = recipeById(id), ing = r.ingredients[+el.dataset.i]; ing.pantry = !ing.pantry; save(); showRecipeCard(id); break; }
+    case 'xdel': S.extra = (S.extra || []).filter(x => x.id !== id); save(); renderList(); break;
     case 'kview': listView = el.dataset.v; renderList(); break;
     case 'stockset': if (setStockFrom(id)) { if (sheetFood) openFood(id); else renderList(); } break;
     case 'stockpkg': { const f = getFood(id), pi = packageInfo(f); changeStock(id, pi.servings, true); save(); toast(`Added 1 package: now ${stockText(f, stockOf(id))}`); if (sheetFood) openFood(id); else renderList(); break; }
@@ -2443,8 +2665,8 @@ document.addEventListener('click', e => {
     case 'cview': costcoView = el.dataset.v; renderCostco(); break;
     case 'qty': { const L = S.list[id]; if (L) { L.qty = Math.max(1, (L.qty || 1) + +el.dataset.d); save(); renderList(); } break; }
     case 'cfilter': costcoFilter = el.dataset.v; renderCostco(); break;
-    case 'cleargot': for (const k in S.list) if (S.list[k].got) delete S.list[k]; save(); renderList(); break;
-    case 'clearlist': if (confirm('Clear your whole shopping list?')) { S.list = {}; save(); renderList(); } break;
+    case 'cleargot': for (const k in S.list) if (S.list[k].got) delete S.list[k]; S.extra = (S.extra || []).filter(x => !x.got); save(); renderList(); break;
+    case 'clearlist': if (confirm('Clear your whole shopping list?')) { S.list = {}; S.extra = []; save(); renderList(); } break;
     case 'pdays': S.planOpts.days = +el.dataset.v; save(); renderPlan(); break;
     case 'pmode': S.planOpts.mode = el.dataset.v; save(); renderPlan(); break;
     case 'pprepdays': S.planOpts.prepDays = +el.dataset.v; save(); renderPlan(); break;
@@ -2485,6 +2707,7 @@ document.addEventListener('change', e => {
   const el = e.target; if (!el.matches('input[type=checkbox][data-act]')) return;
   const id = el.dataset.id;
   if (el.dataset.act === 'listtoggle') { if (el.checked) S.list[id] = { on: true, got: false }; else delete S.list[id]; save(); }
+  if (el.dataset.act === 'xgot') { const x = (S.extra || []).find(x => x.id === id); if (x) { x.got = el.checked; save(); renderList(); } }
   if (el.dataset.act === 'got' && S.list[id]) {
     S.list[id].got = el.checked;
     const f = getFood(id), pi = packageInfo(f), q = S.list[id].qty || 1;
