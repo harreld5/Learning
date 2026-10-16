@@ -790,7 +790,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '6.8 (shop and plan for 2 weeks)';
+const APP_VERSION = '6.9 (game-day chili, leftovers into the plan)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1591,7 +1591,7 @@ function setStockFrom(id) {
 /* ---------- My recipes: favorites for quick reference, with macros and a shopping list ---------- */
 let planView = 'plan', recipeBatches = 1, planOptsOpen = false;
 // Ingredients link to Costco foods (id + servings of that food) so macros and the shopping list work; pantry items (spices) never go on the list.
-const CHILI_RECIPE = { id: 'chili', name: 'Lean Beef & Black Bean Chili', servings: 8, time: 'About 3 hr (mostly simmering)', notes: 'About 450 g per bowl: weigh the finished chili (minus the pot) and divide by 8. Keeps 4 days in the fridge; freeze bowls 5–8. Toppings that fit: cilantro, green onion, lime, jalapeño, hot sauce, 2 tbsp nonfat Greek yogurt instead of sour cream. Go easy on cheese (¼ cup ≈ 5 g saturated fat). For a bigger meal, serve over 150 g baked potato.',
+const CHILI_RECIPE = { id: 'chili', name: 'Lean Beef & Black Bean Chili', servings: 8, occasion: true, time: 'About 3 hr (mostly simmering)', notes: 'About 450 g per bowl: weigh the finished chili (minus the pot) and divide by 8. Keeps 4 days in the fridge; freeze bowls 5–8. Toppings that fit: cilantro, green onion, lime, jalapeño, hot sauce, 2 tbsp nonfat Greek yogurt instead of sour cream. Go easy on cheese (¼ cup ≈ 5 g saturated fat). For a bigger meal, serve over 150 g baked potato.',
   ingredients: [
     { text: '680 g (1.5 lb) top sirloin steak, cut in 2 cm cubes', id: 'm34', sv: 6 },
     { text: '680 g (1.5 lb) eye round roast, cut in 2 cm cubes', id: 'm22', sv: 6 },
@@ -1683,6 +1683,8 @@ const SEED_RECIPES = () => [scrambleBowl(false), scrambleBowl(true), chipotleBow
 S.recipes = S.recipes || []; S.seeded = S.seeded || (S.recipesSeeded ? ['chili'] : []);
 // You skip lettuce in the Chipotle bowls: take it out of copies already saved on this phone.
 if (!S.noLettuceBowls) { for (const r of S.recipes) if (/^chipotle-/.test(r.id)) { const fresh = SEED_RECIPES().find(x => x.id === r.id); r.ingredients = r.ingredients.filter(i => !/romaine|lettuce/i.test(i.text)); if (fresh) { r.notes = fresh.notes; r.steps = fresh.steps; } } S.noLettuceBowls = true; }
+// Chili is for Sunday football: groceries only, leftovers can go in the plan afterwards.
+if (!S.chiliOccasion) { const c = S.recipes.find(r => r.id === 'chili'); if (c) c.occasion = true; for (const w of S.week || []) if (w.rid === 'chili') w.inPlan = false; S.chiliOccasion = true; }
 for (const r of SEED_RECIPES().reverse()) if (!S.seeded.includes(r.id)) { if (!S.recipes.some(x => x.id === r.id)) S.recipes.unshift(JSON.parse(JSON.stringify(r))); S.seeded.push(r.id); }
 const PANTRY_RE = /\b(salt|cumin|paprika|oregano|chili powder|garlic powder|onion powder|cinnamon|thyme|rosemary|basil|bay lea\w*|seasoning|cayenne|spices?|herbs?|cocoa|baking (soda|powder)|vanilla|cooking spray|water|nutmeg|ginger powder|red pepper flakes)\b/;
 const ING_SKIP = new Set('diced chopped minced fresh large medium small boneless skinless organic kirkland can cans drained rinsed optional raw cut cubes cubed into and the with of for to taste or sliced peeled seeded about plus more divided package packages bag bags jar jars whole piece pieces clove cloves cup cups tbsp tsp each inch'.split(' '));
@@ -1749,7 +1751,7 @@ function renderRecipes() {
   let h = weekCard() + `<div class="row" style="margin-bottom:10px"><div class="small muted grow">Your favorites, with macros per serving.</div><button class="btn sm" data-act="rnew">+ New recipe</button></div>`;
   if (!rs.length) h += `<div class="empty">No recipes yet. Tap <b>+ New recipe</b> and paste the ingredients and steps.</div>`;
   for (const r of rs) { const m = recipeMacros(r).per;
-    h += `<div class="card tap" data-act="ropen" data-id="${esc(r.id)}"><div class="row"><h3 class="grow" style="margin:0">${esc(r.name)}</h3><span class="small muted">${r.meal === 'Breakfast' ? '🍳 Breakfast · ' : ''}${r.servings} serving${r.servings === 1 ? '' : 's'}</span></div>
+    h += `<div class="card tap" data-act="ropen" data-id="${esc(r.id)}"><div class="row"><h3 class="grow" style="margin:0">${esc(r.name)}</h3><span class="small muted">${r.meal === 'Breakfast' ? '🍳 Breakfast · ' : r.occasion ? '🏈 Game day · ' : ''}${r.servings} serving${r.servings === 1 ? '' : 's'}</span></div>
       <div class="small" style="margin-top:4px"><b>${Math.round(m.cal)} cal</b> · <span style="color:var(--p)">P${Math.round(m.p)}</span> C${Math.round(m.c)} F${Math.round(m.f)} · sat fat ${r1(m.sf)} g <span class="muted">per serving</span></div>
       ${r.time ? `<div class="small muted">⏱ ${esc(r.time)}</div>` : ''}
       <div style="margin-top:8px">${(S.week || []).some(w => w.rid === r.id) ? `<button class="btn sm" data-act="wkrm" data-id="${esc(r.id)}">✓ Making this week</button>` : `<button class="btn alt sm" data-act="wkadd" data-id="${esc(r.id)}">➕ Making this week</button>`}</div></div>`; }
@@ -1762,7 +1764,7 @@ function showRecipeCard(id) {
   sheet(`<div class="sheet-head"><div class="grow"><h2>${esc(r.name)}</h2><div class="small muted">${r.meal === 'Breakfast' ? '🍳 Breakfast · ' : ''}${r.servings} serving${r.servings === 1 ? '' : 's'}${r.time ? ' · ⏱ ' + esc(r.time) : ''}</div></div><button class="icon-btn" data-act="close">✕</button></div>
     <div class="nut" style="margin-top:8px"><div><b>${Math.round(m.cal)}</b><span>cal</span></div><div><b style="color:var(--p)">${Math.round(m.p)}</b><span>protein g</span></div><div><b style="color:var(--c)">${Math.round(m.c)}</b><span>carbs g</span></div><div><b style="color:var(--f)">${Math.round(m.f)}</b><span>fat g</span></div></div>
     <div class="small muted">Per serving · saturated fat ${r1(m.sf)} g · fiber ${Math.round(m.fb)} g · ${M.manual ? 'your numbers' : `calculated from ${M.counted} of ${M.total} ingredients`}</div>
-    ${left != null ? `<div class="small" style="margin-top:6px">🏠 Leftovers in your kitchen: <b>${r1(left)} serving${left === 1 ? '' : 's'}</b></div>` : ''}
+    ${left != null ? `<div class="row" style="margin-top:6px;gap:6px"><div class="small grow">🏠 Leftovers in your kitchen: <b>${r1(left)} serving${left === 1 ? '' : 's'}</b></div>${left >= 1 && S.plan && r.meal !== 'Breakfast' ? `<button class="btn alt sm" data-act="leftovers2plan" data-id="${esc(r.id)}">🗓 Put leftovers in my plan</button>` : ''}</div>` : ''}
     <div class="row wrap" style="gap:6px;margin-top:10px">
       <div class="stepper"><button data-act="rbatch" data-id="${esc(r.id)}" data-d="-1" aria-label="Fewer batches">−</button><span style="min-width:34px;text-align:center"><b>${b}×</b></span><button data-act="rbatch" data-id="${esc(r.id)}" data-d="1" aria-label="More batches">+</button></div>
       <button class="btn sm grow" data-act="rshop" data-id="${esc(r.id)}">🛒 Shopping list</button></div>
@@ -1901,13 +1903,15 @@ function vegServings(x) {
 }
 const weekDays = () => S.weekDays === 14 ? 14 : 7;
 const weekSel = () => (S.week || []).filter(w => recipeById(w.rid));
-const weekServings = (bf = false) => weekSel().filter(w => (recipeById(w.rid).meal === 'Breakfast') === bf).reduce((a, w) => a + recipeById(w.rid).servings * w.b, 0);
+const inPlan = w => w.inPlan !== false;
+const weekServings = (bf = false) => weekSel().filter(w => inPlan(w) && (recipeById(w.rid).meal === 'Breakfast') === bf).reduce((a, w) => a + recipeById(w.rid).servings * w.b, 0);
 function weekCard() {
   const wk = weekSel(), n = weekServings(), nb = weekServings(true);
   const D = weekDays(), slots = D * 2;
   return `<div class="card" style="background:var(--soft)"><div class="row"><h2 class="grow" style="margin:0 0 4px">🍳 What I'm making</h2></div>
     <div class="row" style="gap:6px;margin:2px 0 6px"><span class="small muted">Shopping for</span><div class="chips" style="margin:0"><button class="chip ${D === 7 ? 'on' : ''}" data-act="wkdays" data-v="7">1 week</button><button class="chip ${D === 14 ? 'on' : ''}" data-act="wkdays" data-v="14">2 weeks</button></div></div>
-    ${wk.length ? wk.map(w => { const r = recipeById(w.rid); return `<div class="item"><div class="grow"><div class="name">${esc(r.name)}</div><div class="meta">${r.meal === 'Breakfast' ? `${r.servings * w.b} breakfast${r.servings * w.b === 1 ? '' : 's'}` : `${r.servings * w.b} servings`}</div></div>
+    ${wk.length ? wk.map(w => { const r = recipeById(w.rid); return `<div class="item"><div class="grow"><div class="name">${esc(r.name)}</div><div class="meta">${r.meal === 'Breakfast' ? `${r.servings * w.b} breakfast${r.servings * w.b === 1 ? '' : 's'}` : `${r.servings * w.b} servings`}</div>
+          <button class="chip ${inPlan(w) ? 'on' : ''}" style="margin-top:4px;font-size:12px;padding:4px 10px" data-act="wkinplan" data-id="${esc(r.id)}">${inPlan(w) ? '🗓 In my plan' : '🏈 Just groceries'}</button></div>
         <div class="stepper"><button data-act="wkb" data-id="${esc(r.id)}" data-d="-1" aria-label="Fewer batches">−</button><span style="min-width:30px;text-align:center"><b>${w.b}×</b></span><button data-act="wkb" data-id="${esc(r.id)}" data-d="1" aria-label="More batches">+</button></div>
         <button class="icon-btn" data-act="wkrm" data-id="${esc(r.id)}" aria-label="Remove">✕</button></div>`; }).join('') + `
       <div class="small" style="margin:6px 0 8px">${n ? `<b>${n} lunches & dinners</b> — covers ${Math.min(slots, n)} of ${slots}${n > slots ? ` · ${n - slots} extra to freeze` : n < slots ? ` · the other ${slots - n} are filled in for you${D === 14 && slots - n >= 4 ? ' (tap + to make bigger batches)' : ''}` : ''}.` : 'Lunches and dinners will be filled in for you.'}
@@ -1917,7 +1921,7 @@ function weekCard() {
     : `<div class="small muted">Tap <b>➕ Making this week</b> on the recipes you're cooking. Then get one grocery check for all of them, and have them fill your meals for 1 or 2 weeks.</div>`}</div>`;
 }
 function buildWeekFromRecipes() {
-  const left = weekSel().map(w => ({ r: recipeById(w.rid), n: recipeById(w.rid).servings * w.b }));
+  const left = weekSel().filter(inPlan).map(w => ({ r: recipeById(w.rid), n: recipeById(w.rid).servings * w.b })); // "just groceries" recipes (game-day chili) stay out
   const pool = planPool(), used = {}, prev = {}, days = [];
   for (let d = 0; d < weekDays(); d++) {
     const day = makeDay(pool, used, { prev });
@@ -1941,6 +1945,18 @@ function buildWeekFromRecipes() {
   S.plan = { made: Date.now(), start: todayKey(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION, style: S.planOpts.style, reserve: snackReserve(),
     fromRecipes: weekSel().map(w => ({ ...w })), extraServings: left.reduce((a, x) => a + x.n, 0) };
   planDay = 0; planDayPicked = false; save();
+}
+// Put a recipe's leftover servings into upcoming lunches and dinners (filled-in meals first, then later recipe meals).
+function leftoversToPlan(rid) {
+  const r = recipeById(rid), food = recipeFood(r), n = Math.floor((stockOf(food.id) || 0) + 0.01);
+  if (!S.plan) { toast('Make a plan first'); return; }
+  if (n < 1) { toast('Tap “🏠 I made it” after cooking so the app knows how many are left'); return; }
+  const start = Math.max(0, planTodayIndex()), slots = [];
+  S.plan.days.forEach((d, di) => { if (di < start) return; d.meals.forEach((m, mi) => { if ((m.meal === 'Lunch' || m.meal === 'Dinner') && m.recipe !== rid) slots.push({ di, mi, auto: !m.recipe }); }); });
+  const already = S.plan.days.slice(start).reduce((a, d) => a + d.meals.filter(m => m.recipe === rid).length, 0), want = Math.max(0, n - already);
+  const pick = [...slots.filter(x => x.auto), ...slots.filter(x => !x.auto).reverse()].slice(0, want);
+  for (const { di, mi } of pick) { const m = S.plan.days[di].meals[mi]; S.plan.days[di].meals[mi] = { meal: m.meal, key: 'recipe', recipe: rid, title: r.name, label: 'Recipe', items: [{ id: food.id, sv: 1, step: 1, min: 1, max: 1, role: 'recipe' }] }; }
+  save(); toast(pick.length ? `${r.name} leftovers added to ${pick.length} meal${pick.length === 1 ? '' : 's'} in your plan` : `Your plan already has all ${n} leftover servings`); showRecipeCard(rid);
 }
 function recipeMade(rid) {
   const r = recipeById(rid), b = recipeBatches, food = recipeFood(r);
@@ -3042,12 +3058,14 @@ document.addEventListener('click', e => {
       if (inStore && pi.servings) changeStock(id, pi.servings * S.list[id].qty, true); // in the store: it's in your cart, so it's in your kitchen
       save(); toast(inStore ? 'In your cart — added to your kitchen' : 'Added to your shopping list'); openFood(id, { fromScan: true, focusPrice: inStore }); break; }
     case 'pview': planView = el.dataset.v; renderPlan(); break;
-    case 'wkadd': S.week = S.week || []; if (!S.week.some(w => w.rid === id)) S.week.push({ rid: id, b: recipeById(id).meal === 'Breakfast' && recipeById(id).servings === 1 ? weekDays() : 1 }); /* a one-bowl breakfast: every morning */ save(); renderPlan(); toast(`${recipeById(id).name} added to this week`); break;
+    case 'wkadd': S.week = S.week || []; if (!S.week.some(w => w.rid === id)) S.week.push({ rid: id, b: recipeById(id).meal === 'Breakfast' && recipeById(id).servings === 1 ? weekDays() : 1, inPlan: !recipeById(id).occasion }); /* a one-bowl breakfast: every morning */ save(); renderPlan(); toast(`${recipeById(id).name} added to this week`); break;
     case 'wkrm': S.week = (S.week || []).filter(w => w.rid !== id); save(); renderPlan(); break;
     case 'wkb': { const w = (S.week || []).find(w => w.rid === id); if (w) w.b = Math.max(1, Math.min(recipeById(id).meal === 'Breakfast' ? 14 : 6, w.b + +el.dataset.d)); save(); renderPlan(); break; }
     case 'wkdays': { const old = weekDays(); S.weekDays = +el.dataset.v; // one-bowl breakfasts follow the number of mornings
       for (const w of S.week || []) { const r = recipeById(w.rid); if (r && r.meal === 'Breakfast' && r.servings === 1 && w.b === old) w.b = weekDays(); }
       save(); renderPlan(); break; }
+    case 'wkinplan': { const w = (S.week || []).find(w => w.rid === id); if (w) { w.inPlan = !inPlan(w); toast(w.inPlan ? `${recipeById(id).name} will fill meals in your plan` : `${recipeById(id).name}: groceries only — add leftovers to your plan after you make it`); } save(); renderPlan(); break; }
+    case 'leftovers2plan': leftoversToPlan(id); break;
     case 'wkplan': if (!weekSel().length) { toast('Pick a recipe first'); break; } buildWeekFromRecipes(); planView = 'plan'; renderPlan(); toast(weekDays() === 14 ? 'Your 2 weeks are built around your recipes' : 'Your week is built around your recipes'); break;
     case 'rnew': editRecipe(null); break;
     case 'ropen': showRecipeCard(id); break;
