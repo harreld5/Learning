@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '5.6 (remove items from the list)';
+const APP_VERSION = '5.7 (spice rack)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1372,8 +1372,9 @@ function renderList() {
   const back = prevTab && prevTab !== 'list' ? prevTab : 'today';
   $('#hdr-extra').innerHTML = `<button class="btn alt sm" data-act="tab" data-t="${back}" aria-label="Back">‹ Back to ${({ today: 'Today', scan: 'Scan', costco: 'Costco', plan: 'Plan', settings: 'Goals' })[back]}</button>`;
   const low = lowItems().length;
-  const switcher = `<div class="chips" style="margin-bottom:10px"><button class="chip ${listView === 'shop' ? 'on' : ''}" data-act="kview" data-v="shop">🛒 Shopping list</button><button class="chip ${listView === 'kitchen' ? 'on' : ''}" data-act="kview" data-v="kitchen">🏠 In my kitchen${low ? ` <b>· ⚠ ${low} low</b>` : ''}</button></div>`;
+  const switcher = `<div class="chips" style="margin-bottom:10px"><button class="chip ${listView === 'shop' ? 'on' : ''}" data-act="kview" data-v="shop">🛒 List</button><button class="chip ${listView === 'kitchen' ? 'on' : ''}" data-act="kview" data-v="kitchen">🏠 Kitchen${low ? ` <b>· ⚠ ${low} low</b>` : ''}</button><button class="chip ${listView === 'spices' ? 'on' : ''}" data-act="kview" data-v="spices">🧂 Spices</button></div>`;
   if (listView === 'kitchen') { $('#view').innerHTML = switcher + renderKitchen(); return; }
+  if (listView === 'spices') { $('#view').innerHTML = switcher + renderSpices(); return; }
   const ids = Object.keys(S.list).filter(id => S.list[id].on && getFood(id));
   const line = id => { const pr = priceOf(id); return pr == null ? null : pr * (S.list[id].qty || 1); };
   let total = 0, inCart = 0, missing = 0, count = 0;
@@ -1409,7 +1410,11 @@ function renderList() {
             </div>${S.prices[f.id] != null ? `<div class="small muted" style="margin-top:2px">Your price${PRICES[f.id] ? ` (listed ${money(PRICES[f.id][0])})` : ''}</div>` : ''}</div></div>`;
       }).join('')}</div>`;
   }
-  if (extra.length) h += `<div class="card"><h2 style="margin:0">📝 Other items</h2>${extra.map(x => `<div class="item"><input type="checkbox" data-act="xgot" data-id="${esc(x.id)}" ${x.got ? 'checked' : ''} aria-label="Got it">
+  const spiceItems = extra.filter(x => x.spice), otherItems = extra.filter(x => !x.spice);
+  const xrow = x => `<div class="item"><input type="checkbox" data-act="xgot" data-id="${esc(x.id)}" ${x.got ? 'checked' : ''} aria-label="Got it">
+      <div class="grow name" style="${x.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(x.text)}</div><button class="icon-btn" data-act="xdel" data-id="${esc(x.id)}" aria-label="Remove">✕</button></div>`;
+  if (spiceItems.length) h += `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🧂 Spices & seasonings</h2><button class="btn ghost sm" data-act="kview" data-v="spices">My spice rack</button></div>${spiceItems.map(xrow).join('')}</div>`;
+  if (otherItems.length) h += `<div class="card"><h2 style="margin:0">📝 Other items</h2>${otherItems.map(x => `<div class="item"><input type="checkbox" data-act="xgot" data-id="${esc(x.id)}" ${x.got ? 'checked' : ''} aria-label="Got it">
       <div class="grow name" style="${x.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(x.text)}</div><button class="icon-btn" data-act="xdel" data-id="${esc(x.id)}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
   h += `<div class="row" style="margin-bottom:8px"><button class="btn ghost grow sm" data-act="cleargot">Remove checked</button><button class="btn danger grow sm" data-act="clearlist">Clear list</button></div>
     <div class="small muted" style="text-align:center;margin-bottom:16px">Prices are Lodi Costco estimates from costco.com and Same-Day (Instacart), which can run a little higher than in the store. Tap a price to change it.</div>`;
@@ -1715,10 +1720,11 @@ function recipeToList(rid) {
     if (!need && (!L || qty === (L.qty || 1))) { have.push(shortName(f)); continue; }
     S.list[fid] = { ...(L || {}), on: true, got: false, qty, base }; added++;
   }
-  if (pantry.length) { // a single pantry reminder that grows as you add recipes
-    const x = S.extra.find(x => x.pantry), items = new Set([...(x ? x.items : []), ...pantry.map(p => p.toLowerCase())]);
-    const text = `Check your pantry: ${[...items].join(', ')}`;
-    if (x) { x.items = [...items]; x.text = text; } else S.extra.push({ id: uid(), text, got: false, pantry: true, items: [...items] }); }
+  // Spices: only the ones not in your spice rack go on the list, in their own section.
+  const spices = [...new Set(r.ingredients.filter(i => i.pantry).flatMap(i => spiceNamesIn(i.text)))];
+  let haveSpices = 0;
+  for (const n of spices) { const e = spiceEntry(n); if (e.have) haveSpices++; else if (spiceToList(n, r.name)) added++; }
+  if (spices.length && haveSpices === spices.length) have.push('all the spices');
   save(); toast(`${added} item${added === 1 ? '' : 's'} added${have.length ? ` · already have: ${have.join(', ')}` : ''}`);
   listView = 'shop'; go('list');
 }
@@ -1727,6 +1733,49 @@ function recipeMade(rid) {
   let used = 0; for (const i of r.ingredients) if (i.id && i.sv != null && !i.pantry && changeStock(i.id, -i.sv * b)) used++;
   changeStock(food.id, r.servings * b, true); save();
   toast(`${r.servings * b} servings of leftovers added to your kitchen${used ? ` · ${used} ingredient${used === 1 ? '' : 's'} taken out` : ''}`); showRecipeCard(rid);
+}
+
+/* ---------- Spices & seasonings: what's in your spice rack ---------- */
+const SPICE_DEFAULTS = ['Salt', 'Black pepper', 'Garlic powder', 'Onion powder', 'Chili powder', 'Ground cumin', 'Smoked paprika', 'Paprika', 'Dried oregano', 'Italian seasoning',
+  'Cayenne pepper', 'Red pepper flakes', 'Ground cinnamon', 'Bay leaves', 'Lemon pepper', 'Everything bagel seasoning', 'Taco seasoning', 'Cocoa powder (unsweetened)'];
+// Recipe wording → spice-rack name ("1 tbsp ground cumin" → Ground cumin).
+const SPICE_ALIASES = [[/smoked paprika/, 'Smoked paprika'], [/paprika/, 'Paprika'], [/cumin/, 'Ground cumin'], [/oregano/, 'Dried oregano'], [/chili powder/, 'Chili powder'],
+  [/cayenne/, 'Cayenne pepper'], [/red pepper flakes|chili flakes/, 'Red pepper flakes'], [/garlic powder/, 'Garlic powder'], [/onion powder/, 'Onion powder'], [/cinnamon/, 'Ground cinnamon'],
+  [/bay lea/, 'Bay leaves'], [/cocoa/, 'Cocoa powder (unsweetened)'], [/italian seasoning/, 'Italian seasoning'], [/lemon pepper/, 'Lemon pepper'], [/taco seasoning/, 'Taco seasoning'],
+  [/black pepper|^pepper$/, 'Black pepper'], [/\bsalt\b/, 'Salt'], [/thyme/, 'Dried thyme'], [/rosemary/, 'Dried rosemary'], [/basil/, 'Dried basil'], [/nutmeg/, 'Ground nutmeg'], [/ginger/, 'Ground ginger']];
+function spiceRack() {
+  if (!S.spices) S.spices = SPICE_DEFAULTS.map(name => ({ name, have: false }));
+  return S.spices;
+}
+function spiceNamesIn(text) {
+  const t = text.toLowerCase(), out = [];
+  for (const part of t.split(/,|\band\b|\+/)) {
+    const hit = SPICE_ALIASES.find(([re]) => re.test(part.trim()));
+    if (hit && !out.includes(hit[1])) out.push(hit[1]);
+  }
+  return out;
+}
+function spiceEntry(name) { const rack = spiceRack(); let s = rack.find(x => x.name.toLowerCase() === name.toLowerCase()); if (!s) { s = { name, have: false, custom: true }; rack.push(s); } return s; }
+// Put a spice on the shopping list (its own section), unless it's already there.
+function spiceToList(name, forWhat) {
+  S.extra = S.extra || [];
+  const x = S.extra.find(x => x.spice === name);
+  if (x) { if (forWhat && !x.text.includes(forWhat)) x.text += `, ${forWhat}`; return false; }
+  S.extra.push({ id: uid(), text: forWhat ? `${name} — ${forWhat}` : name, spice: name, got: false }); return true;
+}
+function renderSpices() {
+  const rack = spiceRack(), have = rack.filter(s => s.have).length;
+  let h = `<div class="card"><div class="small muted">Tick what's in your spice rack. When you add a recipe to your shopping list, only the spices you <b>don't</b> have go on it, in their own section. Checking one off at the store ticks it here.</div>
+    <div class="row" style="gap:6px;margin-top:8px"><input type="text" id="newspice" placeholder="Add a spice or seasoning" class="grow"><button class="btn sm" data-act="spiceadd">Add</button></div></div>
+    <div class="card"><div class="row"><h2 class="grow" style="margin:0">🧂 Spices & seasonings</h2><span class="small muted">${have} of ${rack.length} on hand</span></div>`;
+  for (const s of [...rack].sort((a, b) => (b.have - a.have) || a.name.localeCompare(b.name))) {
+    const onList = (S.extra || []).some(x => x.spice === s.name && !x.got);
+    h += `<div class="item"><input type="checkbox" data-act="spicehave" data-name="${esc(s.name)}" ${s.have ? 'checked' : ''} aria-label="I have ${esc(s.name)}">
+      <div class="grow"><div class="name">${esc(s.name)}</div><div class="meta">${s.have ? 'In your rack' : onList ? '🛒 On your shopping list' : 'Not in your rack'}</div></div>
+      ${s.have ? `<button class="btn ghost sm" data-act="spiceout" data-name="${esc(s.name)}">Ran out</button>` : onList ? '' : `<button class="btn alt sm" data-act="spicelist" data-name="${esc(s.name)}">+ List</button>`}
+      ${s.custom ? `<button class="icon-btn" data-act="spicedel" data-name="${esc(s.name)}" aria-label="Remove">✕</button>` : ''}</div>`;
+  }
+  return h + `</div><div class="small muted" style="text-align:center;margin-bottom:16px">Most spices have almost no calories, so they don't count toward your macros. Watch seasoning blends for added sugar — scan the jar to check.</div>`;
 }
 
 /* ---------- Meal plan ---------- */
@@ -2665,6 +2714,10 @@ document.addEventListener('click', e => {
     }
     case 'kitchen': listView = 'kitchen'; go('list'); break;
     case 'scanjust': closeSheet(); break;
+    case 'spiceadd': { const n = $('#newspice').value.trim(); if (!n) { toast('Type a spice name'); break; } const nice = n.charAt(0).toUpperCase() + n.slice(1); spiceEntry(nice).have = true; save(); renderList(); toast(`${nice} added to your spice rack`); break; }
+    case 'spiceout': { spiceEntry(el.dataset.name).have = false; spiceToList(el.dataset.name); save(); renderList(); toast(`${el.dataset.name} added to your shopping list`); break; }
+    case 'spicelist': spiceToList(el.dataset.name); save(); renderList(); toast(`${el.dataset.name} added to your shopping list`); break;
+    case 'spicedel': S.spices = spiceRack().filter(x => x.name !== el.dataset.name); save(); renderList(); break;
     case 'scanhave': { const f = getFood(id), pi = packageInfo(f);
       if (pi.servings) { changeStock(id, pi.servings, true); save(); toast(`In your kitchen: ${stockText(f, stockOf(id))}`); openFood(id, { fromScan: true }); }
       else { openFood(id, { fromScan: true }); const i = document.querySelector(`[data-stockin="${CSS.escape(id)}"]`); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } toast('How much do you have? Type it and tap Set'); }
@@ -2772,7 +2825,8 @@ document.addEventListener('change', e => {
   const el = e.target; if (!el.matches('input[type=checkbox][data-act]')) return;
   const id = el.dataset.id;
   if (el.dataset.act === 'listtoggle') { if (el.checked) S.list[id] = { on: true, got: false }; else { delete S.list[id]; if (S.rneed) delete S.rneed[id]; } save(); }
-  if (el.dataset.act === 'xgot') { const x = (S.extra || []).find(x => x.id === id); if (x) { x.got = el.checked; save(); renderList(); } }
+  if (el.dataset.act === 'xgot') { const x = (S.extra || []).find(x => x.id === id); if (x) { x.got = el.checked; if (x.spice) spiceEntry(x.spice).have = el.checked; save(); renderList(); } }
+  if (el.dataset.act === 'spicehave') { spiceEntry(el.dataset.name).have = el.checked; save(); renderList(); }
   if (el.dataset.act === 'got' && S.list[id]) {
     S.list[id].got = el.checked;
     const f = getFood(id), pi = packageInfo(f), q = S.list[id].qty || 1;
