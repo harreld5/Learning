@@ -784,7 +784,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '5.7 (spice rack)';
+const APP_VERSION = '5.8 (spices split into have and need)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1764,18 +1764,19 @@ function spiceToList(name, forWhat) {
   S.extra.push({ id: uid(), text: forWhat ? `${name} — ${forWhat}` : name, spice: name, got: false }); return true;
 }
 function renderSpices() {
-  const rack = spiceRack(), have = rack.filter(s => s.have).length;
-  let h = `<div class="card"><div class="small muted">Tick what's in your spice rack. When you add a recipe to your shopping list, only the spices you <b>don't</b> have go on it, in their own section. Checking one off at the store ticks it here.</div>
-    <div class="row" style="gap:6px;margin-top:8px"><input type="text" id="newspice" placeholder="Add a spice or seasoning" class="grow"><button class="btn sm" data-act="spiceadd">Add</button></div></div>
-    <div class="card"><div class="row"><h2 class="grow" style="margin:0">🧂 Spices & seasonings</h2><span class="small muted">${have} of ${rack.length} on hand</span></div>`;
-  for (const s of [...rack].sort((a, b) => (b.have - a.have) || a.name.localeCompare(b.name))) {
-    const onList = (S.extra || []).some(x => x.spice === s.name && !x.got);
-    h += `<div class="item"><input type="checkbox" data-act="spicehave" data-name="${esc(s.name)}" ${s.have ? 'checked' : ''} aria-label="I have ${esc(s.name)}">
-      <div class="grow"><div class="name">${esc(s.name)}</div><div class="meta">${s.have ? 'In your rack' : onList ? '🛒 On your shopping list' : 'Not in your rack'}</div></div>
+  const rack = spiceRack(), haveList = rack.filter(s => s.have).sort((a, b) => a.name.localeCompare(b.name)), needList = rack.filter(s => !s.have).sort((a, b) => a.name.localeCompare(b.name));
+  const row = s => { const onList = (S.extra || []).some(x => x.spice === s.name && !x.got);
+    return `<div class="item"><input type="checkbox" data-act="spicehave" data-name="${esc(s.name)}" ${s.have ? 'checked' : ''} aria-label="I have ${esc(s.name)}">
+      <div class="grow"><div class="name">${esc(s.name)}</div>${!s.have && onList ? '<div class="meta">🛒 On your shopping list</div>' : ''}</div>
       ${s.have ? `<button class="btn ghost sm" data-act="spiceout" data-name="${esc(s.name)}">Ran out</button>` : onList ? '' : `<button class="btn alt sm" data-act="spicelist" data-name="${esc(s.name)}">+ List</button>`}
-      ${s.custom ? `<button class="icon-btn" data-act="spicedel" data-name="${esc(s.name)}" aria-label="Remove">✕</button>` : ''}</div>`;
-  }
-  return h + `</div><div class="small muted" style="text-align:center;margin-bottom:16px">Most spices have almost no calories, so they don't count toward your macros. Watch seasoning blends for added sugar — scan the jar to check.</div>`;
+      ${s.custom ? `<button class="icon-btn" data-act="spicedel" data-name="${esc(s.name)}" aria-label="Remove">✕</button>` : ''}</div>`; };
+  return `<div class="card"><div class="small muted">Tick a spice when you have it — it moves to <b>I have these</b>. When you add a recipe to your shopping list, only spices you <b>don't</b> have go on it. Checking one off at the store moves it here automatically.</div>
+    <div class="row" style="gap:6px;margin-top:8px"><input type="text" id="newspice" placeholder="Add a spice or seasoning you have" class="grow"><button class="btn sm" data-act="spiceadd">Add</button></div></div>
+    <div class="card"><h2 style="margin:0">✅ I have these <span class="small muted">(${haveList.length})</span></h2>
+      ${haveList.length ? haveList.map(row).join('') : '<div class="small muted" style="padding:8px 0">Nothing ticked yet — tick the spices below that are in your cabinet.</div>'}</div>
+    <div class="card"><h2 style="margin:0">❌ I don't have these <span class="small muted">(${needList.length})</span></h2>
+      ${needList.length ? needList.map(row).join('') : '<div class="small muted" style="padding:8px 0">You have every spice on the list.</div>'}</div>
+    <div class="small muted" style="text-align:center;margin-bottom:16px">Most spices have almost no calories, so they don't count toward your macros. Watch seasoning blends for added sugar — scan the jar to check.</div>`;
 }
 
 /* ---------- Meal plan ---------- */
