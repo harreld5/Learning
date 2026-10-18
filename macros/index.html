@@ -858,7 +858,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '7.5 (recipes show only what you need)';
+const APP_VERSION = '7.6 (1,700 calorie goal)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1786,6 +1786,7 @@ S.recipes = S.recipes || []; S.seeded = S.seeded || (S.recipesSeeded ? ['chili']
 // You skip lettuce in the Chipotle bowls: take it out of copies already saved on this phone.
 if (!S.noLettuceBowls) { for (const r of S.recipes) if (/^chipotle-/.test(r.id)) { const fresh = SEED_RECIPES().find(x => x.id === r.id); r.ingredients = r.ingredients.filter(i => !/romaine|lettuce/i.test(i.text)); if (fresh) { r.notes = fresh.notes; r.steps = fresh.steps; } } S.noLettuceBowls = true; }
 // Chili is for Sunday football: groceries only, leftovers can go in the plan afterwards.
+if (!S.cal1700) { S.cal1700 = true; if (S.targets.cal !== 1700) setCalories(1700); }
 if (!S.chiliOccasion) { const c = S.recipes.find(r => r.id === 'chili'); if (c) c.occasion = true; for (const w of S.week || []) if (w.rid === 'chili') w.inPlan = false; S.chiliOccasion = true; }
 for (const r of SEED_RECIPES().reverse()) if (!S.seeded.includes(r.id)) { if (!S.recipes.some(x => x.id === r.id)) S.recipes.unshift(JSON.parse(JSON.stringify(r))); S.seeded.push(r.id); }
 const PANTRY_RE = /\b(salt|cumin|paprika|oregano|chili powder|garlic powder|onion powder|cinnamon|thyme|rosemary|basil|bay lea\w*|seasoning|cayenne|spices?|herbs?|cocoa|baking (soda|powder)|vanilla|cooking spray|water|nutmeg|ginger powder|red pepper flakes)\b/;
@@ -2970,7 +2971,9 @@ function renderPlan() {
   // A plan saved by an older planner gets rebuilt with the current one, keeping the same number of days.
   const keepShape = () => { if (S.plan.prep) { S.planOpts.mode = 'prep'; S.planOpts.prepDays = S.plan.prep; } else { S.planOpts.mode = 'daily'; S.planOpts.days = S.plan.days.length > 1 ? 7 : 1; } };
   if (S.plan && S.plan.planner !== PLANNER_VERSION && planPool().length >= 3) {
-    keepShape(); generatePlan(); toast('Made you a new plan with the improved planner');
+    const cal = S.plan.planner === 0;
+    if (S.plan.fromRecipes && weekSel().length) buildWeekFromRecipes(); else { keepShape(); generatePlan(); }
+    toast(cal ? `New plan for ${S.targets.cal} calories a day` : 'Made you a new plan with the improved planner');
   }
   // The plan follows the calendar: open on today's day, and start the next plan once this one has run out.
   if (S.plan) {
@@ -3086,7 +3089,9 @@ function renderSettings() {
       <button class="btn danger grow sm" data-act="reset">Erase all</button></div></div>
     <div class="small muted" style="text-align:center;margin:8px 0 20px">Barcode data: Open Food Facts (openfoodfacts.org). Costco values are approximate.<br>App version ${APP_VERSION}</div>`;
   const v = $('#view');
-  v.querySelectorAll('[data-t]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (n > 0) { S.targets[i.dataset.t] = Math.round(n); S.targetsSet = true; save(); } }));
+  v.querySelectorAll('[data-t]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (!(n > 0)) return;
+    if (i.dataset.t === 'cal') { setCalories(n); renderSettings(); const T = S.targets; toast(`Goal: ${T.cal} cal · P${T.p} C${T.c} F${T.f} — your meal plan will be rebuilt`); return; }
+    S.targets[i.dataset.t] = Math.round(n); S.targetsSet = true; save(); }));
   v.querySelectorAll('[data-c]').forEach(i => i.addEventListener('change', () => { S.calc[i.dataset.c] = i.type === 'checkbox' ? i.checked : i.tagName === 'SELECT' && i.dataset.c !== 'act' ? i.value : +i.value; save(); }));
   v.querySelectorAll('[data-rule]').forEach(i => i.addEventListener('change', () => { S.rules[i.dataset.rule].on = i.checked; save(); }));
   v.querySelectorAll('[data-rulev]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (n >= 0) { S.rules[i.dataset.rulev].v = n; save(); } }));
@@ -3131,6 +3136,19 @@ function calcGoals() {
   // High triglycerides: judge fat by saturated fat only, so salmon, nuts and olive oil aren't blocked by total fat.
   if (c.tg) S.rules.f.on = false; save(); renderSettings();
   toast(`Goals set: ${cal} cal · P${p} C${carbs} F${f}`);
+}
+// New calorie goal: keep protein (it's based on your body, not calories), then split the rest between carbs and fat
+// the same way the calculator does, and rebuild the meal plan for the new number.
+function setCalories(cal) {
+  const c = S.calc, T = S.targets;
+  cal = Math.max(1200, Math.round(cal / 10) * 10);
+  const p = Math.min(T.p || 150, Math.round(cal * 0.45 / 4)); // protein stays, but never more than 45% of calories
+  let f, carbs;
+  if (c.tg) { carbs = Math.round(cal * 0.34 / 4 / 5) * 5; f = Math.round((cal - p * 4 - carbs * 4) / 9); }
+  else { f = Math.round(cal * 0.28 / 9); carbs = Math.max(50, Math.round((cal - p * 4 - f * 9) / 4)); }
+  S.targets = { cal, p, c: carbs, f, sf: Math.round(cal * (c.tg ? 0.07 : 0.1) / 9) }; S.targetsSet = true; autoRules();
+  if (S.plan) S.plan.planner = 0; // rebuilt next time the plan opens
+  save();
 }
 function autoRules() {
   const n = Math.max(1, S.servingsPerDay), T = S.targets;
