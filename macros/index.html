@@ -870,7 +870,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.6 (paste a whole recipe)';
+const APP_VERSION = '8.7 (change any meal, today at the top)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1158,14 +1158,60 @@ function snackIdeasCard() {
       <button class="btn alt sm" data-act="snacklog" data-i="${x.i}">Ate it</button></div>`).join('')}</div>`;
 }
 function todaysMealsCard() {
-  const di = planTodayIndex(); if (di < 0) return `<div class="card tap" data-act="tab" data-t="plan" style="background:var(--soft)"><b>🍽 No meal plan for today</b><div class="small muted">Tap to make one in Meals.</div></div>`;
-  const day = S.plan.days[di], logged = new Set(entries(todayKey()).map(e => e.tag).filter(Boolean));
-  return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🍽 Today's meals</h2><button class="btn ghost sm" data-act="tab" data-t="plan">Full plan</button></div>
-    ${day.meals.map((m, mi) => { const t = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))), done = logged.has(mealTag(di, mi));
-      return `<div class="item"><div class="grow tap" data-act="todayrecipe" data-d="${di}" data-m="${mi}"><div class="name" style="${done ? 'opacity:.6' : ''}">${m.meal}: ${esc(m.title || m.meal)}</div>
-        <div class="meta">${Math.round(t.cal)} cal · <span style="color:var(--p)">${Math.round(t.p)} g protein</span> · tap for recipe</div></div>
-        ${done ? `<button class="btn ghost sm" data-act="todayunlog" data-d="${di}" data-m="${mi}">✓ Eaten</button>` : `<button class="btn sm" data-act="todaylog" data-d="${di}" data-m="${mi}">Ate it</button>`}</div>`; }).join('')}
-    </div>`;
+  const di = planTodayIndex(), list = entries(todayKey()), day = di >= 0 ? S.plan.days[di] : null;
+  const tagged = new Set(list.map(e => e.tag).filter(Boolean));
+  const extra = meal => list.filter(e => e.meal === meal && !(e.tag && /^plan:/.test(e.tag)));
+  const xrow = e => `<div class="row" style="gap:6px;padding:4px 0 4px 12px;border-left:3px solid var(--soft)"><div class="grow small"><b>${esc(e.name)}</b> <span class="muted">· ${r1(e.sv)} × ${esc(e.serving)} · ${Math.round(e.cal * e.sv)} cal</span></div>
+      <button class="icon-btn" data-act="unlog" data-id="${e.id}" aria-label="Remove" style="width:32px;height:32px">✕</button></div>`;
+  const rows = [];
+  for (const meal of MEALS) {
+    const mis = day ? day.meals.map((m, mi) => [m, mi]).filter(([m]) => m.meal === meal) : [];
+    for (const [m, mi] of mis) {
+      const t = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))), done = tagged.has(mealTag(di, mi)), none = !m.items.length;
+      rows.push(`<div class="item" style="align-items:flex-start"><div class="grow ${none ? '' : 'tap'}" ${none ? '' : `data-act="todayrecipe" data-d="${di}" data-m="${mi}"`}>
+          <div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:700">${meal}</div>
+          <div class="name" style="${done ? 'text-decoration:line-through;opacity:.6' : ''}">${none ? '<span class="muted">Nothing planned</span>' : esc(m.title || m.meal)}</div>
+          ${none ? '' : `<div class="meta">${Math.round(t.cal)} cal · <span style="color:var(--p)">${Math.round(t.p)} g protein</span></div>`}</div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">${none ? '' : done ? `<button class="btn ghost sm" data-act="todayunlog" data-d="${di}" data-m="${mi}">✓ Eaten</button>` : `<button class="btn sm" data-act="todaylog" data-d="${di}" data-m="${mi}">Ate it</button>`}
+          <button class="btn ghost sm" style="padding:4px 10px;font-size:13px" data-act="mealchange" data-d="${di}" data-m="${mi}">${none ? '+ Add' : '✎ Change'}</button></div></div>`);
+    }
+    const ex = extra(meal);
+    if (ex.length && !mis.length) rows.push(`<div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin-top:8px">${meal}</div>`);
+    if (ex.length) rows.push(ex.map(xrow).join(''));
+  }
+  return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🍽 Today's meals</h2>${day ? `<button class="btn ghost sm" data-act="tab" data-t="plan">Full plan</button>` : ''}</div>
+    ${day ? '' : `<div class="small muted tap" data-act="tab" data-t="plan" style="padding:6px 0">No meal plan for today — tap to make one in Meals.</div>`}
+    ${rows.join('')}
+    <div class="row" style="gap:6px;margin-top:10px"><button class="btn alt sm grow" data-act="find">🔎 Ate something else?</button><button class="btn alt sm grow" data-act="eatout">🍔 Eating out</button></div>
+    <button class="btn alt sm block" style="margin-top:6px" data-act="cookkitchen">🍳 Cook with what I have</button></div>`;
+}
+// Swap a planned meal: leftovers, a recipe, something from your kitchen, a different filled-in meal — or nothing.
+const recipeMeal = (meal, r) => ({ meal, key: 'recipe', recipe: r.id, title: r.name, label: 'Recipe', items: [{ id: recipeFood(r).id, sv: 1, step: 1, min: 1, max: 1, role: 'recipe' }] });
+let changeOpts = [];
+function changeMealSheet(di, mi) {
+  const m = S.plan.days[di].meals[mi], meal = m.meal, isB = meal === 'Breakfast';
+  const fits = r => (r.meal === 'Breakfast') === isB;
+  const left = (S.recipes || []).filter(r => fits(r) && (stockOf('rcp-' + r.id) || 0) >= 1 && r.id !== m.recipe);
+  const others = (S.recipes || []).filter(r => fits(r) && !left.includes(r) && r.id !== m.recipe);
+  const kitchen = meal === 'Snacks' ? [] : kitchenMeals(meal, 2);
+  const fresh = (() => { const pool = planPool(), out = []; for (const t of [...templatesFor(meal)].sort(() => Math.random() - 0.5)) { const x = buildMeal(meal, t, pool, {}, false, [m.label]); if (x) { const R = snackReserve() || { cal: 0, p: 0, c: 0, f: 0 }, T = S.targets, sh = isB ? 0.27 : 0.33;
+    optimize([x], S.planOpts.pf, { cal: T.cal - (T.cal - R.cal) * sh, p: T.p - (T.p - R.p) * sh, c: T.c - (T.c - R.c) * sh, f: T.f - (T.f - R.f) * sh }); x.items = x.items.filter(i => i.sv > 0); out.push(x); if (out.length >= 2) break; } } return out; })();
+  changeOpts = [...left.map(r => recipeMeal(meal, r)), ...kitchen, ...fresh, ...others.map(r => recipeMeal(meal, r))];
+  const opt = (x, i, sub) => { const t = totals(x.items.map(y => ({ ...getFood(y.id), sv: y.sv })));
+    return `<div class="item tap" data-act="mealpick" data-d="${di}" data-m="${mi}" data-i="${i}"><div class="grow"><div class="name">${esc(x.title)}</div><div class="meta">${sub ? esc(sub) + ' · ' : ''}${Math.round(t.cal)} cal · ${Math.round(t.p)} g protein</div></div><span class="muted">›</span></div>`; };
+  let k = 0; const sec = (title, arr, sub) => arr.length ? `<h3 style="margin:12px 0 2px;font-size:15px">${title}</h3>` + arr.map(x => opt(x, k++, typeof sub === 'function' ? sub(x) : sub)).join('') : '';
+  const wk = m.recipe && (S.week || []).find(w => w.rid === m.recipe), notMade = wk && stockOf('rcp-' + m.recipe) == null;
+  sheet(`<div class="sheet-head"><div class="grow"><h2>Change ${meal.toLowerCase()}</h2><div class="small muted">Now: ${esc(m.items.length ? m.title : 'nothing planned')}</div></div><button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    ${notMade ? `<button class="btn danger block sm" style="margin:6px 0" data-act="weekdrop" data-id="${esc(m.recipe)}">🗑 I'm not making ${esc(recipeById(m.recipe).name)} — take it out of the whole week</button>` : ''}
+    ${sec('🥡 Leftovers you have', changeOpts.slice(0, left.length), x => `${Math.floor(stockOf('rcp-' + x.recipe))} left`)}
+    ${sec('🍳 From your kitchen', changeOpts.slice(left.length, left.length + kitchen.length), 'no shopping')}
+    ${sec('🔄 A different meal', changeOpts.slice(left.length + kitchen.length, left.length + kitchen.length + fresh.length), 'filled in for your goals')}
+    ${sec('📖 Your recipes', changeOpts.slice(left.length + kitchen.length + fresh.length), x => stockOf('rcp-' + x.recipe) != null ? 'made — none left' : 'not made yet')}
+    ${m.items.length ? `<button class="btn ghost block sm" style="margin-top:14px" data-act="mealnone" data-d="${di}" data-m="${mi}">Remove — nothing planned for this ${meal.toLowerCase()}</button>` : ''}`);
+}
+function setPlannedMeal(di, mi, nm) {
+  const tag = mealTag(di, mi); if (entries(todayKey()).some(e => e.tag === tag)) unlogPlannedMeal(di, mi); // eaten already? take the old one off first
+  S.plan.days[di].meals[mi] = { ...JSON.parse(JSON.stringify(nm)), meal: S.plan.days[di].meals[mi].meal }; save();
 }
 // Calories as one big number, then protein / carbs / fat as three small columns with thin bars.
 function macroSummary(t, T, label = 'left') {
@@ -1193,16 +1239,14 @@ function renderToday() {
   if (!S.targetsSet) h += `<div class="card" style="background:var(--soft)"><b>Set your goals first.</b>
     <div class="small muted">Your daily macros decide what counts as Approved.</div>
     <button class="btn sm" style="margin-top:8px" data-act="tab" data-t="settings">Set goals</button></div>`;
+  if (isToday) h += todaysMealsCard();
   h += `<div class="card">${macroSummary(t, T)}
     <div class="row small" style="margin-top:8px;gap:12px"><span style="color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</span>
       <span style="color:${t.fb >= fiberTarget() ? 'var(--ok)' : 'var(--muted)'}">Fiber ${Math.round(t.fb || 0)} / ${fiberTarget()} g${t.fb >= fiberTarget() ? ' ✓' : ''}</span></div></div>
     ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
-    ${isToday ? todaysMealsCard() : ''}
-    ${isToday ? snackIdeasCard() : ''}
-    <div class="row" style="margin-bottom:12px;gap:6px"><button class="btn alt grow" data-act="find">🔎 Ate something else?</button><button class="btn alt grow" data-act="eatout">🍔 Eating out</button></div>
-    ${isToday ? `<button class="btn alt block" style="margin:-4px 0 12px" data-act="cookkitchen">🍳 Cook with what I have</button>` : ''}
-    ${list.length ? `<h3 style="margin:4px 4px 8px;font-size:15px">What you've logged</h3>` : ''}`;
-  for (const m of MEALS) {
+    ${isToday ? snackIdeasCard() : `<div class="row" style="margin-bottom:12px;gap:6px"><button class="btn alt grow" data-act="find">🔎 Ate something else?</button><button class="btn alt grow" data-act="eatout">🍔 Eating out</button></div>`}
+    ${list.length && !isToday ? `<h3 style="margin:4px 4px 8px;font-size:15px">What you logged</h3>` : ''}`;
+  for (const m of isToday ? [] : MEALS) {
     const es = list.filter(e => e.meal === m); if (!es.length) continue;
     const mt = totals(es);
     h += `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${m}</h2><span class="small muted">${Math.round(mt.cal)} cal · P${Math.round(mt.p)} C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
@@ -1210,7 +1254,7 @@ function renderToday() {
         <div class="meta">${r1(e.sv)} × ${esc(e.serving)} · ${Math.round(e.cal * e.sv)} cal · P${r1(e.p * e.sv)} C${r1(e.c * e.sv)} F${r1(e.f * e.sv)}</div></div>
         <button class="icon-btn" data-act="unlog" data-id="${e.id}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
   }
-  if (!list.length) h += `<div class="empty">Nothing logged ${isToday ? 'yet today — tap “Ate it” on a meal above, or scan a snack' : 'this day'}.</div>`;
+  if (!list.length && !isToday) h += `<div class="empty">Nothing logged this day.</div>`;
   $('#view').innerHTML = h;
 }
 
@@ -3429,20 +3473,21 @@ function renderPlan() {
       ${S.plan.reserve ? (() => { const all = day.meals.flatMap(m => m.items), tt = k => all.reduce((a, x) => a + (getFood(x.id)[k] || 0) * x.sv, 0), cal = Math.max(0, T.cal - tt('cal')), pr = Math.max(0, T.p - tt('p'));
         return `<div class="small" style="margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--soft)">🍎 <b>Room for snacks: about ${Math.round(cal)} cal${pr >= 1 ? ` and ${Math.round(pr)} g protein` : ''}.</b> Scan a snack — if it's approved and says it fits what you have left, add it.</div>`; })() : ''}</div>`;
     day.meals.forEach((m, mi) => {
+      if (!m.items.length) { h += `<div class="card meal"><div class="row"><div class="grow"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:700">${m.meal}</div><div class="muted">Nothing planned</div></div><button class="btn alt sm" data-act="mealchange" data-d="${planDay}" data-m="${mi}">+ Add</button></div></div>`; return; }
       const mt = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv })));
       if (m.recipe) { const r = recipeById(m.recipe);
         h += `<div class="card meal"><div class="row" style="align-items:flex-start;gap:12px"><div class="thumb tap" data-act="${r ? 'ropen' : 'none'}" data-id="${esc(m.recipe)}">${mealVisual(m, 'card')}</div>
           <div class="grow"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:700">${m.meal}</div><h3 style="margin:2px 0">${esc(m.title)}</h3>
           <div class="small"><b>${Math.round(mt.cal)} cal</b> · <span style="color:var(--p);font-weight:700">${Math.round(mt.p)} g protein</span> <span class="muted">· C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div></div></div>
           <div class="small muted" style="margin-top:6px">📖 From your recipes · 1 serving${r && r.servings > 1 ? ` (1/${r.servings} of a batch)` : ''}${planDay >= 4 ? ' · 🧊 take one out of the freezer the night before' : ''}</div>
-          <div class="row" style="margin-top:6px">${r ? `<button class="btn sm" data-act="ropen" data-id="${esc(r.id)}">📖 Recipe</button>` : ''}<button class="btn alt sm" data-act="logmeal" data-m="${mi}">Log this meal today</button></div></div>`;
+          <div class="row" style="margin-top:6px">${r ? `<button class="btn sm" data-act="ropen" data-id="${esc(r.id)}">📖 Recipe</button>` : ''}<button class="btn alt sm" data-act="logmeal" data-m="${mi}">Log today</button><button class="btn ghost sm" data-act="mealchange" data-d="${planDay}" data-m="${mi}">✎ Change</button></div></div>`;
         return; }
       h += `<div class="card meal"><div class="row" style="align-items:flex-start;gap:12px"><div class="thumb tap" data-act="recipe" data-m="${mi}">${mealVisual(m, 'card')}</div>
         <div class="grow"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:700">${m.meal}</div><h3 style="margin:2px 0">${esc(m.title || m.meal)}</h3>
         <div class="small"><b>${Math.round(mt.cal)} cal</b> · <span style="color:var(--p);font-weight:700">${Math.round(mt.p)} g protein</span> <span class="muted">· C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div></div></div>
         ${m.items.map((x, ii) => { const f = getFood(x.id); return `<div class="item"><div class="grow tap" data-act="open" data-id="${esc(f.id)}"><div class="name">${esc(f.name)}</div>
           <div class="meta">${esc(amountText(f, x.sv))} · ${Math.round(f.cal * x.sv)} cal</div></div><button class="btn alt sm" data-act="swap" data-m="${mi}" data-i="${ii}" aria-label="Swap ${esc(f.name)}">🔁 Swap</button></div>`; }).join('')}
-        <div class="row" style="margin-top:6px"><button class="btn sm" data-act="recipe" data-m="${mi}">📖 Recipe</button><button class="btn alt sm" data-act="logmeal" data-m="${mi}">Log this meal today</button>${S.plan.prep && m.meal !== 'Snacks' ? `<span class="small muted grow" style="text-align:right">× ${S.plan.prep} ${m.meal === 'Breakfast' ? 'days' : 'containers'}</span>` : ''}</div></div>`;
+        <div class="row" style="margin-top:6px"><button class="btn sm" data-act="recipe" data-m="${mi}">📖 Recipe</button><button class="btn alt sm" data-act="logmeal" data-m="${mi}">Log today</button><button class="btn ghost sm" data-act="mealchange" data-d="${planDay}" data-m="${mi}">✎ Change</button>${S.plan.prep && m.meal !== 'Snacks' ? `<span class="small muted grow" style="text-align:right">× ${S.plan.prep} ${m.meal === 'Breakfast' ? 'days' : 'containers'}</span>` : ''}</div></div>`;
     });
     h += S.plan.fromRecipes ? `<button class="btn block" data-act="rshop" data-id="week">🛒 Check groceries for my recipes</button>
       <button class="btn alt block" style="margin-top:8px" data-act="plan2list">Add the breakfasts to my shopping list</button>`
@@ -3774,6 +3819,10 @@ document.addEventListener('click', e => {
     case 'swap': swapSheet(+el.dataset.m, +el.dataset.i); break;
     case 'doswap': doSwap(+el.dataset.m, +el.dataset.i, el.dataset.id); break;
     case 'logmeal': { const m = S.plan.days[planDay].meals[+el.dataset.m]; logPlannedMeal(planDay, +el.dataset.m); toast(`${m.meal} logged for today`); break; }
+    case 'mealchange': changeMealSheet(+el.dataset.d, +el.dataset.m); break;
+    case 'mealpick': { const di = +el.dataset.d, mi = +el.dataset.m, nm = changeOpts[+el.dataset.i]; setPlannedMeal(di, mi, nm); closeSheet(); toast(`${nm.meal || S.plan.days[di].meals[mi].meal}: ${nm.title}`); break; }
+    case 'mealnone': { const di = +el.dataset.d, mi = +el.dataset.m, m = S.plan.days[di].meals[mi]; setPlannedMeal(di, mi, { meal: m.meal, key: 'none', title: 'Nothing planned', label: '', items: [] }); closeSheet(); toast(`${m.meal} removed`); break; }
+    case 'weekdrop': { const r = recipeById(id); S.week = (S.week || []).filter(w => w.rid !== id); buildWeekFromRecipes(); save(); closeSheet(); toast(`${r.name} is out of this week — plan rebuilt`); break; }
     case 'todaylog': { const di = +el.dataset.d, mi = +el.dataset.m; logPlannedMeal(di, mi); toast(`${S.plan.days[di].meals[mi].meal} logged ✓`); renderToday(); break; }
     case 'todayunlog': unlogPlannedMeal(+el.dataset.d, +el.dataset.m); toast('Removed from today'); renderToday(); break;
     case 'todayrecipe': planDay = +el.dataset.d; planDayPicked = true; showRecipe(+el.dataset.m); break;
