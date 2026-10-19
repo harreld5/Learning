@@ -869,7 +869,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.2 (cook with what I have)';
+const APP_VERSION = '8.3 (plan uses what you actually made)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -2003,6 +2003,10 @@ if (!S.scramble220) { S.scramble220 = true; const r = S.recipes.find(r => r.id =
 if (!S.cooked1019) { S.cooked1019 = true;
   if (todayKey() <= '2026-10-21') { S.stock = S.stock || {}; S.stock['rcp-chili'] = 5; S.stock['rcp-scramble'] = 2;
     if (S.plan) S.plan.planner = 0; } } // the plan is rebuilt with the chili leftovers in it
+if (!S.onlyMade1020) { S.onlyMade1020 = true;
+  const before = (S.week || []).length;
+  S.week = (S.week || []).filter(w => !(/^chipotle-/.test(w.rid) && stockOf('rcp-' + w.rid) == null));
+  if (S.week.length !== before && S.plan) S.plan.planner = 0; }
 if (!S.cal1700) { S.cal1700 = true; if (S.targets.cal !== 1700) setCalories(1700); }
 if (!S.chiliOccasion) { const c = S.recipes.find(r => r.id === 'chili'); if (c) c.occasion = true; for (const w of S.week || []) if (w.rid === 'chili') w.inPlan = false; S.chiliOccasion = true; }
 for (const r of SEED_RECIPES().reverse()) if (!S.seeded.includes(r.id)) { if (!S.recipes.some(x => x.id === r.id)) S.recipes.unshift(JSON.parse(JSON.stringify(r))); S.seeded.push(r.id); }
@@ -2245,13 +2249,13 @@ function vegServings(x) {
 const weekDays = () => S.weekDays === 14 ? 14 : 7;
 const weekSel = () => (S.week || []).filter(w => recipeById(w.rid));
 const inPlan = w => w.inPlan !== false;
-const weekServings = (bf = false) => weekSel().filter(w => inPlan(w) && (recipeById(w.rid).meal === 'Breakfast') === bf).reduce((a, w) => a + recipeById(w.rid).servings * w.b, 0);
+const weekServings = (bf = false) => weekSel().filter(w => inPlan(w) && (recipeById(w.rid).meal === 'Breakfast') === bf).reduce((a, w) => { const st = stockOf('rcp-' + w.rid); return a + (st != null ? Math.floor(st + 0.01) : recipeById(w.rid).servings * w.b); }, 0);
 function weekCard() {
   const wk = weekSel(), n = weekServings(), nb = weekServings(true);
   const D = weekDays(), slots = D * 2;
   return `<div class="card" style="background:var(--soft)"><div class="row"><h2 class="grow" style="margin:0 0 4px">🍳 What I'm making</h2></div>
     <div class="row" style="gap:6px;margin:2px 0 6px"><span class="small muted">Shopping for</span><div class="chips" style="margin:0"><button class="chip ${D === 7 ? 'on' : ''}" data-act="wkdays" data-v="7">1 week</button><button class="chip ${D === 14 ? 'on' : ''}" data-act="wkdays" data-v="14">2 weeks</button></div></div>
-    ${wk.length ? wk.map(w => { const r = recipeById(w.rid); return `<div class="item"><div class="grow"><div class="name">${esc(r.name)}</div><div class="meta">${r.meal === 'Breakfast' ? `${r.servings * w.b} breakfast${r.servings * w.b === 1 ? '' : 's'}` : `${r.servings * w.b} servings`}</div>
+    ${wk.length ? wk.map(w => { const r = recipeById(w.rid); return `<div class="item"><div class="grow"><div class="name">${esc(r.name)}</div><div class="meta">${(() => { const st = stockOf('rcp-' + r.id); return st != null ? `<span style="color:var(--ok)">🏠 Made · ${Math.floor(st + 0.01)} left</span>` : `${r.meal === 'Breakfast' ? `${r.servings * w.b} breakfast${r.servings * w.b === 1 ? '' : 's'}` : `${r.servings * w.b} servings`} · <span style="color:var(--warn)">not made yet</span>`; })()}</div>
           <button class="chip ${inPlan(w) ? 'on' : ''}" style="margin-top:4px;font-size:12px;padding:4px 10px" data-act="wkinplan" data-id="${esc(r.id)}">${inPlan(w) ? '🗓 In my plan' : '🏈 Just groceries'}</button></div>
         <div class="stepper"><button data-act="wkb" data-id="${esc(r.id)}" data-d="-1" aria-label="Fewer batches">−</button><span style="min-width:30px;text-align:center"><b>${w.b}×</b></span><button data-act="wkb" data-id="${esc(r.id)}" data-d="1" aria-label="More batches">+</button></div>
         <button class="icon-btn" data-act="wkrm" data-id="${esc(r.id)}" aria-label="Remove">✕</button></div>`; }).join('') + `
@@ -2270,10 +2274,12 @@ function refreshPlan() {
   toast(cal ? 'Your meal plan was updated' : 'Made you a new plan with the improved planner');
 }
 function buildWeekFromRecipes() {
-  const left = weekSel().filter(inPlan).map(w => ({ r: recipeById(w.rid), n: recipeById(w.rid).servings * w.b })); // "just groceries" recipes (game-day chili) stay out
+  // Made it already? Plan the servings that are actually left. Not made yet: plan the batches you said you'd cook.
+  const left = weekSel().filter(inPlan).map(w => { const r = recipeById(w.rid), st = stockOf('rcp-' + r.id); return { r, n: st != null ? Math.floor(st + 0.01) : r.servings * w.b }; }); // "just groceries" recipes (game-day chili) stay out
   // ...but their cooked leftovers in the kitchen go in first, before they go bad.
   for (const r of S.recipes || []) { if (left.some(x => x.r.id === r.id)) continue; const n = Math.floor((stockOf('rcp-' + r.id) || 0) + 0.01); if (n > 0) left.push({ r, n, lo: 1 }); }
   const pool = planPool(), used = {}, prev = {}, days = [];
+  for (const f of pool) if (inKitchen(f.id)) used[f.id] = 1; // foods you already have get picked first for the filled-in meals
   for (let d = 0; d < weekDays(); d++) {
     const day = makeDay(pool, used, { prev });
     let last = null;
@@ -2281,6 +2287,7 @@ function buildWeekFromRecipes() {
       const isB = m.meal === 'Breakfast'; if (!isB && m.meal !== 'Lunch' && m.meal !== 'Dinner') return m;
       const c = left.filter(x => x.n > 0 && (x.r.meal === 'Breakfast') === isB).sort((a, b) => ((a.r.id === last) - (b.r.id === last)) || ((b.lo || 0) - (a.lo || 0)) || (b.n - a.n))[0];
       if (!c) return m;
+      if (!isB && c.r.id === last && c.n <= weekDays() - d - 1) return m; // leftovers: one a day when there are enough days left
       c.n--; last = c.r.id; const food = recipeFood(c.r);
       return { meal: m.meal, key: 'recipe', recipe: c.r.id, title: c.r.name, label: 'Recipe', items: [{ id: food.id, sv: 1, step: 1, min: 1, max: 1, role: 'recipe' }] };
     });
