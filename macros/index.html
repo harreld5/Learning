@@ -869,7 +869,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.4 (8 more recipes)';
+const APP_VERSION = '8.4.1 (fiber on Today)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -947,6 +947,8 @@ function guessCategory(f) {
   return 'snack';
 }
 const isDairy = f => /yogurt|cottage|\bmilk\b|kefir|skyr/i.test(f.name || '');
+// About 14 g of fiber per 1,000 calories (the Dietary Guidelines' rule of thumb), at least 25 g.
+const fiberTarget = () => Math.max(25, Math.round(S.targets.cal * 0.014));
 function sfTarget() { return S.targets.sf || Math.round(S.targets.cal * 0.1 / 9); }
 function getFoodSafe(id) { return (S && S.foods[id]) || CATALOG_BY_ID[id] || null; }
 function avoidedWord(f) {
@@ -1079,13 +1081,14 @@ function badge(f) { const v = verdict(f); return `<span class="badge ${v.ok ? 'o
 /* ================= daily totals ================= */
 function entries(k) { return S.log[k] || []; }
 function totals(list) {
-  const t = { cal: 0, p: 0, c: 0, f: 0, sf: 0 };
-  for (const e of list) for (const m of ['cal', 'p', 'c', 'f', 'sf']) t[m] += (e[m] || 0) * e.sv;
+  const t = { cal: 0, p: 0, c: 0, f: 0, sf: 0, fb: 0 };
+  for (const e of list) { for (const m of ['cal', 'p', 'c', 'f', 'sf']) t[m] += (e[m] || 0) * e.sv;
+    t.fb += (e.fb != null ? e.fb : ((e.foodId && getFood(e.foodId)) || {}).fb || 0) * e.sv; } // older log entries didn't save fiber: use the food's
   return t;
 }
 function logFood(f, sv, meal, k = viewDay, opts = {}) {
   const stock = !opts.noStock && changeStock(f.id, -sv); // eaten food comes out of your kitchen
-  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0, sf: f.sf || 0, stock, ...(opts.tag ? { tag: opts.tag } : {}) });
+  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0, sf: f.sf || 0, fb: f.fb || 0, stock, ...(opts.tag ? { tag: opts.tag } : {}) });
   save();
 }
 function defaultMeal() { const h = new Date().getHours(); return h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 20 ? 'Dinner' : 'Snacks'; }
@@ -1163,7 +1166,8 @@ function renderToday() {
     <div class="small muted">Your daily macros decide what counts as Approved.</div>
     <button class="btn sm" style="margin-top:8px" data-act="tab" data-t="settings">Set goals</button></div>`;
   h += `<div class="card">${macroSummary(t, T)}
-    <div class="small" style="margin-top:8px;color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</div></div>
+    <div class="row small" style="margin-top:8px;gap:12px"><span style="color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</span>
+      <span style="color:${t.fb >= fiberTarget() ? 'var(--ok)' : 'var(--muted)'}">Fiber ${Math.round(t.fb || 0)} / ${fiberTarget()} g${t.fb >= fiberTarget() ? ' ✓' : ''}</span></div></div>
     ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
     ${isToday ? todaysMealsCard() : ''}
     <div class="row" style="margin-bottom:12px;gap:6px"><button class="btn alt grow" data-act="find">🔎 Ate something else?</button><button class="btn alt grow" data-act="eatout">🍔 Eating out</button></div>
