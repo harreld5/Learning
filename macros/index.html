@@ -869,7 +869,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '7.8 (cleaner screens)';
+const APP_VERSION = '8.0 (better scanning: USDA lookup + add from photos)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1197,7 +1197,7 @@ function renderScan() {
       <details class="fold" style="margin-top:10px"><summary><span class="grow small"><b>⌨️ Type the barcode number</b></span></summary><div class="row"><input type="text" inputmode="numeric" id="manual-code" placeholder="e.g. 096619123456" autocomplete="off">
       <button class="btn" data-act="lookup">Look up</button></div>
       </details>
-      <div class="small muted" style="margin-top:8px">Nutrition comes from Open Food Facts, a free public food database. Only the barcode number is sent.</div></div>`;
+      <div class="small muted" style="margin-top:8px">Lookups check Open Food Facts, then the USDA branded-food database. Only the barcode number is sent. Not found? Add it once from two photos and it's saved on your phone.</div></div>`;
   $('#scantolist').addEventListener('change', e => { S.scanToList = e.target.checked; save(); });
   $('#barcodephoto').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) decodeBarcodePhoto(f); });
   if (S.camOk) startScan();
@@ -1321,26 +1321,110 @@ async function lookupBarcode(raw) {
   if (code.length < 6) { toast('That barcode looks too short'); return; }
   const saved = S.foods['b' + code] || allFoods().find(f => f.barcode === code);
   if (saved) { addScanToList(saved.id); return openFood(saved.id, { focusPrice: S.scanToList, fromScan: true }); }
-  sheet(`<div class="sheet-head"><h2>Looking up ${esc(code)}…</h2></div><div class="empty">Checking the food database.</div>`);
+  const status = msg => sheet(`<div class="sheet-head"><h2>Looking up ${esc(code)}…</h2></div><div class="empty">${msg}</div>`);
+  status('Checking Open Food Facts…');
+  const found = f => { S.foods[f.id] = f; save(); addScanToList(f.id); openFood(f.id, { focusPrice: S.scanToList, fromScan: true }); };
+  let partial = null, reached = 0;
+  // 1. Open Food Facts (worldwide, crowd-sourced)
   try {
     for (const c of codeVariants(code)) {
-      const d = await offFetch(`https://world.openfoodfacts.org/api/v2/product/${c}.json?fields=${OFF_FIELDS}`);
-      if (d && d.status === 1 && d.product) {
-        const f = fromOFF(code, d.product);
-        S.foods[f.id] = f; save();
-        addScanToList(f.id);
-        return openFood(f.id, { focusPrice: S.scanToList, fromScan: true });
-      }
+      const d = await offFetch(`https://world.openfoodfacts.org/api/v2/product/${c}.json?fields=${OFF_FIELDS}`); reached++;
+      if (d && d.status === 1 && d.product) { const f = fromOFF(code, d.product); if (f.cal != null) return found(f); partial = f; break; } // name but no nutrition: keep looking
     }
-    sheet(`<div class="sheet-head"><h2>Not in the database</h2><button class="icon-btn" data-act="close">✕</button></div>
-      <p>Barcode <b>${esc(code)}</b> wasn't found. Enter the numbers from the Nutrition Facts label once and the app will remember it.</p>
-      <button class="btn block" data-act="newfood" data-code="${esc(code)}">Enter label</button>`);
-  } catch (e) {
-    sheet(`<div class="sheet-head"><h2>Couldn't reach the food database</h2><button class="icon-btn" data-act="close">✕</button></div>
-      <p class="muted">Check your internet connection and try again, or enter the label yourself.</p>
+  } catch (e) {}
+  // 2. USDA FoodData Central (US branded foods, including a lot of Kirkland and store brands)
+  status('Checking the USDA branded-food database…');
+  try { const f = await usdaLookup(code); reached++; if (f) { if (partial) { f.img = f.img || partial.img; f.pkgText = f.pkgText || partial.pkgText; f.pkgG = f.pkgG || partial.pkgG; } return found(f); } } catch (e) {}
+  // 3. At least get the name so you only type the numbers
+  if (!partial) try { const nm = await upcNameLookup(code); if (nm) partial = { name: nm.name, brand: nm.brand }; } catch (e) {}
+  if (!reached) return sheet(`<div class="sheet-head"><h2>Couldn't reach the food databases</h2><button class="icon-btn" data-act="close">✕</button></div>
+      <p class="muted">Check your internet connection and try again, or add it yourself from photos of the package.</p>
       <div class="row"><button class="btn grow" data-act="lookup" data-code="${esc(code)}">Try again</button>
-      <button class="btn alt grow" data-act="newfood" data-code="${esc(code)}">Enter label</button></div>`);
-  }
+      <button class="btn alt grow" data-act="newfood" data-code="${esc(code)}">📸 Add it from photos</button></div>`);
+  addFromPhotos(code, partial);
+}
+// Not found anywhere: snap the front and the Nutrition Facts once, and every later scan finds it instantly.
+function addFromPhotos(code, partial) {
+  const name = partial && partial.name && partial.name !== 'Unnamed product' ? partial.name : '';
+  foodForm({ name, brand: (partial && partial.brand) || '', serving: '', cal: '', p: '', c: '', f: '', sf: '', s: '', fb: '', cat: 'other', img: (partial && partial.img) || '', fresh: true }, code,
+    `<div class="card" style="margin:0 0 10px;padding:10px 12px;background:var(--soft)"><b>${name ? `Found “${esc(name)}” but no nutrition facts.` : `Barcode ${esc(code)} isn't in the food databases yet.`}</b>
+      <div class="small">Take two photos and the app reads the label for you. Check the numbers, tap Save, and every future scan of this barcode pulls it up instantly.</div></div>`);
+}
+async function usdaLookup(code) {
+  const d = await offFetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=DEMO_KEY&dataType=Branded&pageSize=10&query=${encodeURIComponent(code)}`);
+  const strip = x => String(x || '').replace(/\D/g, '').replace(/^0+/, ''), want = strip(code);
+  const hit = ((d && d.foods) || []).find(x => strip(x.gtinUpc) === want || strip(x.gtinUpc).slice(0, -1) === want || strip(x.gtinUpc) === want.slice(0, -1));
+  return hit ? fromUSDA(code, hit) : null;
+}
+// USDA search results give nutrients per 100 g (or ml); scale them to the label serving.
+function fromUSDA(code, h) {
+  const val = (id, num) => { const n = (h.foodNutrients || []).find(x => x.nutrientId === id || String(x.nutrientNumber) === num); return n && n.value != null && !isNaN(+n.value) ? +n.value : null; };
+  const ss = +h.servingSize || 0, unit = String(h.servingSizeUnit || '').toLowerCase(), metric = /^(g|grm|ml|mlt)$/.test(unit);
+  const k = ss && metric ? ss / 100 : 1, per = (id, num) => { const v = val(id, num); return v == null ? null : r1(v * k); };
+  let cal = per(1008, '208'); if (cal == null) { const kj = per(1062, '268'); if (kj != null) cal = r1(kj / 4.184); }
+  const u = unit.replace('grm', 'g').replace('mlt', 'ml');
+  const title = x => String(x || '').toLowerCase().replace(/\b([a-z])/g, m => m.toUpperCase());
+  const food = { id: 'b' + code, barcode: code, src: 'scan', catAuto: true, from: 'USDA',
+    name: title(h.description) || 'Unnamed product', brand: title(h.brandName || h.brandOwner || '').split(',')[0],
+    serving: ss ? `${h.householdServingFullText ? h.householdServingFullText + ' ' : ''}(${ss} ${u})`.replace(/^\((.*)\)$/, '$1') : '100 g', noServing: !ss,
+    cal: cal == null ? null : Math.round(cal), p: per(1003, '203'), c: per(1005, '205'), f: per(1004, '204'), sf: per(1258, '606'), s: per(2000, '269'), fb: per(1079, '291'),
+    img: '', pkgText: h.packageWeight || '', pkgG: null };
+  food.cat = guessCategory(food);
+  return food;
+}
+// Name only (no nutrition) so the add form isn't blank.
+async function upcNameLookup(code) {
+  const d = await offFetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(code)}`);
+  const it = d && d.items && d.items[0]; return it && it.title ? { name: it.title, brand: it.brand || '' } : null;
+}
+
+/* ---------- Package photos (kept on this phone in IndexedDB, not in the main save) ---------- */
+const photoDB = (() => {
+  let db;
+  const open = () => db = db || new Promise((ok, no) => { const r = indexedDB.open('macro-check-photos', 1); r.onupgradeneeded = () => r.result.createObjectStore('p'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
+  const run = (mode, fn) => open().then(d => new Promise((ok, no) => { const t = d.transaction('p', mode), req = fn(t.objectStore('p')); t.oncomplete = () => ok(req.result); t.onerror = () => no(t.error); }));
+  return { get: k => run('readonly', st => st.get(k)).catch(() => null), set: (k, v) => run('readwrite', st => st.put(v, k)).catch(() => null), del: k => run('readwrite', st => st.delete(k)).catch(() => null) };
+})();
+// Shrink a photo: returns a JPEG data URL no wider/taller than max px. gray + contrast stretch for reading text.
+function shrinkPhoto(file, max, forText) {
+  return new Promise((ok, no) => { const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => { const sc = Math.min(forText ? 2.5 : 1, max / Math.max(img.width, img.height)), cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * sc); cv.height = Math.round(img.height * sc); const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, cv.width, cv.height);
+      if (forText) { const d = cx.getImageData(0, 0, cv.width, cv.height), a = d.data; let lo = 255, hi = 0;
+        for (let i = 0; i < a.length; i += 4) { const g = a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11; a[i] = g; if (g < lo) lo = g; if (g > hi) hi = g; }
+        const span = Math.max(1, hi - lo); for (let i = 0; i < a.length; i += 4) { const g = Math.max(0, Math.min(255, (a[i] - lo) * 255 / span)); a[i] = a[i + 1] = a[i + 2] = g; }
+        cx.putImageData(d, 0, 0); }
+      URL.revokeObjectURL(url); ok(cv.toDataURL('image/jpeg', forText ? 0.9 : 0.7)); };
+    img.onerror = () => { URL.revokeObjectURL(url); no(new Error('img')); }; img.src = url; });
+}
+const scriptsLoading = {};
+function loadScript(src) { return scriptsLoading[src] = scriptsLoading[src] || new Promise((ok, no) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => { delete scriptsLoading[src]; no(new Error('load')); }; document.head.appendChild(el); }); }
+const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+async function ocrText(dataUrl) { await loadScript(TESSERACT_URL); const r = await Tesseract.recognize(dataUrl, 'eng'); return (r && r.data && r.data.text) || ''; }
+// Pull the numbers off a Nutrition Facts panel. OCR often reads the "g" in "5g" as a 9, so check both and keep whichever matches the calories.
+function parseLabel(raw) {
+  const lines = String(raw).replace(/\r/g, '').split('\n').map(l => l.replace(/[|]/g, ' ').replace(/(\d)\s*[oO](?=\s*m?g\b)/g, '$10').replace(/\b[oO](?=\s*m?g\b)/g, '0').replace(/(\d),(\d)/g, '$1.$2').trim()).filter(Boolean);
+  const find = (re, skip) => lines.find(l => re.test(l) && !(skip && skip.test(l)));
+  const nums = (line, re) => { if (!line) return null; const after = line.slice(line.search(re)).replace(re, ' '); const m = after.match(/(\d+(?:\.\d+)?)\s*(mg|g)?/i); if (!m || /mg/i.test(m[2] || '')) return null;
+    const v = +m[1]; // no "g" after the number but it ends in 9: the g was probably read as a 9 — try that first
+    if (!/9$/.test(m[1]) || m[1].length < 2) return [v];
+    const cut = +m[1].slice(0, -1).replace(/\.$/, ''); return m[2] ? [v, cut] : [cut, v]; }; // "129g" can be a misread "12g" too — the sanity checks below decide
+  const out = {};
+  const sv = find(/serving\s*size/i); if (sv) out.serving = sv.replace(/.*serving\s*size\s*[:\-]?\s*/i, '').replace(/\s{2,}/g, ' ').trim();
+  const calL = find(/calories/i, /from fat/i) || find(/calories/i);
+  if (calL) { let m = calL.match(/calories[^\d]{0,20}(\d{1,4})/i); if (!m) { const i = lines.indexOf(calL), nx = lines[i + 1] || ''; m = nx.match(/^(\d{1,4})\b/); } if (m) out.cal = +m[1]; }
+  const cand = { f: nums(find(/total\s*fat|^fat\b/i), /total\s*fat|^fat\b/i), sf: nums(find(/sat(urated|\.)?\s*fat/i), /sat(urated|\.)?\s*fat/i),
+    c: nums(find(/carb/i), /total\s*carbo?h?y?d?r?a?t?e?s?|carb\w*/i), fb: nums(find(/fib(er|re)/i), /(dietary\s*)?fib(er|re)/i),
+    s: nums(find(/sugars?/i, /added|includes|incl\./i), /(total\s*)?sugars?/i), p: nums(find(/protein/i), /protein/i) };
+  const pick = k => cand[k] ? cand[k][0] : null;
+  // choose the fat / carb / protein reading that best matches the calories
+  if (out.cal != null && (cand.f || cand.c || cand.p)) { let best = null;
+    for (const f of cand.f || [0]) for (const c of cand.c || [0]) for (const p of cand.p || [0]) { const err = Math.abs(9 * f + 4 * c + 4 * p - out.cal); if (!best || err < best.err) best = { err, f, c, p }; }
+    if (cand.f) out.f = best.f; if (cand.c) out.c = best.c; if (cand.p) out.p = best.p; } // ties keep the first (g-fixed) reading
+  else { for (const k of ['f', 'c', 'p']) if (cand[k]) out[k] = pick(k); }
+  for (const k of ['sf', 'fb', 's']) if (cand[k]) { let v = pick(k); const cap = k === 'sf' ? out.f : out.c; if (cap != null && v > cap) v = cand[k].find(x => x <= cap) ?? v; out[k] = v; }
+  if (out.serving) out.serving = out.serving.replace(/\((\d+)9\s*g\)/i, (m0, a) => `(${a}g)`).replace(/(\d+)9\)/, '$1g)');
+  return out;
 }
 function fromOFF(code, p) {
   const n = p.nutriments || {};
@@ -1382,7 +1466,8 @@ function openFood(id, opts = {}) {
   const fits = (f.cal || 0) <= left.cal && (f.c || 0) <= left.c && (f.f || 0) <= left.f;
   const onList = S.list[f.id] && S.list[f.id].on;
   const sv = opts.sv || 1;
-  sheet(`<div class="sheet-head">${f.img ? `<img src="${esc(f.img)}" alt="" style="width:52px;height:52px;object-fit:contain;border-radius:8px;background:#fff">` : ''}
+  if (!f.img && f.photoFront) photoDB.get(f.id + ':front').then(u => { const im = $('#food-thumb'); if (u && im) { im.src = u; im.style.display = 'block'; } });
+  sheet(`<div class="sheet-head">${f.img ? `<img src="${esc(f.img)}" alt="" style="width:52px;height:52px;object-fit:contain;border-radius:8px;background:#fff">` : `<img id="food-thumb" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;display:none">`}
       <div class="grow"><h2>${esc(f.name)}</h2><div class="small muted">${esc(f.brand || (f.src === 'costco' ? 'Costco catalog' : ''))}${f.barcode ? ' · ' + esc(f.barcode) : ''}</div></div>
       <button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <div class="verdict ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✓ APPROVED' : '✕ NOT APPROVED'}<span class="small" style="font-weight:500;margin-left:auto">${f.src === 'restaurant' ? 'as a meal' : 'per serving'}</span></div>
@@ -1443,28 +1528,31 @@ function openFood(id, opts = {}) {
       <button class="btn alt grow sm" data-act="edit">Edit</button>
       <button class="btn ${S.excluded[f.id] ? 'danger' : 'alt'} sm" data-act="exclude">${S.excluded[f.id] ? '🚫 Never use' : '🚫'}</button>
       ${f.src !== 'costco' ? `<button class="btn danger sm" data-act="delfood">Delete</button>` : ''}</div>`);
+  const pp = $('#pprice'); if (pp) { pp.type = 'text'; pp.addEventListener('change', () => { setPrice(f.id, pp.value); toast('Price saved'); }); }
   if (opts.focusPrice && priceOf(f.id) == null) setTimeout(() => { const i = $('#pprice'); if (i) i.focus(); }, 150);
 }
 // Save the price typed on a food page (blank keeps the listed price).
-function savePriceFrom(id) {
-  const i = $('#pprice'); if (!i) return;
-  const v = i.value.trim();
-  if (v === '') { delete S.prices[id]; return; }
-  const n = Math.round(+v * 100) / 100;
-  if (!(n >= 0)) return;
-  if (PRICES[id] && PRICES[id][0] === n) delete S.prices[id]; else S.prices[id] = n;
-}
+function savePriceFrom(id) { const i = $('#pprice'); if (i) setPrice(id, i.value); }
 // Shopping mode: put a scanned food on the list right away.
 function addScanToList(id) {
   if (!S.scanToList) return;
   const L = S.list[id];
   if (!(L && L.on)) { S.list[id] = { on: true, got: false, qty: 1 }; save(); toast('Added to your shopping list'); }
 }
-function foodForm(f, code) {
-  f = f || { name: '', brand: '', serving: '', cal: '', p: '', c: '', f: '', sf: '', s: '', fb: '', cat: 'other' };
+function foodForm(f, code, intro = '') {
+  f = f || { name: '', brand: '', serving: '', cal: '', p: '', c: '', f: '', sf: '', s: '', fb: '', cat: 'other', fresh: true };
   const n = v => v == null ? '' : v;
-  sheet(`<div class="sheet-head"><h2>${f.id ? 'Edit food' : 'Enter label'}</h2><button class="icon-btn" data-act="close">✕</button></div>
-    <div class="small muted" style="margin-bottom:10px">Copy the numbers from the Nutrition Facts label for <b>one serving</b>.</div>
+  const fid = f.id || (code ? 'b' + code : 'u' + uid()); // known up front so the photos can be filed under it
+  const pending = { front: null, label: null };
+  sheet(`<div class="sheet-head"><h2>${f.id ? 'Edit food' : code ? 'Add this product' : 'Enter label'}</h2><button class="icon-btn" data-act="close">✕</button></div>
+    ${intro}
+    <div class="row" style="gap:8px;margin-bottom:8px">
+      <label class="btn alt grow sm" style="text-align:center">📸 Front of package<input type="file" id="ph-front" accept="image/*" capture="environment" hidden></label>
+      <label class="btn grow sm" style="text-align:center">📸 Nutrition Facts<input type="file" id="ph-label" accept="image/*" capture="environment" hidden></label></div>
+    <div class="row" style="gap:8px;align-items:flex-start"><img id="ph-front-img" alt="Front of package" style="width:76px;border-radius:10px;display:none">
+      <div class="grow"><div id="ocr-status" class="small muted">Take a straight-on photo of the Nutrition Facts — the app fills in the numbers. Always check them.</div>
+      <img id="ph-label-img" alt="Nutrition Facts photo" style="width:100%;border-radius:10px;margin-top:6px;display:none"></div></div>
+    <div class="small muted" style="margin:10px 0">Numbers are for <b>one serving</b>, as printed on the label.</div>
     <form id="foodform"><label class="field">Name<input type="text" name="name" value="${esc(f.name)}" required></label>
     <div class="grid2" style="margin-top:10px"><label class="field">Brand<input type="text" name="brand" value="${esc(f.brand)}"></label>
       <label class="field">Serving size<input type="text" name="serving" value="${esc(f.noServing ? '' : f.serving)}" placeholder="e.g. 1 cup (240 g)"></label>
@@ -1482,11 +1570,32 @@ function foodForm(f, code) {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
     const num = v => v === '' ? null : +v;
-    const id = f.id || (code ? 'b' + code : 'u' + uid());
+    const id = fid;
+    if (pending.front) { photoDB.set(id + ':front', pending.front); f.photoFront = true; }
+    if (pending.label) { photoDB.set(id + ':label', pending.label); f.photoLabel = true; }
+    delete f.fresh;
     const nf = { ...f, id, name: d.name.trim() || 'Food', brand: d.brand.trim(), serving: d.serving.trim() || '1 serving', noServing: false,
       cal: num(d.cal), p: num(d.p), c: num(d.c), f: num(d.f), sf: num(d.sf), s: num(d.s), fb: num(d.fb), cat: d.cat,
       src: f.src === 'search' ? 'scan' : (f.src || (code ? 'scan' : 'custom')), barcode: f.barcode || code || '', catAuto: false };
-    S.foods[id] = nf; save(); toast('Saved'); if (code) addScanToList(id); openFood(id, { focusPrice: !!code && S.scanToList, fromScan: !!code });
+    S.foods[id] = nf; save(); toast(code ? 'Saved — next time this barcode pulls it up instantly' : 'Saved'); if (code) addScanToList(id); openFood(id, { focusPrice: !!code && S.scanToList, fromScan: !!code });
+  });
+  // existing photos when editing
+  if (f.photoFront) photoDB.get(fid + ':front').then(u => { if (u) { const im = $('#ph-front-img'); if (im) { im.src = u; im.style.display = 'block'; } } });
+  if (f.photoLabel) photoDB.get(fid + ':label').then(u => { if (u) { const im = $('#ph-label-img'); if (im) { im.src = u; im.style.display = 'block'; } } });
+  $('#ph-front').addEventListener('change', async e => { const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    try { pending.front = await shrinkPhoto(file, 480); const im = $('#ph-front-img'); im.src = pending.front; im.style.display = 'block'; } catch (er) { toast("Couldn't open that photo"); } });
+  $('#ph-label').addEventListener('change', async e => { const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    const st = $('#ocr-status'), say = (m, c) => { if (st) { st.innerHTML = m; st.style.color = c || ''; } };
+    try {
+      pending.label = await shrinkPhoto(file, 1100); const im = $('#ph-label-img'); im.src = pending.label; im.style.display = 'block';
+      say('🔎 Reading the label… <span class="muted">(the first time takes up to 30 seconds)</span>');
+      const got = parseLabel(await ocrText(await shrinkPhoto(file, 1800, true)));
+      const form = $('#foodform'); if (!form) return;
+      const filled = [];
+      for (const k of ['serving', 'cal', 'p', 'c', 'f', 'sf', 's', 'fb']) if (got[k] != null && got[k] !== '') { const inp = form.elements[k]; if (!inp) continue; inp.value = got[k]; inp.style.background = 'var(--soft)'; filled.push(k); }
+      say(filled.length >= 4 ? `✓ Filled in ${filled.length} numbers from the photo (green boxes). <b>Check them against the label</b>, fix anything off, then Save.`
+        : filled.length ? `Read ${filled.length} number${filled.length === 1 ? '' : 's'} (green boxes). Type the rest from the photo below.` : "Couldn't read the numbers — try a closer, straight-on photo in good light, or type them from the photo below.", filled.length >= 4 ? 'var(--ok)' : 'var(--warn)');
+    } catch (er) { say("Couldn't read the label automatically (no internet?). Type the numbers from the photo below.", 'var(--warn)'); }
   });
 }
 function findSheet(q = '') {
@@ -1567,8 +1676,37 @@ function simpleRow(f) {
   const why = [S.rneed && S.rneed[f.id] ? 'need ' + stockText(f, S.rneed[f.id]) : L.need ? `plan needs ≈ ${r1(L.need)} servings` : '', L.for && L.for.length ? 'for ' + shortRecipes(L.for) : ''].filter(Boolean).join(' · ');
   return `<div class="item"><input type="checkbox" data-act="got" data-id="${esc(f.id)}" ${L.got ? 'checked' : ''} aria-label="Got it" style="width:22px;height:22px">
     <div class="grow tap" data-act="open" data-id="${esc(f.id)}" style="${L.got ? 'text-decoration:line-through;opacity:.6' : ''}"><div class="name">${esc(shortName(f))}</div>${why ? `<div class="meta">${esc(why)}</div>` : ''}</div>
-    <span style="font-weight:700;white-space:nowrap;background:var(--soft);border-radius:999px;padding:4px 10px;font-size:14px">${qty} pack${qty === 1 ? '' : 's'}</span>
+    <button class="tap" data-act="pricesheet" data-id="${esc(f.id)}" style="border:0;font:inherit;font-weight:700;white-space:nowrap;background:var(--soft);border-radius:999px;padding:5px 10px;font-size:14px;text-align:center;line-height:1.2;color:var(--ink)">${qty} pack${qty === 1 ? '' : 's'}<br><span style="font-weight:600;font-size:12px;color:${priceOf(f.id) == null ? 'var(--warn)' : 'var(--muted)'}">${priceOf(f.id) == null ? '+ price' : money(priceOf(f.id) * qty)}</span></button>
     <button class="icon-btn" data-act="listrm" data-id="${esc(f.id)}" aria-label="Remove from list">✕</button></div>`;
+}
+// One place to set a price: blank goes back to the listed Costco price.
+function setPrice(id, raw) {
+  const v = String(raw == null ? '' : raw).replace(/[$\s]/g, '');
+  if (v === '') delete S.prices[id];
+  else { const n = Math.round(+v * 100) / 100; if (!(n >= 0)) return; if (PRICES[id] && PRICES[id][0] === n) delete S.prices[id]; else S.prices[id] = n; }
+  save();
+}
+function refreshListTotals() {
+  let total = 0, inCart = 0;
+  for (const id of Object.keys(S.list)) { const L = S.list[id]; if (!L.on || !getFood(id)) continue; const pr = priceOf(id); const t = pr == null ? null : pr * (L.qty || 1);
+    const el = document.querySelector(`[data-line="${CSS.escape(id)}"]`); if (el) el.textContent = t == null ? '—' : money(t);
+    if (t != null) { total += t; if (L.got) inCart += t; } }
+  const set = (sel, v) => { const el = $(sel); if (el) el.textContent = money(v); }; set('#lt-total', total); set('#lt-cart', inCart); set('#lt-left', total - inCart);
+}
+// Quick sheet from the list: how many and what it costs, nothing else.
+function priceSheet(id) {
+  const f = getFood(id), L = S.list[id] || { qty: 1 }, pr = priceOf(id), listed = PRICES[id] ? PRICES[id][0] : null;
+  sheet(`<div class="sheet-head"><div class="grow"><h2>${esc(shortName(f))}</h2><div class="small muted">${esc(PRICES[id] ? PRICES[id][1] : (f.pkgText || f.serving || ''))}</div></div><button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <label class="small muted">Price per pack (shelf tag)</label>
+    <div class="row" style="gap:6px;margin:4px 0 12px"><span style="font-size:22px;font-weight:700">$</span><input type="text" inputmode="decimal" id="ps-price" value="${pr == null ? '' : pr.toFixed(2)}" placeholder="0.00" style="font-size:22px;font-weight:700;padding:10px 12px" class="grow"></div>
+    ${listed != null ? `<div class="small muted" style="margin:-6px 0 12px">Listed online at ${money(listed)} — leave it, or type what the tag says.</div>` : ''}
+    <div class="row" style="gap:10px;margin-bottom:14px"><span class="small muted">How many packs</span>
+      <div class="stepper"><button data-act="psqty" data-d="-1" aria-label="Fewer">−</button><span id="ps-qty" style="min-width:28px;text-align:center;font-weight:700">${L.qty || 1}</span><button data-act="psqty" data-d="1" aria-label="More">+</button></div>
+      <span class="grow" style="text-align:right;font-weight:700" id="ps-total">${pr == null ? '' : money(pr * (L.qty || 1))}</span></div>
+    <button class="btn block" data-act="pssave" data-id="${esc(id)}">Save</button>`);
+  const inp = $('#ps-price'), upd = () => { const v = +inp.value.replace(/[$\s]/g, ''), q = +$('#ps-qty').textContent || 1; $('#ps-total').textContent = inp.value.trim() && v >= 0 ? money(v * q) : ''; };
+  inp.addEventListener('input', upd); inp.addEventListener('keydown', e => { if (e.key === 'Enter') $('[data-act=pssave]').click(); });
+  setTimeout(() => { inp.focus(); inp.select(); }, 120);
 }
 function renderList() {
   const back = prevTab && prevTab !== 'list' ? prevTab : 'today';
@@ -1582,10 +1720,10 @@ function renderList() {
   let total = 0, inCart = 0, missing = 0, count = 0;
   for (const id of ids) { const L = S.list[id], t = line(id); count += L.qty || 1; if (t == null) { missing++; continue; } total += t; if (L.got) inCart += t; }
   let h = switcher + `<div class="card" style="position:sticky;top:52px;z-index:4">
-      <div class="row"><div class="grow"><div class="small muted">Estimated total · ${count} item${count === 1 ? '' : 's'}</div><div class="big-left">${money(total)}</div></div>
-      <div class="small" style="text-align:right"><span class="muted">In cart</span> <b>${money(inCart)}</b><br><span class="muted">Left to buy</span> <b>${money(total - inCart)}</b></div></div>
+      <div class="row"><div class="grow"><div class="small muted">Estimated total · ${count} item${count === 1 ? '' : 's'}${missing ? ` · <span style="color:var(--warn)">${missing} without a price</span>` : ''}</div><div class="big-left" id="lt-total">${money(total)}</div></div>
+      <div class="small" style="text-align:right"><span class="muted">In cart</span> <b id="lt-cart">${money(inCart)}</b><br><span class="muted">Left to buy</span> <b id="lt-left">${money(total - inCart)}</b></div></div>
       ${ids.length || (S.extra || []).length ? `<div class="row" style="gap:6px;margin-top:8px"><button class="btn ghost sm grow" data-act="cleargot">Remove checked</button><button class="btn danger sm grow" data-act="clearlist">🗑 Clear whole list</button></div>` : ''}
-      ${missing && S.listMode === 'prices' ? `<div class="small" style="color:var(--warn);margin-top:6px">${missing} item${missing === 1 ? ' has' : 's have'} no price yet — type one in to include ${missing === 1 ? 'it' : 'them'}.</div>` : ''}</div>`;
+</div>`;
   const extra = S.extra || [];
   if (!ids.length && !extra.length) {
     h += `<div class="empty">Your shopping list is empty.<br>Tick items on the <b>Costco</b> tab, tap <b>+ Shopping list</b> on any food, or add a whole meal plan.</div>
@@ -1612,7 +1750,7 @@ function renderList() {
               <div class="stepper"><button data-act="qty" data-id="${esc(f.id)}" data-d="-1" aria-label="Fewer">−</button><span style="min-width:22px;text-align:center"><b>${qty}</b></span><button data-act="qty" data-id="${esc(f.id)}" data-d="1" aria-label="More">+</button></div>
               <span class="small muted">×</span>
               <label class="row" style="gap:2px">$<input type="number" inputmode="decimal" step="0.01" min="0" data-price="${esc(f.id)}" value="${pr == null ? '' : pr.toFixed(2)}" placeholder="price" style="width:84px;padding:6px 8px"></label>
-              <span class="grow" style="text-align:right"><b>${pr == null ? '—' : money(pr * qty)}</b></span>
+              <span class="grow" style="text-align:right"><b data-line="${esc(f.id)}">${pr == null ? '—' : money(pr * qty)}</b></span>
             </div>${S.prices[f.id] != null ? `<div class="small muted" style="margin-top:2px">Your price${PRICES[f.id] ? ` (listed ${money(PRICES[f.id][0])})` : ''}</div>` : ''}</div></div>`;
       }).join('')}</div>`;
   }
@@ -1626,11 +1764,7 @@ function renderList() {
   h += `<div class="row" style="margin-bottom:8px"><button class="btn ghost grow sm" data-act="cleargot">Remove checked</button><button class="btn danger grow sm" data-act="clearlist">Clear list</button></div>
     <div class="small muted" style="text-align:center;margin-bottom:16px">Prices are Lodi Costco estimates from costco.com and Same-Day (Instacart), which can run a little higher than in the store. Tap a price to change it.</div>`;
   $('#view').innerHTML = h;
-  $('#view').querySelectorAll('[data-price]').forEach(i => i.addEventListener('change', () => {
-    const id = i.dataset.price, v = i.value.trim();
-    if (v === '') delete S.prices[id]; else if (+v >= 0) S.prices[id] = Math.round(+v * 100) / 100;
-    save(); renderList();
-  }));
+  $('#view').querySelectorAll('[data-price]').forEach(i => i.addEventListener('change', () => { setPrice(i.dataset.price, i.value); refreshListTotals(); }));
 }
 
 /* ---------- In my kitchen: what you have on hand, by weight ---------- */
@@ -3124,7 +3258,7 @@ function renderSettings() {
       <div class="row wrap"><button class="btn alt grow sm" data-act="export">Save backup</button>
       <label class="btn alt grow sm" style="text-align:center">Restore backup<input type="file" id="importfile" accept="application/json,.json" hidden></label>
       <button class="btn danger grow sm" data-act="reset">Erase all</button></div></details>
-    <div class="small muted" style="text-align:center;margin:8px 0 20px">Barcode data: Open Food Facts (openfoodfacts.org). Costco values are approximate.<br>App version ${APP_VERSION}</div>`;
+    <div class="small muted" style="text-align:center;margin:8px 0 20px">Barcode data: Open Food Facts (openfoodfacts.org) and USDA FoodData Central. Label reading: Tesseract.js. Costco values are approximate.<br>App version ${APP_VERSION}</div>`;
   const v = $('#view');
   v.querySelectorAll('[data-t]').forEach(i => i.addEventListener('change', () => { const n = +i.value; if (!(n > 0)) return;
     if (i.dataset.t === 'cal') { setCalories(n); renderSettings(); const T = S.targets; toast(`Goal: ${T.cal} cal · P${T.p} C${T.c} F${T.f} — your meal plan will be rebuilt`); return; }
@@ -3222,7 +3356,7 @@ document.addEventListener('click', e => {
     case 'startscan': startScan(); break;
     case 'stopscan': stopScan(); S.camOk = false; save(); break;
     case 'lookup': lookupBarcode(el.dataset.code || ($('#manual-code') && $('#manual-code').value)); break;
-    case 'newfood': foodForm(null, el.dataset.code); break;
+    case 'newfood': el.dataset.code ? addFromPhotos(el.dataset.code, null) : foodForm(null); break;
     case 'close': closeSheet(); break;
     case 'open': openFood(id); break;
     case 'online': searchOnline(el.dataset.q); break;
@@ -3347,8 +3481,12 @@ document.addEventListener('click', e => {
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
     case 'resetfood': { const fid = sheetFood.id; delete S.foods[fid]; save(); openFood(fid); break; }
-    case 'delfood': if (confirm('Delete this saved food?')) { delete S.foods[sheetFood.id]; delete S.list[sheetFood.id]; save(); closeSheet(); } break;
+    case 'delfood': if (confirm('Delete this saved food?')) { photoDB.del(sheetFood.id + ':front'); photoDB.del(sheetFood.id + ':label'); delete S.foods[sheetFood.id]; delete S.list[sheetFood.id]; save(); closeSheet(); } break;
     case 'cview': costcoView = el.dataset.v; renderCostco(); break;
+    case 'pricesheet': priceSheet(id); break;
+    case 'psqty': { const q = $('#ps-qty'); q.textContent = Math.max(1, (+q.textContent || 1) + +el.dataset.d); const i = $('#ps-price'); i.dispatchEvent(new Event('input')); break; }
+    case 'pssave': { const L = S.list[id]; setPrice(id, $('#ps-price').value); if (L) L.qty = +$('#ps-qty').textContent || 1; save(); $('#sheet').hidden = true; sheetFood = null; renderList();
+      const pr = priceOf(id); toast(pr == null ? 'Saved' : `${shortName(getFood(id))}: ${money(pr * ((L && L.qty) || 1))}`); break; }
     case 'listmode': S.listMode = el.dataset.v; save(); renderList(); break;
     case 'listrm': { const n = shortName(getFood(id)); delete S.list[id]; if (S.rneed) delete S.rneed[id]; save(); renderList(); toast(`Removed ${n}`); break; }
     case 'qty': { const L = S.list[id]; if (L) { L.qty = Math.max(1, (L.qty || 1) + +el.dataset.d); save(); renderList(); } break; }
