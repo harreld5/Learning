@@ -687,7 +687,8 @@ const CATALOG_RAW = [
   ['br13','Kirkland Danish','other','1 danish',420,6,48,23,24,1,{sf:11}],
   ['br14','Kirkland Pita Bread','carb','1 pita',160,6,32,1,1,2,{sf:0,meals:'ld'}],
   ['br15','Guerrero 8" Flour Tortillas','carb','1 tortilla',140,4,24,3.5,1,1,{sf:1.5,meals:'bld'}],
-  ['br16','Las Fortunitas or Tortilla Fresca 10" Flour Tortillas','carb','1 tortilla',200,5,33,5,1,1,{sf:2,meals:'ld'}],
+  ['br16','Las Fortunitas 10" Flour Tortillas','carb','1 tortilla',200,5,33,5,1,1,{sf:2,meals:'ld'}],
+  ['br20','Tortilla Fresca Organic Uncooked Flour Tortillas','carb','1 tortilla (50 g)',150,4,23,5,0.5,0.5,{sf:0,meals:'bld',whole:1,barcode:'899450002050'}], // from the label: 240 mg sodium, item 907160
   ['br17','Guerrero 6" Corn Tortillas','carb','2 tortillas',100,2,22,1,0,2,{sf:0,meals:'ld'}],
   ['br18','Siete Almond Flour Tortillas','carb','1 tortilla',100,3,9,6,0,2,{sf:0.5,meals:'bld'}],
   ['br19','Mission Carb Balance Flour Tortillas','carb','1 tortilla',70,5,19,2.5,0,15,{sf:0.5,meals:'bld'}],
@@ -789,7 +790,7 @@ const SAT_FAT = { k1: 0.5, k2: 2, k3: 5, k4: 2.5, k5: 3, k6: 1, k7: 0.5, k8: 0.5
   c5: 0, c6: 0.5, c7: 0, c8: 0, c9: 0, c11: 0, c12: 0.5, v8: 0.5, a1: 1, a2: 1, a3: 3, a4: 2, a5: 5, a7: 1.5,
   a8: 1, a9: 0.5, s1: 0, s2: 4, s3: 1, s4: 1.5, s5: 0 };
 const CATALOG = CATALOG_RAW.map(([id, name, cat, serving, cal, p, c, f, s, fb, o = {}]) =>
-  ({ id, name, cat, serving, cal, p, c, f, s, fb, sf: o.sf ?? SAT_FAT[id] ?? 0, ppl: o.ppl, src: 'costco', meals: o.meals, whole: !!o.whole, alcohol: !!o.alcohol, kids: !!o.kids }));
+  ({ id, name, cat, serving, cal, p, c, f, s, fb, sf: o.sf ?? SAT_FAT[id] ?? 0, ppl: o.ppl, src: 'costco', meals: o.meals, whole: !!o.whole, alcohol: !!o.alcohol, kids: !!o.kids, ...(o.barcode ? { barcode: o.barcode } : {}) }));
 // Everything on your Costco receipts: meal plans lean toward these, and the Costco tab can filter to them.
 const BOUGHT = new Set(['dm15', 'rc1', 'dm6', 'rc2', 'e19', 'pr7', 'rc3', 'bk2', 'dr40', 'rc4', 'rc5', 'rc6', 'e5', 'rc7', 'c11', 'pr16', 'rc14', 'b1', 'pr29', 'rc8', 'f2', 'rc9',
   'pr33', 'a3', 'pt30', 'rc10', 'c8', 'f1', 'pr35', 'rc11', 'rc12', 'cz7', 'rc13', 'sc10',
@@ -869,7 +870,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.4.1 (fiber on Today)';
+const APP_VERSION = '8.4.2 (Tortilla Fresca)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
