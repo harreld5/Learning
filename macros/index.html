@@ -869,7 +869,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.0 (better scanning: USDA lookup + add from photos)';
+const APP_VERSION = '8.1 (scan → Got it? → crossed off)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1184,12 +1184,12 @@ function renderToday() {
 let scan = { active: false, stream: null, reader: null, timer: 0, busy: false };
 function renderScan() {
   $('#view').innerHTML = `<div class="scanbox" id="scanbox"><video id="video" playsinline muted></video><div class="guide" id="guide" hidden></div>
-      <div class="idle" id="scan-idle"><div style="font-size:15px">Point the camera at the barcode on the package.</div>
+      <div class="idle" id="scan-idle"><div style="font-size:15px">Point the camera at the barcode.<br><span style="opacity:.8;font-size:13px">Shopping? Things on your list ask “Got it?” — tap ✓ Yes and they're crossed off and added to your kitchen.</span></div>
       <button class="btn" data-act="startscan">Start camera</button></div></div>
     <div class="row" style="margin:10px 0 14px"><button class="btn ghost sm" data-act="stopscan" id="stopbtn" hidden>Stop camera</button>
       <span class="small muted grow" id="scan-status"></span></div>
     <div class="card" style="padding:10px 14px"><label class="switch" style="border:0;padding:0"><input type="checkbox" id="scantolist" ${S.scanToList ? 'checked' : ''}>
-      <span class="grow"><b>🛒 Shopping mode</b> <span class="small muted">— turn on at the store: scans go on your list and into your kitchen</span></span></label></div>
+      <span class="grow"><b>🛒 At the store</b> <span class="small muted">— also ask “Got it?” for things that aren't on my list</span></span></label></div>
     <div class="card"><h2 style="margin:0 0 8px">Won't scan?</h2>
       <label class="btn alt block" style="text-align:center;display:block;width:100%;box-sizing:border-box">📸 Take a photo of the barcode<input type="file" id="barcodephoto" accept="image/*" capture="environment" hidden></label>
       <div class="small muted" style="margin:4px 0 10px">Best for curved, shiny or small labels like spice jars and cans.</div>
@@ -1320,10 +1320,10 @@ async function lookupBarcode(raw) {
   const code = String(raw || '').replace(/\D/g, '');
   if (code.length < 6) { toast('That barcode looks too short'); return; }
   const saved = S.foods['b' + code] || allFoods().find(f => f.barcode === code);
-  if (saved) { addScanToList(saved.id); return openFood(saved.id, { focusPrice: S.scanToList, fromScan: true }); }
+  if (saved) return scanResult(saved.id);
   const status = msg => sheet(`<div class="sheet-head"><h2>Looking up ${esc(code)}…</h2></div><div class="empty">${msg}</div>`);
   status('Checking Open Food Facts…');
-  const found = f => { S.foods[f.id] = f; save(); addScanToList(f.id); openFood(f.id, { focusPrice: S.scanToList, fromScan: true }); };
+  const found = f => { S.foods[f.id] = f; save(); scanResult(f.id); };
   let partial = null, reached = 0;
   // 1. Open Food Facts (worldwide, crowd-sourced)
   try {
@@ -1539,6 +1539,60 @@ function addScanToList(id) {
   const L = S.list[id];
   if (!(L && L.on)) { S.list[id] = { on: true, got: false, qty: 1 }; save(); toast('Added to your shopping list'); }
 }
+/* ---------- Shopping: scan it → "Got it?" → crossed off and into your kitchen ---------- */
+const MATCH_SKIP = new Set(['kirkland', 'signature', 'organic', 'the', 'and', 'with', 'fresh', 'premium', 'natural', 'original', 'brand', 'canned', 'pack', 'count', 'value', 'family', 'size', 'boneless', 'skinless']);
+const matchWords = t => String(t || '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !MATCH_SKIP.has(w)).map(w => w.replace(/(es|s)$/, ''));
+// Which item on your list is this scan? Same food, a barcode you matched before, or the same key words in the name.
+function listMatch(f) {
+  const sp = spiceNameForFood(f);
+  if (sp) { const x = (S.extra || []).find(x => x.spice === sp && !x.got); return x ? { kind: 'spice', x, sp } : null; }
+  const open = Object.keys(S.list).filter(id => S.list[id].on && !S.list[id].got && getFood(id));
+  if (open.includes(f.id)) return { kind: 'food', id: f.id, exact: true };
+  const mapped = f.barcode && S.barcodeMap && S.barcodeMap[f.barcode];
+  if (mapped && open.includes(mapped)) return { kind: 'food', id: mapped, exact: true };
+  const fw = new Set(matchWords(f.name + ' ' + (f.brand || ''))); let best = null;
+  for (const id of open) { const lw = [...new Set(matchWords(shortName(getFood(id))))]; if (!lw.length) continue;
+    const hit = lw.filter(w => fw.has(w)).length, score = hit / lw.length;
+    if ((score === 1 || (hit >= 2 && score >= 0.6)) && (!best || score > best.score)) best = { kind: 'food', id, score }; }
+  return best;
+}
+function scanResult(id) {
+  const f = getFood(id), m = listMatch(f);
+  if (m) return gotItSheet(f, m);
+  if (S.scanToList && !spiceNameForFood(f)) return gotItSheet(f, { kind: 'food', id, notListed: true });
+  openFood(id, { fromScan: true });
+}
+function gotItSheet(f, m) {
+  if (m.kind === 'spice') {
+    sheet(`<div class="sheet-head"><div class="grow"><div class="small muted">🛒 On your list</div><h2>🧂 ${esc(m.sp)}</h2><div class="small muted">${esc(f.name)}</div></div><button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+      <div style="font-size:20px;font-weight:700;margin:14px 0 10px">Did you get it?</div>
+      <div class="row" style="gap:8px"><button class="btn grow" style="padding:16px;font-size:18px" data-act="gotspice" data-id="${esc(f.id)}">✓ Yes</button><button class="btn alt grow" style="padding:16px;font-size:18px" data-act="close">Not yet</button></div>
+      <button class="btn ghost block sm" style="margin-top:10px" data-act="gotdetails" data-id="${esc(f.id)}">See nutrition</button>`);
+    gotItSheet.m = m; return;
+  }
+  const lf = getFood(m.id), L = S.list[m.id] || {}, pi = packageInfo(lf), need = S.rneed && S.rneed[m.id], st = stockOf(m.id) || 0;
+  const q = L.qty || 1;
+  sheet(`<div class="sheet-head"><div class="grow"><div class="small muted">${m.notListed ? '🛒 Not on your list' : '🛒 On your list'}</div><h2>${esc(shortName(lf))}</h2>
+      ${m.id !== f.id ? `<div class="small muted">Scanned: ${esc(f.name)}</div>` : ''}</div><button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    ${need ? `<div class="small" style="margin-top:6px">You need <b>${esc(stockText(lf, need))}</b>${L.for && L.for.length ? ` for ${esc(shortRecipes(L.for))}` : ''}${st > 0.01 ? ` · you have ${esc(stockText(lf, st))}` : ''}.</div>` : ''}
+    <div style="font-size:20px;font-weight:700;margin:14px 0 8px">Did you get it?</div>
+    <div class="row" style="gap:10px;margin-bottom:6px"><span class="small muted">How many</span>
+      <div class="stepper"><button data-act="gotqty" data-d="-1" aria-label="Fewer">−</button><span id="got-qty" style="min-width:28px;text-align:center;font-weight:700">${q}</span><button data-act="gotqty" data-d="1" aria-label="More">+</button></div>
+      <span class="small muted grow" id="got-unit">${pi.servings ? 'pack' : ''}</span></div>
+    <div class="small" id="got-cover" style="margin-bottom:12px"></div>
+    <div class="row" style="gap:8px"><button class="btn grow" style="padding:16px;font-size:18px" data-act="gotyes">✓ Yes</button><button class="btn alt grow" style="padding:16px;font-size:18px" data-act="close">Not yet</button></div>
+    <div class="row" style="gap:6px;margin-top:10px">${m.exact || m.notListed ? '' : `<button class="btn ghost sm grow" data-act="gotwrong">Not the same thing</button>`}<button class="btn ghost sm grow" data-act="gotdetails">See nutrition</button></div>`);
+  gotItSheet.m = m; gotItSheet.f = f; gotCover();
+}
+// "8 cans — covers the 2 you need ✓" as you change how many you grabbed.
+function gotCover() {
+  const m = gotItSheet.m, el = $('#got-cover'); if (!el || !m || m.kind !== 'food') return;
+  const lf = getFood(m.id), pi = packageInfo(lf), q = +$('#got-qty').textContent || 1, need = S.rneed && S.rneed[m.id], st = stockOf(m.id) || 0;
+  if (!pi.servings) { el.textContent = ''; return; }
+  const u = $('#got-unit'); if (u) u.textContent = q === 1 ? 'pack' : 'packs';
+  const got = pi.servings * q, short = need ? need - st - got : 0;
+  el.innerHTML = `That's <b>${esc(stockText(lf, got))}</b>${need ? (short > 0.05 ? ` — <span style="color:var(--warn)">still short ${esc(stockText(lf, short))}</span>` : ` — <span style="color:var(--ok)">enough for your recipes ✓</span>`) : ''}`;
+}
 function foodForm(f, code, intro = '') {
   f = f || { name: '', brand: '', serving: '', cal: '', p: '', c: '', f: '', sf: '', s: '', fb: '', cat: 'other', fresh: true };
   const n = v => v == null ? '' : v;
@@ -1577,7 +1631,7 @@ function foodForm(f, code, intro = '') {
     const nf = { ...f, id, name: d.name.trim() || 'Food', brand: d.brand.trim(), serving: d.serving.trim() || '1 serving', noServing: false,
       cal: num(d.cal), p: num(d.p), c: num(d.c), f: num(d.f), sf: num(d.sf), s: num(d.s), fb: num(d.fb), cat: d.cat,
       src: f.src === 'search' ? 'scan' : (f.src || (code ? 'scan' : 'custom')), barcode: f.barcode || code || '', catAuto: false };
-    S.foods[id] = nf; save(); toast(code ? 'Saved — next time this barcode pulls it up instantly' : 'Saved'); if (code) addScanToList(id); openFood(id, { focusPrice: !!code && S.scanToList, fromScan: !!code });
+    S.foods[id] = nf; save(); toast(code ? 'Saved — next time this barcode pulls it up instantly' : 'Saved'); if (code) scanResult(id); else openFood(id);
   });
   // existing photos when editing
   if (f.photoFront) photoDB.get(fid + ':front').then(u => { if (u) { const im = $('#ph-front-img'); if (im) { im.src = u; im.style.display = 'block'; } } });
@@ -3484,6 +3538,15 @@ document.addEventListener('click', e => {
     case 'delfood': if (confirm('Delete this saved food?')) { photoDB.del(sheetFood.id + ':front'); photoDB.del(sheetFood.id + ':label'); delete S.foods[sheetFood.id]; delete S.list[sheetFood.id]; save(); closeSheet(); } break;
     case 'cview': costcoView = el.dataset.v; renderCostco(); break;
     case 'pricesheet': priceSheet(id); break;
+    case 'gotqty': { const q = $('#got-qty'); q.textContent = Math.max(1, (+q.textContent || 1) + +el.dataset.d); gotCover(); break; }
+    case 'gotyes': { const m = gotItSheet.m, f = gotItSheet.f, q = +$('#got-qty').textContent || 1, lf = getFood(m.id), pi = packageInfo(lf);
+      S.list[m.id] = { ...(S.list[m.id] || {}), on: true, got: true, qty: q };
+      if (pi.servings) changeStock(m.id, pi.servings * q, true); else { S.have = S.have || {}; S.have[m.id] = true; }
+      if (f.barcode && f.id !== m.id) { S.barcodeMap = S.barcodeMap || {}; S.barcodeMap[f.barcode] = m.id; } // next time this barcode goes straight to it
+      save(); closeSheet(); toast(`✓ ${shortName(lf)} crossed off${pi.servings ? ` · ${stockText(lf, stockOf(m.id))} in your kitchen` : ''}`); break; }
+    case 'gotspice': { const m = gotItSheet.m, e = spiceEntry(m.sp); e.have = true; e.ids = [...new Set([...(e.ids || []), id])]; m.x.got = true; save(); closeSheet(); toast(`✓ ${m.sp} crossed off · in your spice rack`); break; }
+    case 'gotwrong': { const f = gotItSheet.f; openFood(f.id, { fromScan: true }); break; }
+    case 'gotdetails': { const f = gotItSheet.f || getFood(id); openFood(f.id, { fromScan: true }); break; }
     case 'psqty': { const q = $('#ps-qty'); q.textContent = Math.max(1, (+q.textContent || 1) + +el.dataset.d); const i = $('#ps-price'); i.dispatchEvent(new Event('input')); break; }
     case 'pssave': { const L = S.list[id]; setPrice(id, $('#ps-price').value); if (L) L.qty = +$('#ps-qty').textContent || 1; save(); $('#sheet').hidden = true; sheetFood = null; renderList();
       const pr = priceOf(id); toast(pr == null ? 'Saved' : `${shortName(getFood(id))}: ${money(pr * ((L && L.qty) || 1))}`); break; }
