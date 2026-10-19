@@ -858,7 +858,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '7.6.2 (220 g scramble bowls)';
+const APP_VERSION = '7.7 (leftovers you made go in your plan)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1793,6 +1793,9 @@ if (!S.scramble220) { S.scramble220 = true; const r = S.recipes.find(r => r.id =
   if (r) { const fresh = scrambleBowl(false); r.servings = 2; r.notes = fresh.notes; r.steps = fresh.steps; recipeFood(r);
     for (const w of S.week || []) if (w.rid === 'scramble') w.b = Math.max(1, Math.ceil(w.b / 2));
     if (S.plan) S.plan.planner = 0; } }
+if (!S.cooked1019) { S.cooked1019 = true;
+  if (todayKey() <= '2026-10-21') { S.stock = S.stock || {}; S.stock['rcp-chili'] = 5; S.stock['rcp-scramble'] = 2;
+    if (S.plan) S.plan.planner = 0; } } // the plan is rebuilt with the chili leftovers in it
 if (!S.cal1700) { S.cal1700 = true; if (S.targets.cal !== 1700) setCalories(1700); }
 if (!S.chiliOccasion) { const c = S.recipes.find(r => r.id === 'chili'); if (c) c.occasion = true; for (const w of S.week || []) if (w.rid === 'chili') w.inPlan = false; S.chiliOccasion = true; }
 for (const r of SEED_RECIPES().reverse()) if (!S.seeded.includes(r.id)) { if (!S.recipes.some(x => x.id === r.id)) S.recipes.unshift(JSON.parse(JSON.stringify(r))); S.seeded.push(r.id); }
@@ -2051,15 +2054,25 @@ function weekCard() {
       <div class="row" style="gap:6px"><button class="btn sm grow" data-act="rshop" data-id="week">🛒 Check groceries</button><button class="btn sm grow" data-act="wkplan">🗓 Put them in my ${D === 14 ? '2 weeks' : 'week'}</button></div>`
     : `<div class="small muted">Tap <b>➕ Making this week</b> on the recipes you're cooking. Then get one grocery check for all of them, and have them fill your meals for 1 or 2 weeks.</div>`}</div>`;
 }
+// A plan saved by an older planner (or marked for a rebuild) is rebuilt, keeping the same number of days.
+function refreshPlan() {
+  if (!S.plan || S.plan.planner === PLANNER_VERSION || planPool().length < 3) return;
+  const cal = S.plan.planner === 0;
+  if (S.plan.fromRecipes && weekSel().length) buildWeekFromRecipes();
+  else { if (S.plan.prep) { S.planOpts.mode = 'prep'; S.planOpts.prepDays = S.plan.prep; } else { S.planOpts.mode = 'daily'; S.planOpts.days = S.plan.days.length > 1 ? 7 : 1; } generatePlan(); }
+  toast(cal ? 'Your meal plan was updated' : 'Made you a new plan with the improved planner');
+}
 function buildWeekFromRecipes() {
   const left = weekSel().filter(inPlan).map(w => ({ r: recipeById(w.rid), n: recipeById(w.rid).servings * w.b })); // "just groceries" recipes (game-day chili) stay out
+  // ...but their cooked leftovers in the kitchen go in first, before they go bad.
+  for (const r of S.recipes || []) { if (left.some(x => x.r.id === r.id)) continue; const n = Math.floor((stockOf('rcp-' + r.id) || 0) + 0.01); if (n > 0) left.push({ r, n, lo: 1 }); }
   const pool = planPool(), used = {}, prev = {}, days = [];
   for (let d = 0; d < weekDays(); d++) {
     const day = makeDay(pool, used, { prev });
     let last = null;
     day.meals = day.meals.map(m => {
       const isB = m.meal === 'Breakfast'; if (!isB && m.meal !== 'Lunch' && m.meal !== 'Dinner') return m;
-      const c = left.filter(x => x.n > 0 && (x.r.meal === 'Breakfast') === isB).sort((a, b) => ((a.r.id === last) - (b.r.id === last)) || (b.n - a.n))[0];
+      const c = left.filter(x => x.n > 0 && (x.r.meal === 'Breakfast') === isB).sort((a, b) => ((a.r.id === last) - (b.r.id === last)) || ((b.lo || 0) - (a.lo || 0)) || (b.n - a.n))[0];
       if (!c) return m;
       c.n--; last = c.r.id; const food = recipeFood(c.r);
       return { meal: m.meal, key: 'recipe', recipe: c.r.id, title: c.r.name, label: 'Recipe', items: [{ id: food.id, sv: 1, step: 1, min: 1, max: 1, role: 'recipe' }] };
@@ -2074,7 +2087,7 @@ function buildWeekFromRecipes() {
     days.push(day);
   }
   S.plan = { made: Date.now(), start: todayKey(), days, pf: S.planOpts.pf, ver: APP_VERSION, planner: PLANNER_VERSION, style: S.planOpts.style, reserve: snackReserve(),
-    fromRecipes: weekSel().map(w => ({ ...w })), extraServings: left.reduce((a, x) => a + x.n, 0) };
+    fromRecipes: weekSel().map(w => ({ ...w })), extraServings: left.filter(x => !x.lo).reduce((a, x) => a + x.n, 0) };
   planDay = 0; planDayPicked = false; save();
 }
 // Put a recipe's leftover servings into upcoming lunches and dinners (filled-in meals first, then later recipe meals).
@@ -2091,9 +2104,12 @@ function leftoversToPlan(rid) {
 }
 function recipeMade(rid) {
   const r = recipeById(rid), b = recipeBatches, food = recipeFood(r);
+  const ans = prompt(`How many servings did you end up with?${r.servings * b > 1 ? ' (Ate some already, or portioned it differently? Put what you have now.)' : ''}`, r.servings * b);
+  if (ans == null) return;
+  const got = Math.max(0, Math.round(+ans || 0));
   let used = 0; for (const i of r.ingredients) if (i.id && i.sv != null && !i.pantry && changeStock(i.id, -i.sv * b)) used++;
-  changeStock(food.id, r.servings * b, true); save();
-  toast(`${r.servings * b} servings of leftovers added to your kitchen${used ? ` · ${used} ingredient${used === 1 ? '' : 's'} taken out` : ''}`); showRecipeCard(rid);
+  changeStock(food.id, got, true); save();
+  toast(`${got} serving${got === 1 ? '' : 's'} added to your kitchen${used ? ` · ${used} ingredient${used === 1 ? '' : 's'} taken out` : ''}`); showRecipeCard(rid);
 }
 
 /* ---------- Spices & seasonings: what's in your spice rack ---------- */
@@ -2975,13 +2991,8 @@ function restaurantForm() {
 function renderPlan() {
   if (planView === 'recipes') { $('#view').innerHTML = planSwitch() + renderRecipes(); return; }
   if (planView === 'out') { $('#view').innerHTML = planSwitch() + renderEatingOut(); return; }
-  // A plan saved by an older planner gets rebuilt with the current one, keeping the same number of days.
-  const keepShape = () => { if (S.plan.prep) { S.planOpts.mode = 'prep'; S.planOpts.prepDays = S.plan.prep; } else { S.planOpts.mode = 'daily'; S.planOpts.days = S.plan.days.length > 1 ? 7 : 1; } };
-  if (S.plan && S.plan.planner !== PLANNER_VERSION && planPool().length >= 3) {
-    const cal = S.plan.planner === 0;
-    if (S.plan.fromRecipes && weekSel().length) buildWeekFromRecipes(); else { keepShape(); generatePlan(); }
-    toast(cal ? `New plan for ${S.targets.cal} calories a day` : 'Made you a new plan with the improved planner');
-  }
+ const keepShape = () => { if (S.plan.prep) { S.planOpts.mode = 'prep'; S.planOpts.prepDays = S.plan.prep; } else { S.planOpts.mode = 'daily'; S.planOpts.days = S.plan.days.length > 1 ? 7 : 1; } };
+  refreshPlan();
   // The plan follows the calendar: open on today's day, and start the next plan once this one has run out.
   if (S.plan) {
     if (!S.plan.start) { S.plan.start = todayKey(); save(); }
@@ -3373,6 +3384,7 @@ document.addEventListener('change', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'manual-code') lookupBarcode(e.target.value); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && scan.active) stopScan(); });
 
+try { refreshPlan(); } catch (e) { console.error(e); }
 render();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   // When a new version installs, reload once so it shows right away.
