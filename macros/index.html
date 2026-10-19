@@ -870,7 +870,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.5.1 (clean start for new users)';
+const APP_VERSION = '8.6 (paste a whole recipe)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -2208,10 +2208,47 @@ function showRecipeCard(id) {
     ${r.notes ? `<h3 style="margin:14px 0 4px;font-size:15px">Notes</h3><div class="small" style="white-space:pre-wrap">${esc(r.notes)}</div>` : ''}
     <div class="row" style="gap:6px;margin-top:14px"><button class="btn alt sm grow" data-act="redit" data-id="${esc(r.id)}">✏️ Edit</button><button class="btn danger sm" data-act="rdel" data-id="${esc(r.id)}">Delete</button></div>`);
 }
-function editRecipe(id) {
-  const r = id ? recipeById(id) : { name: '', servings: 4, time: '', notes: '', ingredients: [], steps: [] };
+// Paste a whole recipe from a website, a text or a note: split it into name, servings, time, ingredients, steps and notes.
+function parsePastedRecipe(raw) {
+  const lines = String(raw || '').replace(/\r/g, '').split('\n').map(l => l.replace(/\u00a0/g, ' ').trim());
+  const head = (l, re) => re.test(l.replace(/[:#*\-–—\s]+$/, '').replace(/^[#*\s]+/, ''));
+  const ING = /^(ingredients?|what you('|’)ll need|you('|’)ll need|shopping list)$/i, STEP = /^(instructions?|directions?|method|steps|preparation|how to make( it)?|procedure)$/i, NOTE = /^(notes?|tips?|recipe notes|storage|cook('|’)s notes)$/i;
+  const STOP = /^(nutrition|nutrition facts|nutrition information|calories\b|course|cuisine|keyword|author|jump to|print|pin|rate this|share|video)/i;
+  let sec = 'top'; const out = { name: '', servings: 4, time: '', ing: [], steps: [], notes: [] };
+  for (const l of lines) {
+    if (!l) continue;
+    if (head(l, ING)) { sec = 'ing'; continue; } if (head(l, STEP)) { sec = 'step'; continue; } if (head(l, NOTE)) { sec = 'note'; continue; }
+    const sv = l.match(/\b(serves|servings?|yield|yields|makes)\s*:?\s*(\d+)/i); if (sv && l.length < 60) { out.servings = +sv[2]; if (sec === 'top') continue; }
+    const tm = l.match(/\b(total time|ready in|cook time|prep time|time)\s*:?\s*(.+)/i); if (tm && l.length < 60 && sec === 'top') { if (/total|ready/i.test(tm[1]) || !out.time) out.time = tm[2]; continue; }
+    if (STOP.test(l)) { if (sec !== 'top') sec = 'skip'; continue; }
+    if (sec === 'skip') continue;
+    if (sec === 'top') { if (!out.name && l.length < 90) out.name = l.replace(/^[#*\s]+/, ''); continue; }
+    if (sec === 'ing') { if (/:$/.test(l) && l.length < 40) continue; out.ing.push(l.replace(/^\s*([-•*▢☐□✓]|\d+[.)](?=\s))\s*/, '')); }
+    else if (sec === 'step') out.steps.push(l.replace(/^\s*(step\s*\d+\s*[:.)-]?|\d+\s*[.)]|[-•*])\s*/i, ''));
+    else if (sec === 'note') out.notes.push(l);
+  }
+  // No headings? Short lines that start with an amount are ingredients; sentences are steps.
+  if (!out.ing.length && !out.steps.length) {
+    for (const l of lines.filter(Boolean).slice(out.name ? 1 : 0)) {
+      if (/^([-•*]\s*)?(\d|[½⅓⅔¼¾⅛]|a |an |one |two |pinch|dash|salt|pepper)/i.test(l) && l.length < 80 && !/[.!]$/.test(l)) out.ing.push(l.replace(/^[-•*]\s*/, ''));
+      else if (l.length > 25) out.steps.push(l.replace(/^\s*(step\s*\d+\s*[:.)-]?|\d+\s*[.)])\s*/i, ''));
+    }
+  }
+  return { name: out.name, servings: Math.max(1, Math.min(24, out.servings || 4)), time: out.time, notes: out.notes.join('\n'), ingredients: out.ing.map(text => ({ text })), steps: out.steps.filter(x => x.length > 2) };
+}
+function pasteRecipeSheet() {
+  sheet(`<div class="sheet-head"><div class="grow"><h2>📋 Paste a recipe</h2><div class="small muted">From a website, a text, Notes — anywhere</div></div><button class="icon-btn" data-act="rnew" aria-label="Back">‹</button></div>
+    <div class="small" style="margin-bottom:6px">Copy the whole recipe (name, ingredients and steps) and paste it here. The app sorts it into the form for you to check.</div>
+    <textarea id="rpaste" rows="12" style="width:100%" placeholder="Turkey Chili&#10;Serves 6&#10;&#10;Ingredients&#10;1 lb lean ground beef&#10;1 can black beans…&#10;&#10;Instructions&#10;1. Brown the beef…"></textarea>
+    <button class="btn block" style="margin-top:10px" data-act="rpastego">Fill in the recipe</button>`);
+  setTimeout(() => { const t = $('#rpaste'); if (t) t.focus(); }, 120);
+}
+function editRecipe(id, pre) {
+  const r = id ? recipeById(id) : pre || { name: '', servings: 4, time: '', notes: '', ingredients: [], steps: [] };
   const mm = r.manual || {};
-  sheet(`<div class="sheet-head"><div class="grow"><h2>${id ? 'Edit recipe' : 'New recipe'}</h2></div><button class="icon-btn" data-act="close">✕</button></div>
+  sheet(`<div class="sheet-head"><div class="grow"><h2>${id ? 'Edit recipe' : pre ? 'Check the recipe' : 'New recipe'}</h2></div><button class="icon-btn" data-act="close">✕</button></div>
+    ${id ? '' : pre ? `<div class="card" style="margin:0 0 10px;padding:8px 12px;background:var(--soft)"><div class="small">Found <b>${r.ingredients.length} ingredient${r.ingredients.length === 1 ? '' : 's'}</b> and <b>${r.steps.length} step${r.steps.length === 1 ? '' : 's'}</b>. Check the name and servings, fix anything that landed in the wrong box, then Save.</div></div>`
+      : `<button class="btn alt block" style="margin-bottom:10px" data-act="rpaste">📋 Paste a whole recipe instead</button>`}
     <label class="small muted">Name</label><input type="text" id="rname" value="${esc(r.name)}" placeholder="e.g. Turkey chili" style="margin-bottom:8px">
     <div class="row" style="gap:8px"><div class="grow"><label class="small muted">Servings it makes</label><input id="rserv" type="number" inputmode="numeric" min="1" value="${r.servings}"></div>
       <div class="grow"><label class="small muted">Time (optional)</label><input type="text" id="rtime" value="${esc(r.time || '')}" placeholder="45 min"></div></div>
@@ -2228,7 +2265,7 @@ function editRecipe(id) {
 }
 function saveRecipe(id) {
   const name = $('#rname').value.trim(); if (!name) { toast('Give the recipe a name'); return; }
-  const old = id ? recipeById(id) : null, lines = s => s.split('\n').map(x => x.replace(/^\s*([-•*]|\d+[.)])\s*/, '').trim()).filter(Boolean);
+  const old = id ? recipeById(id) : null, lines = s => s.split('\n').map(x => x.replace(/^\s*([-•*▢☐]|\d+[.)](?=\s))\s*/, '').trim()).filter(Boolean); // "1. Brown the beef" loses the 1., "1.5 lb" keeps it
   const r = old || { id: uid() };
   r.name = name; r.meal = $('#rmeal').value || undefined; r.servings = Math.max(1, Math.round(+$('#rserv').value || 1)); r.time = $('#rtime').value.trim(); r.notes = $('#rnotes').value.trim();
   r.ingredients = lines($('#ring').value).map(t => linkLine(t, old && old.ingredients.find(i => i.text === t)));
@@ -3634,6 +3671,9 @@ document.addEventListener('click', e => {
     case 'leftovers2plan': leftoversToPlan(id); break;
     case 'wkplan': if (!weekSel().length) { toast('Pick a recipe first'); break; } buildWeekFromRecipes(); planView = 'plan'; renderPlan(); toast(weekDays() === 14 ? 'Your 2 weeks are built around your recipes' : 'Your week is built around your recipes'); break;
     case 'rnew': editRecipe(null); break;
+    case 'rpaste': pasteRecipeSheet(); break;
+    case 'rpastego': { const t = $('#rpaste').value; if (!t.trim()) { toast('Paste a recipe first'); break; } const r = parsePastedRecipe(t);
+      if (!r.ingredients.length && !r.steps.length) { toast("Couldn't find ingredients or steps — try including the headings"); break; } editRecipe(null, r); break; }
     case 'ropen': showRecipeCard(id); break;
     case 'redit': editRecipe(id); break;
     case 'rsave': saveRecipe(id || null); break;
