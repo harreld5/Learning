@@ -858,7 +858,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '7.6 (1,700 calorie goal)';
+const APP_VERSION = '7.6.1 (scramble bowl weights)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1761,7 +1761,7 @@ const chipotleBowl = (meat) => {
 };
 // Egg scramble bowl: eggs + egg whites + chicken sausage + veggies, with potatoes on days you want the carbs.
 const scrambleBowl = (potato) => ({ id: potato ? 'scramble-potato' : 'scramble', name: potato ? 'Egg Scramble Bowl with Potatoes' : 'Egg Scramble Bowl', servings: 1, meal: 'Breakfast', time: potato ? '20 min (10 min with prepped potatoes)' : '10 min',
-  notes: `One bowl. In grams: ${potato ? '≈ 170 g cooked potatoes (200 g raw) · ' : ''}≈ 230 g scramble (2 eggs + 180 g whites) · 57 g sausage · ≈ 120 g cooked veggies · 64 g salsa.\n${potato ? 'Meal prep: roast a week of potatoes on Sunday (1.4 kg raw = 7 bowls) — then it\'s a 10-minute breakfast.\n' : 'Need carbs today? Make the "with Potatoes" version instead.\n'}Make ahead: cook 4–5 bowls at once (keep the eggs a little soft), refrigerate, and reheat 60–90 seconds.\nOptional: 1 tbsp parmesan adds 20 cal and 1 g saturated fat. Skip cheddar — ¼ cup is about 5.5 g saturated fat.`,
+  notes: `One bowl. In grams: ${potato ? '≈ 170 g cooked potatoes (200 g raw) · ' : ''}≈ 240 g cooked eggs (2 eggs + 180 g whites) · ≈ 85 g cooked veggies (145 g raw: pepper, onion, spinach) · ≈ 50 g cooked sausage · 64 g salsa. Eggs + veggies alone weigh about 300–330 g; with the sausage about 370 g before salsa.\n${potato ? 'Meal prep: roast a week of potatoes on Sunday (1.4 kg raw = 7 bowls) — then it\'s a 10-minute breakfast.\n' : 'Need carbs today? Make the "with Potatoes" version instead.\n'}Make ahead: cook 4–5 bowls at once (keep the eggs a little soft), refrigerate, and reheat 60–90 seconds.\nOptional: 1 tbsp parmesan adds 20 cal and 1 g saturated fat. Skip cheddar — ¼ cup is about 5.5 g saturated fat.`,
   ingredients: [
     ...(potato ? [{ text: '200 g gold or red potatoes, diced 1.5 cm', id: 'pr24', sv: 1.41 }] : []),
     { text: '2 large eggs', id: 'b1', sv: 1 },
@@ -1786,6 +1786,8 @@ S.recipes = S.recipes || []; S.seeded = S.seeded || (S.recipesSeeded ? ['chili']
 // You skip lettuce in the Chipotle bowls: take it out of copies already saved on this phone.
 if (!S.noLettuceBowls) { for (const r of S.recipes) if (/^chipotle-/.test(r.id)) { const fresh = SEED_RECIPES().find(x => x.id === r.id); r.ingredients = r.ingredients.filter(i => !/romaine|lettuce/i.test(i.text)); if (fresh) { r.notes = fresh.notes; r.steps = fresh.steps; } } S.noLettuceBowls = true; }
 // Chili is for Sunday football: groceries only, leftovers can go in the plan afterwards.
+// Fix the scramble bowl weights in saved recipes (the veggies cook down more than the first note said).
+if (!S.scrambleGrams) { S.scrambleGrams = true; for (const r of S.recipes) if (/^scramble/.test(r.id) && r.notes) { const fresh = scrambleBowl(r.id === 'scramble-potato'); r.notes = r.notes.replace(/≈ 230 g scramble[^\n]*?64 g salsa\./, fresh.notes.match(/≈ 240 g cooked eggs[^\n]*?before salsa\./)[0]); } }
 if (!S.cal1700) { S.cal1700 = true; if (S.targets.cal !== 1700) setCalories(1700); }
 if (!S.chiliOccasion) { const c = S.recipes.find(r => r.id === 'chili'); if (c) c.occasion = true; for (const w of S.week || []) if (w.rid === 'chili') w.inPlan = false; S.chiliOccasion = true; }
 for (const r of SEED_RECIPES().reverse()) if (!S.seeded.includes(r.id)) { if (!S.recipes.some(x => x.id === r.id)) S.recipes.unshift(JSON.parse(JSON.stringify(r))); S.seeded.push(r.id); }
