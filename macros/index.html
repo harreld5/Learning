@@ -274,6 +274,7 @@ const CATALOG_RAW = [
   ['m26','Kirkland Choice Seasoned Tri-Tip','protein','4 oz raw',210,22,2,11,1,0,{sf:4.5,ppl:18.15}],
   ['m27','American Wagyu Ground Beef','protein','4 oz raw',290,19,0,23,0,0,{sf:9,ppl:8.32}],
   ['m28','Kirkland Choice Ribeye Steak (boneless)','protein','4 oz raw',280,21,0,21.5,0,0,{sf:8.5,ppl:22.69}],
+  ['rb1','Ribeye, trimmed of visible fat (lean only)','protein','4 oz raw',190,24,0,10,0,0,{sf:4}], // cutting off the fat cap and big fat pockets roughly halves the fat
   ['m29','Kirkland Top Sirloin Cap (Picanha, whole)','protein','4 oz raw',250,21,0,18,0,0,{sf:7,ppl:11.34}],
   ['m30','Kirkland Organic Ground Beef 85/15','protein','4 oz raw',240,21,0,17,0,0,{sf:6.5,ppl:8.18}],
   ['m31','Kirkland Prime Boneless Chuck Short Ribs','protein','4 oz raw',400,16,0,37,0,0,{sf:15,ppl:20.42}],
@@ -727,6 +728,7 @@ const CATALOG_RAW = [
   ['sc8','Bolani Sweet Jalapeño Sauce','other','2 tbsp',40,0,9,0,7,0,{sf:0}],
   ['sc9','Vinegar (distilled or Kirkland organic apple cider)','other','1 tbsp',0,0,0,0,0,0,{sf:0}],
   ['sc10','Kirkland Organic Balsamic Vinegar','other','1 tbsp',15,0,3,0,3,0,{sf:0}],
+  ['dc1','De Cecco Acini di Pepe (pasta)','carb','2 oz dry (56 g)',200,7,41,1,2,2,{sf:0,meals:'ld'}],
   ['sc11',"Mustard (French's organic)",'other','1 tsp',0,0,0,0,0,0,{sf:0}],
   ['sc12','Tapatio Hot Sauce','other','1 tsp',0,0,0,0,0,0,{sf:0}],
   ['sc13','Mt Olive Kosher Dill Pickles','other','1 spear',5,0,1,0,0,0,{sf:0}],
@@ -870,7 +872,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.7 (change any meal, today at the top)';
+const APP_VERSION = '8.7.1 (ribeye bites & acini di pepe)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -2115,6 +2117,15 @@ const MORE_RECIPES = [
       I_('½ cup onion, diced', 'pr15', 1), I_('4 tbsp salsa', 'sc7', 2), P_('Cooking spray, smoked paprika, garlic powder, salt, pepper, hot sauce')],
     steps: ['Microwave the diced potatoes covered with a splash of water 4 min, then crisp in a nonstick pan with spray, paprika, salt and pepper, 8 min.', 'Season the steak and sear 3–4 min per side; rest and dice.',
       'Add the peppers and onion to the potatoes for 4 min, then the steak to warm through.', 'Make 4 wells and crack in the eggs; cover and cook 3–4 min until the whites set.', 'Split onto 2 plates and top with salsa and hot sauce.'] },
+  { id: 'ribeye-acini', name: 'Garlic Ribeye Bites, Caramelized Onions & Balsamic over Acini di Pepe', servings: 1, time: '35 min',
+    notes: 'One plate: ≈ 128 g cooked steak bites (170 g raw, trimmed) · 40 g dry acini di pepe (≈ 100 g cooked) · 1 caramelized onion · spinach · balsamic reduction.\nTrim the fat cap and big fat pockets before cutting the bites — that\'s what keeps a ribeye under your saturated-fat limit. Skip butter in the pan: 1 tbsp adds about 100 cal and 7 g saturated fat.\nStore-bought balsamic glaze works too, but it\'s sweeter: about 40 cal a tablespoon.',
+    ingredients: [I_('170 g (6 oz) ribeye, fat trimmed, cut in 2–3 cm bites', 'rb1', 1.5), I_('40 g (scant ¼ cup) dry acini di pepe', 'dc1', 0.71), I_('1 medium onion (110 g), thinly sliced', 'pr15', 1.4),
+      I_('1 tsp olive oil', 'a4', 0.33), I_('2 tbsp balsamic vinegar (reduces to about 1 tbsp)', 'sc10', 2), I_('3 cloves garlic, minced', 'pr22', 3), I_('2 cups baby spinach (for fiber)', 'v3', 0.67),
+      P_('Cooking spray, salt, black pepper, red pepper flakes, chopped parsley')],
+    steps: ['Caramelize the onion: 1 tsp olive oil and a pinch of salt over medium-low, 20–25 min, stirring now and then. Add a splash of water if it starts to stick.',
+      'Boil the acini di pepe in salted water 9 min; drain.', 'Balsamic reduction: simmer 2 tbsp balsamic in a small pan 3–4 min until syrupy and reduced by about half. It thickens more as it cools.',
+      'Pat the steak bites dry; season with salt and pepper. Sear in a very hot pan with cooking spray, 1½–2 min per side. Add the garlic for the last 30 seconds.',
+      'Wilt the spinach in the same pan, then toss in the pasta and onions.', 'Plate the pasta, top with the steak bites, and drizzle the balsamic reduction over everything.'] },
   { id: 'beef-potato-stew', name: 'Lean Beef & Potato Stew', servings: 6, time: '2 hr (mostly hands-off)',
     notes: 'About 400 g per bowl. Made with eye round, so it\'s very lean — about 54 g protein and 2.5 g saturated fat a bowl.\nKeeps 4 days in the fridge; freezes well for 3 months.',
     ingredients: [I_('1.1 kg (2.4 lb) eye round roast, cut in 3 cm cubes', 'm22', 9.7), I_('900 g (2 lb) gold potatoes, quartered', 'pr24', 6.34), I_('2 onions, chopped', 'pr15', 4), I_('3 cups mushrooms, halved', 'pr10', 3),
