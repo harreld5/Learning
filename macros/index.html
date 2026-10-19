@@ -870,7 +870,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.4.2 (Tortilla Fresca)';
+const APP_VERSION = '8.5 (black beans + fruit & nut snacks)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1130,6 +1130,30 @@ function unlogPlannedMeal(di, mi) {
   for (const e of entries(k)) if (e.tag === tag && e.stock) changeStock(e.foodId, e.sv);
   S.log[k] = entries(k).filter(e => e.tag !== tag); save();
 }
+// Fruit & nut snacks: nuts by the half-ounce so the fat stays in check; fruit with skin or seeds for the fiber.
+const SNACK_IDEAS = [
+  ['Raspberries + almonds', [['pr27', 1], ['a2', 0.5]]], ['Greek yogurt + berries + walnuts', [['b3', 1], ['f5', 1], ['a7', 0.5]]],
+  ['Apple + almonds', [['pr35', 1], ['a2', 0.5]]], ['Greek yogurt + raspberries + chia', [['b3', 1], ['pr27', 1], ['a8', 0.5]]],
+  ['Apple pear + pistachios', [['pr34', 1], ['nt2', 0.5]]], ['Orange + pistachios', [['pr38', 1], ['nt2', 0.5]]],
+  ['Blackberries + Greek yogurt', [['pr28', 1], ['b3', 1]]], ['Strawberries + peanuts', [['f2', 1], ['nt3', 0.5]]],
+  ['Kiwi + cashews', [['pr31', 2], ['nt1', 0.5]]], ['Cherries + almonds', [['rc34', 1], ['a2', 0.5]]],
+];
+function snackIdeasCard() {
+  const t = totals(entries(todayKey())), T = S.targets;
+  // room left after the rest of today's planned meals
+  const di = planTodayIndex(), logged = entries(todayKey());
+  const planned = di >= 0 ? S.plan.days[di].meals.filter((m, mi) => !logged.some(e => e.tag === mealTag(di, mi))).flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))) : [];
+  const pt = totals(planned), room = { cal: T.cal - t.cal - pt.cal, f: T.f - t.f - pt.f, c: T.c - t.c - pt.c };
+  if (room.cal < 100) return '';
+  const ideas = SNACK_IDEAS.map(([name, parts], i) => { const items = parts.filter(([id]) => getFood(id)).map(([id, sv]) => ({ ...getFood(id), sv })); return { i, name, parts, tt: totals(items), items }; })
+    .filter(x => x.items.length === x.parts.length && x.tt.cal <= room.cal + 25 && x.tt.f <= Math.max(room.f, 0) + 6 && x.tt.c <= Math.max(room.c, 0) + 10) // a little give: planned portions aren't exact
+    .sort((a, b) => (b.tt.fb + b.tt.p) / b.tt.cal - (a.tt.fb + a.tt.p) / a.tt.cal).slice(0, 4);
+  if (!ideas.length) return '';
+  return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🍎 Fruit & nut snacks</h2><span class="small muted">about ${Math.round(room.cal)} cal of room</span></div>
+    ${ideas.map(x => `<div class="item"><div class="grow"><div class="name">${esc(x.name)}</div><div class="meta">${x.items.map(f => `${esc(amountText(f, f.sv))} ${esc(shortName(f).toLowerCase())}`).join(' + ')}</div>
+      <div class="small">${Math.round(x.tt.cal)} cal · <span style="color:var(--p)">${Math.round(x.tt.p)} g protein</span> · <b style="color:var(--ok)">${r1(x.tt.fb)} g fiber</b></div></div>
+      <button class="btn alt sm" data-act="snacklog" data-i="${x.i}">Ate it</button></div>`).join('')}</div>`;
+}
 function todaysMealsCard() {
   const di = planTodayIndex(); if (di < 0) return `<div class="card tap" data-act="tab" data-t="plan" style="background:var(--soft)"><b>🍽 No meal plan for today</b><div class="small muted">Tap to make one in Meals.</div></div>`;
   const day = S.plan.days[di], logged = new Set(entries(todayKey()).map(e => e.tag).filter(Boolean));
@@ -1171,6 +1195,7 @@ function renderToday() {
       <span style="color:${t.fb >= fiberTarget() ? 'var(--ok)' : 'var(--muted)'}">Fiber ${Math.round(t.fb || 0)} / ${fiberTarget()} g${t.fb >= fiberTarget() ? ' ✓' : ''}</span></div></div>
     ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
     ${isToday ? todaysMealsCard() : ''}
+    ${isToday ? snackIdeasCard() : ''}
     <div class="row" style="margin-bottom:12px;gap:6px"><button class="btn alt grow" data-act="find">🔎 Ate something else?</button><button class="btn alt grow" data-act="eatout">🍔 Eating out</button></div>
     ${isToday ? `<button class="btn alt block" style="margin:-4px 0 12px" data-act="cookkitchen">🍳 Cook with what I have</button>` : ''}
     ${list.length ? `<h3 style="margin:4px 4px 8px;font-size:15px">What you've logged</h3>` : ''}`;
@@ -1973,7 +1998,7 @@ const chipotleBowl = (meat) => {
 };
 // Egg scramble bowl: eggs + egg whites + chicken sausage + veggies, with potatoes on days you want the carbs.
 const scrambleBowl = (potato) => ({ id: potato ? 'scramble-potato' : 'scramble', name: potato ? 'Egg Scramble Bowl with Potatoes' : 'Egg Scramble Bowl', servings: potato ? 1 : 2, meal: 'Breakfast', time: potato ? '20 min (10 min with prepped potatoes)' : '10 min',
-  notes: `${potato ? '' : 'Makes 2 bowls of about 220 g. Weigh the whole pan when it\'s cooked and split it in half — eat one, fridge the other for tomorrow.\n'}${potato ? 'One bowl' : 'The whole pan'}. In grams: ${potato ? '≈ 170 g cooked potatoes (200 g raw) · ' : ''}≈ 240 g cooked eggs (2 eggs + 180 g whites) · ≈ 85 g cooked veggies (145 g raw: pepper, onion, spinach) · ≈ 50 g cooked sausage · 64 g salsa. Eggs + veggies alone weigh about 300–330 g; with the sausage about 370 g before salsa.\n${potato ? 'Meal prep: roast a week of potatoes on Sunday (1.4 kg raw = 7 bowls) — then it\'s a 10-minute breakfast.\n' : 'Need carbs today? Make the "with Potatoes" version instead.\n'}Make ahead: cook 4–5 bowls at once (keep the eggs a little soft), refrigerate, and reheat 60–90 seconds.\nOptional: 1 tbsp parmesan adds 20 cal and 1 g saturated fat. Skip cheddar — ¼ cup is about 5.5 g saturated fat.`,
+  notes: `${potato ? '' : 'Makes 2 bowls of about 250 g (with ¼ cup black beans each for fiber). Weigh the whole pan when it\'s cooked and split it in half — eat one, fridge the other for tomorrow.\n'}${potato ? 'One bowl' : 'The whole pan'}. In grams: ${potato ? '≈ 170 g cooked potatoes (200 g raw) · ' : ''}≈ 240 g cooked eggs (2 eggs + 180 g whites) · ≈ 85 g cooked veggies (145 g raw: pepper, onion, spinach) · ≈ 50 g cooked sausage · 64 g salsa. Eggs + veggies alone weigh about 300–330 g; with the sausage about 370 g before salsa.\n${potato ? 'Meal prep: roast a week of potatoes on Sunday (1.4 kg raw = 7 bowls) — then it\'s a 10-minute breakfast.\n' : 'Need carbs today? Make the "with Potatoes" version instead.\n'}Make ahead: cook 4–5 bowls at once (keep the eggs a little soft), refrigerate, and reheat 60–90 seconds.\nOptional: 1 tbsp parmesan adds 20 cal and 1 g saturated fat. Skip cheddar — ¼ cup is about 5.5 g saturated fat.`,
   ingredients: [
     ...(potato ? [{ text: '200 g gold or red potatoes, diced 1.5 cm', id: 'pr24', sv: 1.41 }] : []),
     { text: '2 large eggs', id: 'b1', sv: 1 },
@@ -1982,40 +2007,41 @@ const scrambleBowl = (potato) => ({ id: potato ? 'scramble-potato' : 'scramble',
     { text: '75 g bell pepper, diced', id: 'pr6', sv: 0.82 },
     { text: '40 g onion, diced', id: 'pr15', sv: 0.5 },
     { text: '30 g (1 cup) baby spinach', id: 'v3', sv: 0.33 },
+    ...(potato ? [] : [{ text: '½ cup black beans, rinsed (¼ cup a bowl — natural fiber)', id: 'c11', sv: 1 }]),
     { text: '4 tbsp salsa', id: 'sc7', sv: 2 },
     { text: 'Cooking spray, salt, black pepper, garlic powder', id: null, sv: null, pantry: true },
   ],
   steps: [
     ...(potato ? ['Potatoes: microwave the diced potatoes in a covered bowl with a splash of water 3–4 min until just tender, then crisp them in a nonstick pan with cooking spray, salt and pepper, 6–8 min. (Or warm up potatoes you roasted on prep day.) Move to your bowl.'] : []),
     'Brown the sliced sausage in the nonstick pan over medium-high, 3–4 min. Set aside with the potatoes.',
-    'Add the pepper and onion with a little spray; cook 4–5 min until soft. Toss in the spinach for 30 seconds.',
+    potato ? 'Add the pepper and onion with a little spray; cook 4–5 min until soft. Toss in the spinach for 30 seconds.' : 'Add the pepper and onion with a little spray; cook 4–5 min until soft. Stir in the black beans to warm, then toss in the spinach for 30 seconds.',
     'Whisk the eggs and egg whites with a pinch of salt, pepper and garlic powder. Turn the heat to medium-low, pour them in and gently push them around until just set, 2–3 min.',
-    potato ? 'Pile the scramble and sausage into the bowl and top with salsa (and hot sauce if you like).' : 'Weigh it all and split into 2 bowls (about 220 g each). Top each with 2 tbsp salsa. Fridge the second bowl and reheat 60–90 seconds tomorrow.',
+    potato ? 'Pile the scramble and sausage into the bowl and top with salsa (and hot sauce if you like).' : 'Weigh it all and split into 2 bowls (about 250 g each). Top each with 2 tbsp salsa. Fridge the second bowl and reheat 60–90 seconds tomorrow.',
   ] });
 // More meal-prep recipes in the same style: red meat or chicken, rice or potatoes, lots of vegetables, a sauce or salsa. No corn, edamame or lettuce.
 const P_ = t => ({ text: t, id: null, sv: null, pantry: true }), I_ = (text, id, sv) => ({ text, id, sv });
 const MORE_RECIPES = [
   { id: 'teriyaki-chicken', name: 'Teriyaki Chicken Rice Bowls', servings: 4, time: '35 min',
-    notes: 'Each bowl (cooked): ≈ 170 g chicken (225 g raw) · 105 g jasmine rice · 1 cup broccoli · ½ cup peppers · 1¼ tbsp teriyaki.\nMeal prep: keeps 4 days. Add a squeeze of sriracha or Tapatío when you reheat.',
-    ingredients: [I_('900 g (2 lb) boneless skinless chicken thighs', 'ch1', 7.94), I_('140 g (⅔ cup) dry jasmine rice', 'c2', 3.11), I_('4 cups broccoli florets', 'v1', 4),
+    notes: 'Each bowl (cooked): ≈ 170 g chicken (225 g raw) · 75 g jasmine rice · ¼ cup black beans · 1 cup broccoli · ½ cup peppers · 1¼ tbsp teriyaki.\nMeal prep: keeps 4 days. Add a squeeze of sriracha or Tapatío when you reheat.',
+    ingredients: [I_('900 g (2 lb) boneless skinless chicken thighs', 'ch1', 7.94), I_('100 g (½ cup) dry jasmine rice', 'c2', 2.22), I_('½ can (15 oz) black beans, drained and rinsed', 'c11', 1.75), I_('4 cups broccoli florets', 'v1', 4),
       I_('300 g (2) bell peppers, sliced', 'pr6', 3.26), I_('5 tbsp teriyaki sauce (Kinder\'s)', 'sc2', 5), I_('3 cloves garlic, minced', 'pr22', 3), P_('Cooking spray, black pepper, garlic powder, red pepper flakes (optional)')],
-    steps: ['Start the rice: rinse 140 g jasmine rice and cook with 1 cup + 2 tbsp water (rice cooker, or simmer covered 15 min, rest 10).', 'Cut the chicken into bite-size pieces; season with pepper and garlic powder.',
+    steps: ['Start the rice: rinse 100 g jasmine rice and cook with ¾ cup + 1 tbsp water. Warm the black beans with a pinch of salt and garlic powder (rice cooker, or simmer covered 15 min, rest 10).', 'Cut the chicken into bite-size pieces; season with pepper and garlic powder.',
       'Sear the chicken in a hot nonstick pan with spray, in 2 batches, 6–7 min until browned and 165°F. Set aside.', 'Same pan: stir-fry the broccoli and peppers with the garlic and 2 tbsp water, 4–5 min until crisp-tender.',
-      'Return the chicken, add the teriyaki, and toss 1 min until glossy.', 'Divide the rice into 4 containers (≈105 g each) and top with chicken and vegetables.'] },
+      'Return the chicken, add the teriyaki, and toss 1 min until glossy.', 'Divide the rice and beans into 4 containers (≈75 g rice each) and top with chicken and vegetables.'] },
   { id: 'steak-fajita', name: 'Steak Fajita Bowls', servings: 4, time: '30 min + 30 min marinating',
-    notes: 'Each bowl (cooked): ≈ 128 g steak (170 g raw) · 105 g rice · 1 cup fajita peppers & onions · 4 tbsp salsa · 2 tbsp Greek yogurt.\nMeal prep: keeps 4 days. Keep the salsa and yogurt on the side.',
-    ingredients: [I_('680 g (1.5 lb) top sirloin steak', 'm34', 6), I_('140 g (⅔ cup) dry jasmine rice', 'c2', 3.11), I_('400 g (3) bell peppers, sliced in strips', 'pr6', 4.35), I_('300 g (2) onions, sliced', 'pr15', 3.75),
+    notes: 'Each bowl (cooked): ≈ 128 g steak (170 g raw) · 75 g rice · ¼ cup black beans · 1 cup fajita peppers & onions · 4 tbsp salsa · 2 tbsp Greek yogurt.\nMeal prep: keeps 4 days. Keep the salsa and yogurt on the side.',
+    ingredients: [I_('680 g (1.5 lb) top sirloin steak', 'm34', 6), I_('100 g (½ cup) dry jasmine rice', 'c2', 2.22), I_('½ can (15 oz) black beans, drained and rinsed', 'c11', 1.75), I_('400 g (3) bell peppers, sliced in strips', 'pr6', 4.35), I_('300 g (2) onions, sliced', 'pr15', 3.75),
       I_('1 tbsp olive oil', 'a4', 1), I_('2 limes', 'rc35', 2), I_('1 cup salsa (Tatemada or any fresh salsa)', 'sc7', 8), I_('120 g nonfat Greek yogurt (as sour cream)', 'b3', 0.71),
       P_('2 tsp chili powder, 1 tsp cumin, 1 tsp garlic powder, ½ tsp smoked paprika, salt, pepper')],
-    steps: ['Mix the spices with the juice of 1 lime and half the oil; rub on the steak and rest 30 min (or overnight).', 'Cook the rice with 1 cup + 2 tbsp water; squeeze in the second lime when it\'s done.',
+    steps: ['Mix the spices with the juice of 1 lime and half the oil; rub on the steak and rest 30 min (or overnight).', 'Cook 100 g rice with ¾ cup + 1 tbsp water; squeeze in the second lime and stir in the black beans when it\'s done.',
       'Sear the steak in a very hot pan 4–5 min per side to 130–135°F for medium-rare. Rest 10 min, then slice thin against the grain.', 'Same pan with the rest of the oil: cook the peppers and onions on high 6–8 min until charred at the edges. Season with salt.',
-      'Divide into 4 containers: rice, fajita veggies, steak. Salsa and a spoon of yogurt on the side.'] },
+      'Divide into 4 containers: rice & beans, fajita veggies, steak. Salsa and a spoon of yogurt on the side.'] },
   { id: 'beef-broccoli', name: 'Garlic Beef & Broccoli', servings: 4, time: '30 min',
-    notes: 'Each bowl (cooked): ≈ 128 g flank steak (170 g raw) · 105 g rice · 1¼ cups broccoli · sauce.\nCut the flank steak thin across the grain while it\'s half-frozen — it slices much easier.',
-    ingredients: [I_('680 g (1.5 lb) flank steak, sliced thin', 'm2', 6), I_('140 g (⅔ cup) dry jasmine rice', 'c2', 3.11), I_('5 cups broccoli florets', 'v1', 5), I_('4 cloves garlic, minced', 'pr22', 4),
+    notes: 'Each bowl (cooked): ≈ 128 g flank steak (170 g raw) · 75 g rice · ¼ cup black beans · 1¼ cups broccoli · sauce.\nCut the flank steak thin across the grain while it\'s half-frozen — it slices much easier.',
+    ingredients: [I_('680 g (1.5 lb) flank steak, sliced thin', 'm2', 6), I_('100 g (½ cup) dry jasmine rice', 'c2', 2.22), I_('½ can (15 oz) black beans, drained and rinsed', 'c11', 1.75), I_('5 cups broccoli florets', 'v1', 5), I_('4 cloves garlic, minced', 'pr22', 4),
       I_('4 tbsp Mr. Yoshida\'s (or teriyaki) sauce', 'sc3', 4), I_('1 cup bone broth', 'rc8', 1), P_('1 tbsp cornstarch, black pepper, ½ tsp ground ginger, red pepper flakes')],
-    steps: ['Cook the rice with 1 cup + 2 tbsp water.', 'Whisk the broth, Yoshida\'s, cornstarch, ginger and garlic.', 'Steam the broccoli in the pan with ¼ cup water, covered, 3 min; set aside.',
-      'Sear the beef in a very hot pan with spray in 2 batches, 1–2 min per side. Don\'t crowd it.', 'Pour in the sauce and bring to a simmer until it thickens, 1–2 min. Add the broccoli and toss.', 'Divide over the rice in 4 containers.'] },
+    steps: ['Cook 100 g rice with ¾ cup + 1 tbsp water; warm the black beans.', 'Whisk the broth, Yoshida\'s, cornstarch, ginger and garlic.', 'Steam the broccoli in the pan with ¼ cup water, covered, 3 min; set aside.',
+      'Sear the beef in a very hot pan with spray in 2 batches, 1–2 min per side. Don\'t crowd it.', 'Pour in the sauce and bring to a simmer until it thickens, 1–2 min. Add the broccoli and toss.', 'Divide over the rice and beans in 4 containers.'] },
   { id: 'chicken-potato-pan', name: 'Lemon-Garlic Chicken & Potato Sheet Pan', servings: 4, time: '45 min',
     notes: 'Each serving (cooked): ≈ 170 g chicken (225 g raw) · 180 g roasted potatoes · 1 cup green beans. Serve with salsa or hot sauce.\nMeal prep: keeps 4 days. The potatoes reheat best in an air fryer, 4 min at 400°F.',
     ingredients: [I_('900 g (2 lb) boneless skinless chicken breasts', 'ch9', 7.94), I_('900 g (2 lb) gold or red potatoes, cut in 2–3 cm chunks', 'pr24', 6.34), I_('4 cups green beans, trimmed', 'v4', 4),
@@ -2029,13 +2055,13 @@ const MORE_RECIPES = [
     steps: ['Heat the oven to 400°F. Boil the pasta 2 min less than the package says; drain.', 'Brown the chicken with spray, salt, pepper and Italian seasoning, 6–7 min. Add the mushrooms and garlic for 3 min, then wilt in the spinach.',
       'Stir in the marinara and pasta; pour into a baking dish and top with the mozzarella.', 'Bake 12–15 min until bubbly. Divide into 4 containers.'] },
   { id: 'greek-chicken', name: 'Greek Chicken Rice Bowls', servings: 4, time: '35 min + 30 min marinating',
-    notes: 'Each bowl (cooked): ≈ 170 g chicken (225 g raw) · 105 g rice · ½ cup tomatoes · red onion · ⅓ cup yogurt-garlic sauce · 1 tbsp feta.\nNo hummus or chickpeas — the yogurt sauce does the job.',
-    ingredients: [I_('900 g (2 lb) boneless skinless chicken thighs', 'ch1', 7.94), I_('140 g (⅔ cup) dry jasmine rice', 'c2', 3.11), I_('2 cups tomatoes, chopped', 'pr4', 2), I_('½ red onion, thinly sliced', 'pr15', 1),
+    notes: 'Each bowl (cooked): ≈ 170 g chicken (225 g raw) · 75 g rice · ½ cup black beans · ½ cup tomatoes · red onion · ⅓ cup yogurt-garlic sauce · 1 tbsp feta.\nNo hummus or chickpeas — the yogurt sauce does the job.',
+    ingredients: [I_('900 g (2 lb) boneless skinless chicken thighs', 'ch1', 7.94), I_('100 g (½ cup) dry jasmine rice', 'c2', 2.22), I_('1 can (15 oz) black beans, drained and rinsed', 'c11', 3.5), I_('2 cups tomatoes, chopped', 'pr4', 2), I_('½ red onion, thinly sliced', 'pr15', 1),
       I_('340 g (1½ cups) nonfat Greek yogurt', 'b3', 2), I_('2 cloves garlic, grated', 'pr22', 2), I_('1 lemon', 'pr23', 1), I_('56 g (2 oz) crumbled feta', 'cz5', 2),
       P_('2 tsp dried oregano, 1 tsp garlic powder, ½ tsp smoked paprika, dried dill (optional), salt, pepper')],
-    steps: ['Mix half the lemon juice, oregano, garlic powder, paprika, salt and pepper; coat the chicken and marinate 30 min.', 'Cook the rice with 1 cup + 2 tbsp water.',
+    steps: ['Mix half the lemon juice, oregano, garlic powder, paprika, salt and pepper; coat the chicken and marinate 30 min.', 'Cook 100 g rice with ¾ cup + 1 tbsp water; warm the black beans with oregano and a squeeze of lemon.',
       'Sauce: stir the yogurt with the grated garlic, the rest of the lemon juice, a pinch of salt and dill.', 'Grill or pan-sear the chicken 5–6 min per side to 165°F; rest 5 min and slice.',
-      'Bowls: rice, chicken, tomatoes, red onion, a big spoon of yogurt sauce and a sprinkle of feta.'] },
+      'Bowls: rice and beans, chicken, tomatoes, red onion, a big spoon of yogurt sauce and a sprinkle of feta.'] },
   { id: 'steak-eggs-hash', name: 'Steak & Eggs Breakfast Hash', servings: 2, meal: 'Breakfast', time: '25 min',
     notes: 'Each plate: ≈ 85 g steak (113 g raw) · 2 eggs · 120 g crispy potatoes · peppers & onions · 2 tbsp salsa.\nGreat with leftover steak from the fajita bowls — skip step 2.',
     ingredients: [I_('225 g (½ lb) top sirloin steak', 'm34', 1.98), I_('4 large eggs', 'b1', 2), I_('300 g gold potatoes, diced 1.5 cm', 'pr24', 2.11), I_('1 cup bell pepper, diced', 'pr6', 1),
@@ -2071,6 +2097,10 @@ if (!S.onlyMade1020) { S.onlyMade1020 = true;
   const before = (S.week || []).length;
   S.week = (S.week || []).filter(w => !(/^chipotle-/.test(w.rid) && stockOf('rcp-' + w.rid) == null));
   if (S.week.length !== before && S.plan) S.plan.planner = 0; }
+if (!S.beans1021) { S.beans1021 = true;
+  for (const fresh of [scrambleBowl(false), ...MORE_RECIPES.filter(r => ['teriyaki-chicken', 'steak-fajita', 'beef-broccoli', 'greek-chicken'].includes(r.id))]) {
+    const r = (S.recipes || []).find(x => x.id === fresh.id); if (!r) continue;
+    r.ingredients = JSON.parse(JSON.stringify(fresh.ingredients)); r.notes = fresh.notes; r.steps = fresh.steps.slice(); recipeFood(r); } }
 if (!S.cal1700) { S.cal1700 = true; if (S.targets.cal !== 1700) setCalories(1700); }
 if (!S.chiliOccasion) { const c = S.recipes.find(r => r.id === 'chili'); if (c) c.occasion = true; for (const w of S.week || []) if (w.rid === 'chili') w.inPlan = false; S.chiliOccasion = true; }
 for (const r of SEED_RECIPES().reverse()) if (!S.seeded.includes(r.id)) { if (!S.recipes.some(x => x.id === r.id)) S.recipes.unshift(JSON.parse(JSON.stringify(r))); S.seeded.push(r.id); }
@@ -3662,6 +3692,7 @@ document.addEventListener('click', e => {
     case 'cview': costcoView = el.dataset.v; renderCostco(); break;
     case 'pricesheet': priceSheet(id); break;
     case 'cookkitchen': cookFromKitchen(); break;
+    case 'snacklog': { const [name, parts] = SNACK_IDEAS[+el.dataset.i]; for (const [fid, sv] of parts) logFood(getFood(fid), sv, 'Snacks', todayKey()); save(); renderToday(); toast(`${name} logged ✓`); break; }
     case 'kmeal': cookFromKitchen(el.dataset.v); break;
     case 'kidea': showKitchenIdea(+el.dataset.i); break;
     case 'kback': cookFromKitchen(cookFromKitchen.meal); break;
