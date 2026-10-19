@@ -870,7 +870,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.5 (black beans + fruit & nut snacks)';
+const APP_VERSION = '8.5.1 (clean start for new users)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -880,7 +880,7 @@ function defaults() {
     rules: { cal: { on: true, v: 400 }, c: { on: true, v: 40 }, f: { on: true, v: 13 }, sf: { on: true, v: 4.5 }, s: { on: true, v: 10 }, p: { on: false, v: 10 }, net: false },
     foods: {}, list: {}, log: {}, plan: null, prices: {}, pkg: {}, units: 'mixed',
     planOpts: { days: 1, onlyList: false, snacks: 1, pf: true, mode: 'daily', prepDays: 5, style: 'variety' }, stock: {}, recipes: [], extra: [],
-    avoid: ['chickpea', 'garbanzo', 'hummus', 'falafel', 'edamame', 'corn on the cob', 'sweet corn', 'kernel corn'], excluded: {},
+    avoid: [], excluded: {},
     calc: { sex: 'm', age: 35, lb: 180, ft: 5, inch: 10, act: 1.375, goal: 'lose', tg: false, pf: true },
   };
 }
@@ -892,7 +892,10 @@ function load() {
       return { ...base, ...d, rules: { ...base.rules, ...d.rules }, planOpts: { ...base.planOpts, ...d.planOpts }, calc: { ...base.calc, ...d.calc } };
     }
   } catch (e) {}
-  return defaults();
+  // A brand-new phone: start clean. The one-time fixes made for the first user's saved data (their calorie goal,
+  // their leftovers, their avoid list, recipe edits) are marked done so they never touch someone else's setup.
+  return { ...defaults(), fresh: true, noCornEdamame: true, catFix2: true, noLettuceBowls: true, scrambleGrams: true, scramble220: true,
+    cooked1019: true, onlyMade1020: true, beans1021: true, cal1700: true, chiliOccasion: true };
 }
 let S = load();
 if (!S.unitsChosen && S.units === 'g') S.units = 'mixed'; // ounces for meat, grams for the rest unless picked otherwise
