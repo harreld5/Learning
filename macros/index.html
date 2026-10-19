@@ -872,7 +872,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.7.1 (ribeye bites & acini di pepe)';
+const APP_VERSION = '8.7.2 (macros on top, meals below)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1241,10 +1241,10 @@ function renderToday() {
   if (!S.targetsSet) h += `<div class="card" style="background:var(--soft)"><b>Set your goals first.</b>
     <div class="small muted">Your daily macros decide what counts as Approved.</div>
     <button class="btn sm" style="margin-top:8px" data-act="tab" data-t="settings">Set goals</button></div>`;
-  if (isToday) h += todaysMealsCard();
   h += `<div class="card">${macroSummary(t, T)}
     <div class="row small" style="margin-top:8px;gap:12px"><span style="color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</span>
       <span style="color:${t.fb >= fiberTarget() ? 'var(--ok)' : 'var(--muted)'}">Fiber ${Math.round(t.fb || 0)} / ${fiberTarget()} g${t.fb >= fiberTarget() ? ' ✓' : ''}</span></div></div>
+    ${isToday ? todaysMealsCard() : ''}
     ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
     ${isToday ? snackIdeasCard() : `<div class="row" style="margin-bottom:12px;gap:6px"><button class="btn alt grow" data-act="find">🔎 Ate something else?</button><button class="btn alt grow" data-act="eatout">🍔 Eating out</button></div>`}
     ${list.length && !isToday ? `<h3 style="margin:4px 4px 8px;font-size:15px">What you logged</h3>` : ''}`;
