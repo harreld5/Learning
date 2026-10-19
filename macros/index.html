@@ -869,7 +869,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.3 (plan uses what you actually made)';
+const APP_VERSION = '8.4 (8 more recipes)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1987,7 +1987,66 @@ const scrambleBowl = (potato) => ({ id: potato ? 'scramble-potato' : 'scramble',
     'Whisk the eggs and egg whites with a pinch of salt, pepper and garlic powder. Turn the heat to medium-low, pour them in and gently push them around until just set, 2–3 min.',
     potato ? 'Pile the scramble and sausage into the bowl and top with salsa (and hot sauce if you like).' : 'Weigh it all and split into 2 bowls (about 220 g each). Top each with 2 tbsp salsa. Fridge the second bowl and reheat 60–90 seconds tomorrow.',
   ] });
-const SEED_RECIPES = () => [scrambleBowl(false), scrambleBowl(true), chipotleBowl('chicken'), chipotleBowl('steak'), CHILI_RECIPE];
+// More meal-prep recipes in the same style: red meat or chicken, rice or potatoes, lots of vegetables, a sauce or salsa. No corn, edamame or lettuce.
+const P_ = t => ({ text: t, id: null, sv: null, pantry: true }), I_ = (text, id, sv) => ({ text, id, sv });
+const MORE_RECIPES = [
+  { id: 'teriyaki-chicken', name: 'Teriyaki Chicken Rice Bowls', servings: 4, time: '35 min',
+    notes: 'Each bowl (cooked): ≈ 170 g chicken (225 g raw) · 105 g jasmine rice · 1 cup broccoli · ½ cup peppers · 1¼ tbsp teriyaki.\nMeal prep: keeps 4 days. Add a squeeze of sriracha or Tapatío when you reheat.',
+    ingredients: [I_('900 g (2 lb) boneless skinless chicken thighs', 'ch1', 7.94), I_('140 g (⅔ cup) dry jasmine rice', 'c2', 3.11), I_('4 cups broccoli florets', 'v1', 4),
+      I_('300 g (2) bell peppers, sliced', 'pr6', 3.26), I_('5 tbsp teriyaki sauce (Kinder\'s)', 'sc2', 5), I_('3 cloves garlic, minced', 'pr22', 3), P_('Cooking spray, black pepper, garlic powder, red pepper flakes (optional)')],
+    steps: ['Start the rice: rinse 140 g jasmine rice and cook with 1 cup + 2 tbsp water (rice cooker, or simmer covered 15 min, rest 10).', 'Cut the chicken into bite-size pieces; season with pepper and garlic powder.',
+      'Sear the chicken in a hot nonstick pan with spray, in 2 batches, 6–7 min until browned and 165°F. Set aside.', 'Same pan: stir-fry the broccoli and peppers with the garlic and 2 tbsp water, 4–5 min until crisp-tender.',
+      'Return the chicken, add the teriyaki, and toss 1 min until glossy.', 'Divide the rice into 4 containers (≈105 g each) and top with chicken and vegetables.'] },
+  { id: 'steak-fajita', name: 'Steak Fajita Bowls', servings: 4, time: '30 min + 30 min marinating',
+    notes: 'Each bowl (cooked): ≈ 128 g steak (170 g raw) · 105 g rice · 1 cup fajita peppers & onions · 4 tbsp salsa · 2 tbsp Greek yogurt.\nMeal prep: keeps 4 days. Keep the salsa and yogurt on the side.',
+    ingredients: [I_('680 g (1.5 lb) top sirloin steak', 'm34', 6), I_('140 g (⅔ cup) dry jasmine rice', 'c2', 3.11), I_('400 g (3) bell peppers, sliced in strips', 'pr6', 4.35), I_('300 g (2) onions, sliced', 'pr15', 3.75),
+      I_('1 tbsp olive oil', 'a4', 1), I_('2 limes', 'rc35', 2), I_('1 cup salsa (Tatemada or any fresh salsa)', 'sc7', 8), I_('120 g nonfat Greek yogurt (as sour cream)', 'b3', 0.71),
+      P_('2 tsp chili powder, 1 tsp cumin, 1 tsp garlic powder, ½ tsp smoked paprika, salt, pepper')],
+    steps: ['Mix the spices with the juice of 1 lime and half the oil; rub on the steak and rest 30 min (or overnight).', 'Cook the rice with 1 cup + 2 tbsp water; squeeze in the second lime when it\'s done.',
+      'Sear the steak in a very hot pan 4–5 min per side to 130–135°F for medium-rare. Rest 10 min, then slice thin against the grain.', 'Same pan with the rest of the oil: cook the peppers and onions on high 6–8 min until charred at the edges. Season with salt.',
+      'Divide into 4 containers: rice, fajita veggies, steak. Salsa and a spoon of yogurt on the side.'] },
+  { id: 'beef-broccoli', name: 'Garlic Beef & Broccoli', servings: 4, time: '30 min',
+    notes: 'Each bowl (cooked): ≈ 128 g flank steak (170 g raw) · 105 g rice · 1¼ cups broccoli · sauce.\nCut the flank steak thin across the grain while it\'s half-frozen — it slices much easier.',
+    ingredients: [I_('680 g (1.5 lb) flank steak, sliced thin', 'm2', 6), I_('140 g (⅔ cup) dry jasmine rice', 'c2', 3.11), I_('5 cups broccoli florets', 'v1', 5), I_('4 cloves garlic, minced', 'pr22', 4),
+      I_('4 tbsp Mr. Yoshida\'s (or teriyaki) sauce', 'sc3', 4), I_('1 cup bone broth', 'rc8', 1), P_('1 tbsp cornstarch, black pepper, ½ tsp ground ginger, red pepper flakes')],
+    steps: ['Cook the rice with 1 cup + 2 tbsp water.', 'Whisk the broth, Yoshida\'s, cornstarch, ginger and garlic.', 'Steam the broccoli in the pan with ¼ cup water, covered, 3 min; set aside.',
+      'Sear the beef in a very hot pan with spray in 2 batches, 1–2 min per side. Don\'t crowd it.', 'Pour in the sauce and bring to a simmer until it thickens, 1–2 min. Add the broccoli and toss.', 'Divide over the rice in 4 containers.'] },
+  { id: 'chicken-potato-pan', name: 'Lemon-Garlic Chicken & Potato Sheet Pan', servings: 4, time: '45 min',
+    notes: 'Each serving (cooked): ≈ 170 g chicken (225 g raw) · 180 g roasted potatoes · 1 cup green beans. Serve with salsa or hot sauce.\nMeal prep: keeps 4 days. The potatoes reheat best in an air fryer, 4 min at 400°F.',
+    ingredients: [I_('900 g (2 lb) boneless skinless chicken breasts', 'ch9', 7.94), I_('900 g (2 lb) gold or red potatoes, cut in 2–3 cm chunks', 'pr24', 6.34), I_('4 cups green beans, trimmed', 'v4', 4),
+      I_('1½ tbsp olive oil', 'a4', 1.5), I_('4 cloves garlic, minced', 'pr22', 4), I_('1 lemon', 'pr23', 1), P_('2 tsp paprika, 1 tsp garlic powder, 1 tsp Italian seasoning, salt, pepper')],
+    steps: ['Heat the oven to 425°F. Toss the potatoes with 1 tbsp oil, salt, pepper and half the paprika; roast 15 min on a lined sheet pan.', 'Cut the chicken into large chunks and toss with the rest of the oil, the garlic, lemon zest, Italian seasoning and the rest of the spices.',
+      'Push the potatoes to the sides; add the chicken and green beans to the pan. Roast 18–22 min until the chicken is 165°F and the potatoes are crisp.', 'Squeeze the lemon over everything and divide into 4 containers.'] },
+  { id: 'chicken-pasta-bake', name: 'Chicken Marinara Pasta Bake', servings: 4, time: '40 min',
+    notes: 'Each serving: ≈ 150 g chicken (200 g raw) · 110 g cooked pasta · ½ cup marinara · spinach & mushrooms · a little mozzarella.\nMeal prep: keeps 4 days; freezes well. Higher-protein comfort food that still fits.',
+    ingredients: [I_('800 g (1.75 lb) boneless skinless chicken breasts, cubed', 'ch9', 7.05), I_('200 g (7 oz) dry pasta (penne or rigatoni)', 'c9', 3.53), I_('2 cups marinara (Kirkland Tuscan)', 'sc4', 4),
+      I_('6 cups baby spinach', 'v3', 2), I_('2 cups mushrooms, sliced', 'pr10', 2), I_('56 g (½ cup) shredded mozzarella', 'cz6', 2), I_('3 cloves garlic', 'pr22', 3), P_('Italian seasoning, red pepper flakes, salt, pepper')],
+    steps: ['Heat the oven to 400°F. Boil the pasta 2 min less than the package says; drain.', 'Brown the chicken with spray, salt, pepper and Italian seasoning, 6–7 min. Add the mushrooms and garlic for 3 min, then wilt in the spinach.',
+      'Stir in the marinara and pasta; pour into a baking dish and top with the mozzarella.', 'Bake 12–15 min until bubbly. Divide into 4 containers.'] },
+  { id: 'greek-chicken', name: 'Greek Chicken Rice Bowls', servings: 4, time: '35 min + 30 min marinating',
+    notes: 'Each bowl (cooked): ≈ 170 g chicken (225 g raw) · 105 g rice · ½ cup tomatoes · red onion · ⅓ cup yogurt-garlic sauce · 1 tbsp feta.\nNo hummus or chickpeas — the yogurt sauce does the job.',
+    ingredients: [I_('900 g (2 lb) boneless skinless chicken thighs', 'ch1', 7.94), I_('140 g (⅔ cup) dry jasmine rice', 'c2', 3.11), I_('2 cups tomatoes, chopped', 'pr4', 2), I_('½ red onion, thinly sliced', 'pr15', 1),
+      I_('340 g (1½ cups) nonfat Greek yogurt', 'b3', 2), I_('2 cloves garlic, grated', 'pr22', 2), I_('1 lemon', 'pr23', 1), I_('56 g (2 oz) crumbled feta', 'cz5', 2),
+      P_('2 tsp dried oregano, 1 tsp garlic powder, ½ tsp smoked paprika, dried dill (optional), salt, pepper')],
+    steps: ['Mix half the lemon juice, oregano, garlic powder, paprika, salt and pepper; coat the chicken and marinate 30 min.', 'Cook the rice with 1 cup + 2 tbsp water.',
+      'Sauce: stir the yogurt with the grated garlic, the rest of the lemon juice, a pinch of salt and dill.', 'Grill or pan-sear the chicken 5–6 min per side to 165°F; rest 5 min and slice.',
+      'Bowls: rice, chicken, tomatoes, red onion, a big spoon of yogurt sauce and a sprinkle of feta.'] },
+  { id: 'steak-eggs-hash', name: 'Steak & Eggs Breakfast Hash', servings: 2, meal: 'Breakfast', time: '25 min',
+    notes: 'Each plate: ≈ 85 g steak (113 g raw) · 2 eggs · 120 g crispy potatoes · peppers & onions · 2 tbsp salsa.\nGreat with leftover steak from the fajita bowls — skip step 2.',
+    ingredients: [I_('225 g (½ lb) top sirloin steak', 'm34', 1.98), I_('4 large eggs', 'b1', 2), I_('300 g gold potatoes, diced 1.5 cm', 'pr24', 2.11), I_('1 cup bell pepper, diced', 'pr6', 1),
+      I_('½ cup onion, diced', 'pr15', 1), I_('4 tbsp salsa', 'sc7', 2), P_('Cooking spray, smoked paprika, garlic powder, salt, pepper, hot sauce')],
+    steps: ['Microwave the diced potatoes covered with a splash of water 4 min, then crisp in a nonstick pan with spray, paprika, salt and pepper, 8 min.', 'Season the steak and sear 3–4 min per side; rest and dice.',
+      'Add the peppers and onion to the potatoes for 4 min, then the steak to warm through.', 'Make 4 wells and crack in the eggs; cover and cook 3–4 min until the whites set.', 'Split onto 2 plates and top with salsa and hot sauce.'] },
+  { id: 'beef-potato-stew', name: 'Lean Beef & Potato Stew', servings: 6, time: '2 hr (mostly hands-off)',
+    notes: 'About 400 g per bowl. Made with eye round, so it\'s very lean — about 54 g protein and 2.5 g saturated fat a bowl.\nKeeps 4 days in the fridge; freezes well for 3 months.',
+    ingredients: [I_('1.1 kg (2.4 lb) eye round roast, cut in 3 cm cubes', 'm22', 9.7), I_('900 g (2 lb) gold potatoes, quartered', 'pr24', 6.34), I_('2 onions, chopped', 'pr15', 4), I_('3 cups mushrooms, halved', 'pr10', 3),
+      I_('3 cups green beans, cut in pieces', 'v4', 3), I_('4 cups bone broth', 'rc8', 4), I_('½ cup tomato sauce', 'sc15', 2), I_('4 cloves garlic', 'pr22', 4), I_('1 tbsp Worcestershire sauce', 'pt16', 3),
+      P_('2 bay leaves, 1 tsp dried thyme, 1 tsp smoked paprika, salt, pepper, 1 tbsp flour (optional, to thicken)')],
+    steps: ['Season the beef with salt, pepper and paprika. Brown it in a heavy pot with spray in 3 batches; set aside.', 'Cook the onions and mushrooms 5 min; add the garlic for 1 min.',
+      'Add the broth, tomato sauce, Worcestershire, thyme, bay leaves and the beef. Cover and simmer gently 1 hr 15 min.', 'Add the potatoes; simmer 25 min. Add the green beans for the last 8 min.',
+      'Remove the bay leaves. Weigh the stew (minus the pot) and divide by 6 — about 400 g a bowl.'] },
+];
+const SEED_RECIPES = () => [scrambleBowl(false), scrambleBowl(true), chipotleBowl('chicken'), chipotleBowl('steak'), CHILI_RECIPE, ...MORE_RECIPES];
 // Add recipes made for you (once each; deleting one keeps it deleted).
 S.recipes = S.recipes || []; S.seeded = S.seeded || (S.recipesSeeded ? ['chili'] : []);
 // You skip lettuce in the Chipotle bowls: take it out of copies already saved on this phone.
