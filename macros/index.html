@@ -274,6 +274,7 @@ const CATALOG_RAW = [
   ['m26','Kirkland Choice Seasoned Tri-Tip','protein','4 oz raw',210,22,2,11,1,0,{sf:4.5,ppl:18.15}],
   ['m27','American Wagyu Ground Beef','protein','4 oz raw',290,19,0,23,0,0,{sf:9,ppl:8.32}],
   ['m28','Kirkland Choice Ribeye Steak (boneless)','protein','4 oz raw',280,21,0,21.5,0,0,{sf:8.5,ppl:22.69}],
+  ['dl1','Deli Roast Beef (sliced)','protein','2 oz (56 g, about 3 slices)',70,12,1,2,0,0,{sf:1}],
   ['rb1','Ribeye, trimmed of visible fat (lean only)','protein','4 oz raw',190,24,0,10,0,0,{sf:4}], // cutting off the fat cap and big fat pockets roughly halves the fat
   ['m29','Kirkland Top Sirloin Cap (Picanha, whole)','protein','4 oz raw',250,21,0,18,0,0,{sf:7,ppl:11.34}],
   ['m30','Kirkland Organic Ground Beef 85/15','protein','4 oz raw',240,21,0,17,0,0,{sf:6.5,ppl:8.18}],
@@ -872,7 +873,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.8.1 (counter = what you ate)';
+const APP_VERSION = '8.9 (add what I ate + usual meals)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1170,6 +1171,68 @@ function planVsAte(t) {
       ${row('Calories', 'cal', '')}${row('Protein', 'p', ' g')}${row('Carbs', 'c', ' g')}${row('Fat', 'f', ' g')}${row('Fiber', 'fb', ' g')}</table>
     <div class="small muted" style="margin-top:6px">Planned is the whole day's plan. Under each meal below you can see what you had instead.</div></details>`;
 }
+/* ---------- Add what I ate: several foods at once, and usual meals in one tap ---------- */
+let bm = { meal: 'Lunch', items: [], pick: null, usualId: null };
+function usualMeals() {
+  if (!S.usualSeeded) { S.usualSeeded = true; S.usual = S.usual || [];
+    if (!S.fresh) { // the two you told me about on Oct 22
+      const mine = re => Object.values(S.foods).find(f => f.src === 'scan' && re.test(f.name || ''));
+      const rb = mine(/roast beef/i) || getFood('dl1'), br = mine(/bread|sourdough/i) || getFood('c5'), rc = countUnit(rb);
+      S.usual.push({ id: 'u-tacos', name: 'Chipotle steak tacos', items: [{ id: 'm34', sv: 2, amt: '6 oz cooked' }, { id: 'tf1', sv: 2, amt: '2 tortillas' }, { id: 'sc7', sv: 1, amt: '2 tbsp' }] });
+      S.usual.push({ id: 'u-rbs', name: 'Roast beef sandwich', items: [{ id: br.id, sv: 2, amt: '2 slices' }, { id: rb.id, sv: rc ? Math.round(3 / rc.n * 1000) / 1000 : 1, amt: '3 slices' }] });
+    }
+    save(); }
+  return (S.usual || []).filter(u => u.items.every(i => getFood(i.id)));
+}
+function addMealSheet(meal, usualId) {
+  const u = usualId && usualMeals().find(x => x.id === usualId);
+  bm = { meal: meal || defaultMeal(), items: u ? JSON.parse(JSON.stringify(u.items)) : [], pick: null, usualId: u ? u.id : null, name: u ? u.name : '' };
+  renderAddMeal();
+}
+function renderAddMeal() {
+  const tt = totals(bm.items.map(i => ({ ...getFood(i.id), sv: i.sv }))), us = usualMeals();
+  sheet(`<div class="sheet-head"><div class="grow"><h2>➕ Add what I ate</h2><div class="small muted">Put a whole meal together, then log it</div></div><button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <div class="chips" style="margin:4px 0 8px">${MEALS.map(m => `<button class="chip ${m === bm.meal ? 'on' : ''}" data-act="bmmeal" data-v="${m}">${m}</button>`).join('')}</div>
+    ${us.length ? `<div class="small muted">⭐ Usual meals — tap to start from one:</div><div class="chips" style="margin:4px 0 10px">${us.map(x => `<button class="chip ${x.id === bm.usualId ? 'on' : ''}" data-act="bmusual" data-id="${esc(x.id)}">${esc(x.name)}</button>`).join('')}</div>` : ''}
+    <div class="card" style="margin:0 0 10px;padding:8px 12px;background:var(--bg)">
+      ${bm.items.length ? bm.items.map((i, k) => { const f = getFood(i.id); return `<div class="item"><div class="grow"><div class="name">${esc(shortName(f))}</div><div class="meta">${esc(i.amt || amountText(f, i.sv))} · ${Math.round(f.cal * i.sv)} cal · ${r1(f.p * i.sv)} g protein</div></div><button class="icon-btn" data-act="bmrm" data-i="${k}" aria-label="Remove">✕</button></div>`; }).join('')
+        + `<div class="small" style="margin-top:6px"><b>Total: ${Math.round(tt.cal)} cal</b> · <span style="color:var(--p);font-weight:700">${Math.round(tt.p)} g protein</span> · C${Math.round(tt.c)} F${Math.round(tt.f)} · sat fat ${r1(tt.sf)} g</div>`
+        : '<div class="small muted" style="padding:4px 0">Nothing yet — search for each thing you ate below.</div>'}</div>
+    <input type="search" id="bmq" placeholder="🔎 Add a food: steak, tortilla, roast beef, bread…" autocomplete="off">
+    <div id="bmres" style="margin-top:4px"></div>
+    ${bm.items.length ? `<label class="row small" style="gap:8px;margin:10px 0 4px"><input type="checkbox" id="bmsave" ${bm.usualId ? '' : ''}> <span>${bm.usualId ? 'Update' : 'Save as'} a usual meal</span>
+        <input type="text" id="bmname" value="${esc(bm.name || '')}" placeholder="e.g. Roast beef sandwich" style="flex:1;padding:6px 8px"></label>
+      <button class="btn block" style="margin-top:6px" data-act="bmlog">Log ${bm.items.length} item${bm.items.length === 1 ? '' : 's'} to ${bm.meal.toLowerCase()}</button>` : ''}
+    ${bm.usualId ? `<button class="btn ghost block sm" style="margin-top:8px" data-act="bmdelusual">Delete “${esc(bm.name)}” from usual meals</button>` : ''}`);
+  const q = $('#bmq'), res = $('#bmres');
+  // what you actually use comes first: foods in your recipes and logs, things you scanned, then your Costco receipts
+  const used = new Set([...(S.recipes || []).flatMap(r => r.ingredients.map(i => i.id)), ...Object.values(S.log || {}).flat().map(e => e.foodId)]);
+  const rank = f => (used.has(f.id) ? 4 : 0) + (f.src === 'scan' ? 2 : 0) + (BOUGHT.has(f.id) ? 1 : 0);
+  const run = () => { const words = q.value.toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) { res.innerHTML = ''; return; }
+    const hits = allFoods().filter(f => !f.kids && f.src !== 'restaurant' && words.every(w => ((f.name || '') + ' ' + (f.brand || '')).toLowerCase().includes(w)))
+      .sort((a, b) => rank(b) - rank(a) || a.name.length - b.name.length).slice(0, 10);
+    res.innerHTML = hits.length ? hits.map(f => `<div class="item tap" data-act="bmpick" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div><div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal${f.src === 'scan' ? ' · scanned' : ''}</div></div><span class="muted">+</span></div>`).join('')
+      : `<div class="small muted" style="padding:6px 0">No match. Try one word, or scan it on the Scan tab first.</div>`; };
+  q.addEventListener('input', run);
+}
+// Amount picker for one food inside the builder.
+function bmPickPanel(id) {
+  const f = getFood(id), us = amountUnits(f), res = $('#bmres'); bm.pick = id;
+  res.innerHTML = `<div class="card" style="margin:6px 0;padding:10px 12px;background:var(--soft)"><div class="name">${esc(f.name)}</div><div class="small muted">1 serving = ${esc(f.serving)}</div>
+    <div class="row" style="gap:6px;margin-top:8px"><input type="number" id="bmamt" value="1" step="any" min="0" inputmode="decimal" style="width:90px">
+      <select id="bmunit" style="flex:1">${us.map(u => `<option value="${u.k}">${esc(u.label)}</option>`).join('')}</select></div>
+    <div class="small" id="bmprev" style="margin:6px 0"></div>
+    <div class="row" style="gap:6px"><button class="btn sm grow" data-act="bmadd">Add</button><button class="btn ghost sm" data-act="bmcancel">Cancel</button></div></div>`;
+  const amt = $('#bmamt'), unit = $('#bmunit');
+  const upd = () => { const u = us.find(x => x.k === unit.value) || us[0]; if (unit.value === 'setslice') return; const sv = (+amt.value || 0) / u.per; $('#bmprev').innerHTML = `= ${r1(sv)} serving${r1(sv) === 1 ? '' : 's'} · <b>${Math.round(f.cal * sv)} cal</b> · ${r1(f.p * sv)} g protein`; };
+  amt.addEventListener('input', upd);
+  unit.addEventListener('change', () => {
+    if (unit.value === 'setslice') { const n = +prompt(`How many slices are in one serving of ${shortName(f)}? (The label usually says, e.g. "about 3 slices" — serving: ${f.serving})`, '');
+      if (n > 0) { S.foods[f.id] = { ...getFood(f.id), countPer: n, countUnit: 'slice' }; save(); return bmPickPanel(id); } unit.value = us[0].k; }
+    if (unit.value !== 'sv') amt.value = unit.value === 'count' ? (countUnit(f) || { n: 1 }).n : unit.value === 'g' ? Math.round(servingGrams(f)) : Math.round((us.find(x => x.k === unit.value).per) * 2) / 2;
+    else amt.value = 1; upd(); });
+  upd(); amt.focus(); amt.select();
+}
 const TORTILLA_OPTS = [['tf1', 2, 'Tortilla Fresca'], ['br19', 2, 'Carb Balance'], ['br17', 1, 'Corn']];
 let pendTort = 0;
 function pendingLogCard() {
@@ -1205,15 +1268,16 @@ function todaysMealsCard() {
     if (ex.length) {
       const et = totals(ex), skipped = mis.filter(([m, mi]) => m.items.length && !tagged.has(mealTag(di, mi)));
       const pt = totals(skipped.flatMap(([m]) => m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))));
-      rows.push(`<div class="small" style="margin:2px 0 2px 12px;font-weight:700">${skipped.length ? 'What you had instead' : 'Also had'}</div>` + ex.map(xrow).join('')
+      rows.push(`<div class="small" style="margin:2px 0 2px 12px;font-weight:700">${skipped.length ? 'What you had instead' : mis.some(([m]) => m.items.length) ? 'Also had' : 'You had'}</div>` + ex.map(xrow).join('')
         + `<div class="small" style="margin:4px 0 6px 12px">= <b>${Math.round(et.cal)} cal · <span style="color:var(--p)">${Math.round(et.p)} g protein</span></b></div>`);
     }
   }
   return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🍽 Today's meals</h2>${day ? `<button class="btn ghost sm" data-act="tab" data-t="plan">Full plan</button>` : ''}</div>
     ${day ? '' : `<div class="small muted tap" data-act="tab" data-t="plan" style="padding:6px 0">No meal plan for today — tap to make one in Meals.</div>`}
     ${rows.join('')}
-    <div class="row" style="gap:6px;margin-top:10px"><button class="btn alt sm grow" data-act="find">🔎 Ate something else?</button><button class="btn alt sm grow" data-act="eatout">🍔 Eating out</button></div>
-    <button class="btn alt sm block" style="margin-top:6px" data-act="cookkitchen">🍳 Cook with what I have</button></div>`;
+    <button class="btn block" style="margin-top:10px" data-act="addmeal">➕ Add what I ate</button>
+    ${usualMeals().length ? `<div class="chips" style="margin:6px 0 0">${usualMeals().map(u => `<button class="chip" data-act="addmeal" data-id="${esc(u.id)}">⭐ ${esc(u.name)}</button>`).join('')}</div>` : ''}
+    <div class="row" style="gap:6px;margin-top:8px"><button class="btn alt sm grow" data-act="eatout">🍔 Eating out</button><button class="btn alt sm grow" data-act="cookkitchen">🍳 Cook with what I have</button></div></div>`;
 }
 // Swap a planned meal: leftovers, a recipe, something from your kitchen, a different filled-in meal — or nothing.
 const recipeMeal = (meal, r) => ({ meal, key: 'recipe', recipe: r.id, title: r.name, label: 'Recipe', items: [{ id: recipeFood(r).id, sv: 1, step: 1, min: 1, max: 1, role: 'recipe' }] });
@@ -1272,7 +1336,7 @@ function renderToday() {
   h += `<div class="card">${macroSummary(t, T)}
     <div class="row small" style="margin-top:8px;gap:12px"><span style="color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</span>
       <span style="color:${t.fb >= fiberTarget() ? 'var(--ok)' : 'var(--muted)'}">Fiber ${Math.round(t.fb || 0)} / ${fiberTarget()} g${t.fb >= fiberTarget() ? ' ✓' : ''}</span></div></div>
-    ${isToday ? pendingLogCard() + todaysMealsCard() : ''}
+    ${isToday ? todaysMealsCard() : ''}
     ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
     ${isToday ? snackIdeasCard() : `<div class="row" style="margin-bottom:12px;gap:6px"><button class="btn alt grow" data-act="find">🔎 Ate something else?</button><button class="btn alt grow" data-act="eatout">🍔 Eating out</button></div>`}
     ${list.length && !isToday ? `<h3 style="margin:4px 4px 8px;font-size:15px">What you logged</h3>` : ''}`;
@@ -1568,18 +1632,20 @@ $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeS
 // Ways to say how much you ate: servings, or slices/pieces when the label says how many are in a serving, or grams/ounces.
 function countUnit(f) {
   if (f.countPer && f.countUnit) return { u: f.countUnit, n: f.countPer };
-  const m = /(\d+(?:\.\d+)?)\s*(slices?|pieces?|pcs|links?|crackers?|chips?|cookies?|nuggets?|strips?|wings?|meatballs?|bites?|tortillas?|patt(?:y|ies)|sticks?|eggs?|almonds|pretzels?)\b/i.exec(f.serving || '');
+  const m = /(\d+(?:\.\d+)?)\s*(slices?|pieces?|pcs|links?|crackers?|chips?|cookies?|nuggets?|strips?|wings?|meatballs?|bites?|tortillas?|patt(?:y|ies)|sticks?|eggs?|almonds|pretzels?|tbsp|tsp|cups?)\b/i.exec(f.serving || '');
   if (!m || +m[1] <= 0) return null;
-  const u = m[2].toLowerCase().replace(/^pcs$/, 'piece').replace(/ies$/, 'y').replace(/s$/, '');
+  const u = m[2].toLowerCase().replace(/^pcs$/, 'piece').replace(/ies$/, 'y').replace(/s$/, '').replace(/^(tb|t)$/, '$1sp');
   return { u, n: +m[1] };
 }
 const sliceLike = f => /slice|deli|roast beef|turkey breast|\bham\b|salami|pastrami|bologna|prosciutto|pepperoni|lunch ?meat|cheese|bacon/i.test((f.name || '') + ' ' + (f.serving || ''));
 function amountUnits(f) {
   const us = [{ k: 'sv', label: 'servings', per: 1, step: 0.5 }], c = countUnit(f), g = servingGrams(f);
-  if (c) us.push({ k: 'count', label: c.u + 's', per: c.n, step: 1 });
+  if (c) us.push({ k: 'count', label: /sp$/.test(c.u) ? c.u : c.u + 's', per: c.n, step: 1 });
   else if (sliceLike(f)) us.push({ k: 'setslice', label: 'slices…', per: 0, step: 1 });
-  if (g) { us.push({ k: 'g', label: 'grams', per: g, step: 10 }); us.push({ k: 'oz', label: 'oz', per: g / 28.35, step: 0.5 }); }
-  const last = S.lastUnit && S.lastUnit[f.id], i = us.findIndex(u => u.k === last); if (i > 0) us.unshift(us.splice(i, 1)[0]); // the unit you used last time comes first
+  if (g) { const raw = f.cat === 'protein' && /raw/i.test(f.serving || '');
+    if (raw) us.push({ k: 'ozc', label: 'oz cooked', per: g * COOKED_YIELD(f) / 28.35, step: 0.5 });
+    us.push({ k: 'g', label: raw ? 'grams raw' : 'grams', per: g, step: 10 }); us.push({ k: 'oz', label: raw ? 'oz raw' : 'oz', per: g / 28.35, step: 0.5 }); }
+  const last = (S.lastUnit && S.lastUnit[f.id]) || (c ? 'count' : ''), i = us.findIndex(u => u.k === last); if (i > 0) us.unshift(us.splice(i, 1)[0]); // the unit you used last time (or slices/pieces) comes first
   return us;
 }
 function wireAmount(f) {
@@ -3902,6 +3968,22 @@ document.addEventListener('click', e => {
     case 'swap': swapSheet(+el.dataset.m, +el.dataset.i); break;
     case 'doswap': doSwap(+el.dataset.m, +el.dataset.i, el.dataset.id); break;
     case 'logmeal': { const m = S.plan.days[planDay].meals[+el.dataset.m]; logPlannedMeal(planDay, +el.dataset.m); toast(`${m.meal} logged for today`); break; }
+    case 'addmeal': addMealSheet(el.dataset.v, el.dataset.id); break;
+    case 'bmmeal': bm.meal = el.dataset.v; renderAddMeal(); break;
+    case 'bmusual': { const meal = bm.meal; addMealSheet(meal, id); break; }
+    case 'bmrm': bm.items.splice(+el.dataset.i, 1); renderAddMeal(); break;
+    case 'bmpick': bmPickPanel(id); break;
+    case 'bmcancel': bm.pick = null; renderAddMeal(); break;
+    case 'bmadd': { const f = getFood(bm.pick), us = amountUnits(f), u = us.find(x => x.k === $('#bmunit').value) || us[0], a = +$('#bmamt').value;
+      if (!(a > 0) || !u.per) { toast('Enter how much'); break; }
+      bm.items.push({ id: f.id, sv: Math.round(a / u.per * 1000) / 1000, amt: u.k === 'sv' ? `${a} serving${a === 1 ? '' : 's'}` : `${a} ${u.label}` });
+      S.lastUnit = S.lastUnit || {}; S.lastUnit[f.id] = u.k; save(); bm.pick = null; renderAddMeal(); break; }
+    case 'bmlog': { const saveIt = $('#bmsave') && $('#bmsave').checked, nm = ($('#bmname') && $('#bmname').value.trim()) || '';
+      for (const i of bm.items) logFood(getFood(i.id), i.sv, bm.meal, todayKey(), { amt: i.amt });
+      if (saveIt) { S.usual = S.usual || []; const ex = bm.usualId && S.usual.find(x => x.id === bm.usualId);
+        if (ex) { ex.items = JSON.parse(JSON.stringify(bm.items)); ex.name = nm || ex.name; } else S.usual.push({ id: 'u-' + uid(), name: nm || bm.items.map(i => shortName(getFood(i.id))).slice(0, 2).join(' + '), items: JSON.parse(JSON.stringify(bm.items)) }); }
+      save(); closeSheet(); toast(`${bm.items.length} item${bm.items.length === 1 ? '' : 's'} logged to ${bm.meal.toLowerCase()}${saveIt ? ' · saved as a usual meal' : ''} ✓`); if (tab !== 'today') go('today'); break; }
+    case 'bmdelusual': if (confirm(`Delete “${bm.name}” from your usual meals?`)) { S.usual = (S.usual || []).filter(x => x.id !== bm.usualId); save(); bm.usualId = null; bm.name = ''; renderAddMeal(); } break;
     case 'pendtort': pendTort = +el.dataset.i; renderToday(); break;
     case 'pendadd': { const pl = S.pendingLogs.shift(), [tid, tsv] = TORTILLA_OPTS[pendTort], day = pl.day || todayKey();
       for (const [fid, sv, amt] of [...pl.items, [tid, tsv, `${tsv === 1 ? 2 : tsv} tortillas`]]) if (getFood(fid)) logFood(getFood(fid), sv, el.dataset.v, day, { amt });
