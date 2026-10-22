@@ -872,7 +872,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.7.2 (macros on top, meals below)';
+const APP_VERSION = '8.8 (slices & grams, planned vs. ate)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1094,7 +1094,7 @@ function totals(list) {
 }
 function logFood(f, sv, meal, k = viewDay, opts = {}) {
   const stock = !opts.noStock && changeStock(f.id, -sv); // eaten food comes out of your kitchen
-  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0, sf: f.sf || 0, fb: f.fb || 0, stock, ...(opts.tag ? { tag: opts.tag } : {}) });
+  (S.log[k] = S.log[k] || []).push({ id: uid(), foodId: f.id, name: f.name, serving: f.serving, sv, meal, cal: f.cal || 0, p: f.p || 0, c: f.c || 0, f: f.f || 0, sf: f.sf || 0, fb: f.fb || 0, stock, ...(opts.amt ? { amt: opts.amt } : {}), ...(opts.tag ? { tag: opts.tag } : {}) });
   save();
 }
 function defaultMeal() { const h = new Date().getHours(); return h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 20 ? 'Dinner' : 'Snacks'; }
@@ -1159,11 +1159,22 @@ function snackIdeasCard() {
       <div class="small">${Math.round(x.tt.cal)} cal · <span style="color:var(--p)">${Math.round(x.tt.p)} g protein</span> · <b style="color:var(--ok)">${r1(x.tt.fb)} g fiber</b></div></div>
       <button class="btn alt sm" data-act="snacklog" data-i="${x.i}">Ate it</button></div>`).join('')}</div>`;
 }
+// The whole day: what the plan had vs. what you've actually logged so far.
+function planVsAte(t) {
+  const di = planTodayIndex(); if (di < 0 || !entries(todayKey()).length) return '';
+  const p = totals(S.plan.days[di].meals.flatMap(m => m.items.map(x => ({ ...getFood(x.id), sv: x.sv })))), T = S.targets;
+  const row = (label, k, unit) => { const d = Math.round(t[k] - p[k]), good = k === 'p' ? d >= 0 : d <= 0;
+    return `<tr><td>${label}</td><td style="text-align:right">${Math.round(p[k])}${unit}</td><td style="text-align:right"><b>${Math.round(t[k])}${unit}</b></td><td style="text-align:right;color:${Math.abs(d) < (k === 'cal' ? 25 : 3) ? 'var(--muted)' : good ? 'var(--ok)' : 'var(--warn)'}">${d > 0 ? '+' : ''}${d}${unit}</td><td style="text-align:right" class="muted">${Math.round(k === 'fb' ? fiberTarget() : T[k])}${unit}</td></tr>`; };
+  return `<details class="card fold" ${planVsAte.open ? 'open' : ''} ontoggle="planVsAte.open=this.open"><summary><h2 style="font-size:16px">📊 Planned vs. what I ate</h2></summary>
+    <table class="small" style="width:100%;border-collapse:collapse"><tr class="muted"><td></td><td style="text-align:right">Planned</td><td style="text-align:right">Ate so far</td><td style="text-align:right">Diff</td><td style="text-align:right">Goal</td></tr>
+      ${row('Calories', 'cal', '')}${row('Protein', 'p', ' g')}${row('Carbs', 'c', ' g')}${row('Fat', 'f', ' g')}${row('Fiber', 'fb', ' g')}</table>
+    <div class="small muted" style="margin-top:6px">Planned is the whole day's plan. Under each meal below you can see what you had instead.</div></details>`;
+}
 function todaysMealsCard() {
   const di = planTodayIndex(), list = entries(todayKey()), day = di >= 0 ? S.plan.days[di] : null;
   const tagged = new Set(list.map(e => e.tag).filter(Boolean));
   const extra = meal => list.filter(e => e.meal === meal && !(e.tag && /^plan:/.test(e.tag)));
-  const xrow = e => `<div class="row" style="gap:6px;padding:4px 0 4px 12px;border-left:3px solid var(--soft)"><div class="grow small"><b>${esc(e.name)}</b> <span class="muted">· ${r1(e.sv)} × ${esc(e.serving)} · ${Math.round(e.cal * e.sv)} cal</span></div>
+  const xrow = e => `<div class="row" style="gap:6px;padding:4px 0 4px 12px;border-left:3px solid var(--soft)"><div class="grow small"><b>${esc(e.name)}</b> <span class="muted">· ${e.amt ? esc(e.amt) : `${r1(e.sv)} × ${esc(e.serving)}`} · ${Math.round(e.cal * e.sv)} cal</span></div>
       <button class="icon-btn" data-act="unlog" data-id="${e.id}" aria-label="Remove" style="width:32px;height:32px">✕</button></div>`;
   const rows = [];
   for (const meal of MEALS) {
@@ -1179,7 +1190,12 @@ function todaysMealsCard() {
     }
     const ex = extra(meal);
     if (ex.length && !mis.length) rows.push(`<div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin-top:8px">${meal}</div>`);
-    if (ex.length) rows.push(ex.map(xrow).join(''));
+    if (ex.length) {
+      const et = totals(ex), skipped = mis.filter(([m, mi]) => m.items.length && !tagged.has(mealTag(di, mi)));
+      const pt = totals(skipped.flatMap(([m]) => m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))));
+      rows.push(`<div class="small" style="margin:2px 0 2px 12px;font-weight:700">${skipped.length ? 'What you had instead' : 'Also had'}</div>` + ex.map(xrow).join('')
+        + `<div class="small" style="margin:4px 0 6px 12px">= <b>${Math.round(et.cal)} cal · <span style="color:var(--p)">${Math.round(et.p)} g protein</span></b>${skipped.length ? ` <span class="muted">vs. planned ${Math.round(pt.cal)} cal · ${Math.round(pt.p)} g protein</span>` : ''}</div>`);
+    }
   }
   return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🍽 Today's meals</h2>${day ? `<button class="btn ghost sm" data-act="tab" data-t="plan">Full plan</button>` : ''}</div>
     ${day ? '' : `<div class="small muted tap" data-act="tab" data-t="plan" style="padding:6px 0">No meal plan for today — tap to make one in Meals.</div>`}
@@ -1244,6 +1260,7 @@ function renderToday() {
   h += `<div class="card">${macroSummary(t, T)}
     <div class="row small" style="margin-top:8px;gap:12px"><span style="color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</span>
       <span style="color:${t.fb >= fiberTarget() ? 'var(--ok)' : 'var(--muted)'}">Fiber ${Math.round(t.fb || 0)} / ${fiberTarget()} g${t.fb >= fiberTarget() ? ' ✓' : ''}</span></div></div>
+    ${isToday ? planVsAte(t) : ''}
     ${isToday ? todaysMealsCard() : ''}
     ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
     ${isToday ? snackIdeasCard() : `<div class="row" style="margin-bottom:12px;gap:6px"><button class="btn alt grow" data-act="find">🔎 Ate something else?</button><button class="btn alt grow" data-act="eatout">🍔 Eating out</button></div>`}
@@ -1253,7 +1270,7 @@ function renderToday() {
     const mt = totals(es);
     h += `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${m}</h2><span class="small muted">${Math.round(mt.cal)} cal · P${Math.round(mt.p)} C${Math.round(mt.c)} F${Math.round(mt.f)}</span></div>
       ${es.map(e => `<div class="item"><div class="grow"><div class="name">${esc(e.name)}</div>
-        <div class="meta">${r1(e.sv)} × ${esc(e.serving)} · ${Math.round(e.cal * e.sv)} cal · P${r1(e.p * e.sv)} C${r1(e.c * e.sv)} F${r1(e.f * e.sv)}</div></div>
+        <div class="meta">${e.amt ? esc(e.amt) : `${r1(e.sv)} × ${esc(e.serving)}`} · ${Math.round(e.cal * e.sv)} cal · P${r1(e.p * e.sv)} C${r1(e.c * e.sv)} F${r1(e.f * e.sv)}</div></div>
         <button class="icon-btn" data-act="unlog" data-id="${e.id}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
   }
   if (!list.length && !isToday) h += `<div class="empty">Nothing logged this day.</div>`;
@@ -1537,6 +1554,42 @@ function sheet(html) { $('#sheet-card').innerHTML = html; $('#sheet').hidden = f
 function closeSheet() { if (sheetFood && $('#pprice')) { savePriceFrom(sheetFood.id); save(); } $('#sheet').hidden = true; sheetFood = null; if (tab === 'scan') { scan.busy = false; scan.lastAt = Date.now(); if (S.camOk) startScan(); } else render(); }
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
 
+// Ways to say how much you ate: servings, or slices/pieces when the label says how many are in a serving, or grams/ounces.
+function countUnit(f) {
+  if (f.countPer && f.countUnit) return { u: f.countUnit, n: f.countPer };
+  const m = /(\d+(?:\.\d+)?)\s*(slices?|pieces?|pcs|links?|crackers?|chips?|cookies?|nuggets?|strips?|wings?|meatballs?|bites?|tortillas?|patt(?:y|ies)|sticks?|eggs?|almonds|pretzels?)\b/i.exec(f.serving || '');
+  if (!m || +m[1] <= 0) return null;
+  const u = m[2].toLowerCase().replace(/^pcs$/, 'piece').replace(/ies$/, 'y').replace(/s$/, '');
+  return { u, n: +m[1] };
+}
+const sliceLike = f => /slice|deli|roast beef|turkey breast|\bham\b|salami|pastrami|bologna|prosciutto|pepperoni|lunch ?meat|cheese|bacon/i.test((f.name || '') + ' ' + (f.serving || ''));
+function amountUnits(f) {
+  const us = [{ k: 'sv', label: 'servings', per: 1, step: 0.5 }], c = countUnit(f), g = servingGrams(f);
+  if (c) us.push({ k: 'count', label: c.u + 's', per: c.n, step: 1 });
+  else if (sliceLike(f)) us.push({ k: 'setslice', label: 'slices…', per: 0, step: 1 });
+  if (g) { us.push({ k: 'g', label: 'grams', per: g, step: 10 }); us.push({ k: 'oz', label: 'oz', per: g / 28.35, step: 0.5 }); }
+  const last = S.lastUnit && S.lastUnit[f.id], i = us.findIndex(u => u.k === last); if (i > 0) us.unshift(us.splice(i, 1)[0]); // the unit you used last time comes first
+  return us;
+}
+function wireAmount(f) {
+  const amt = $('#amt'), unit = $('#svu'), sv = $('#sv'); if (!amt) return;
+  const units = amountUnits(f), cur = () => units.find(u => u.k === unit.value) || units[0];
+  const toSv = () => { const u = cur(); sv.value = u.per ? Math.round((+amt.value || 0) / u.per * 1000) / 1000 : sv.value; };
+  const fromSv = () => { const u = cur(); amt.value = u.per ? Math.round(+sv.value * u.per * 100) / 100 : amt.value; };
+  amt.value = Math.round(+sv.value * cur().per * 100) / 100 || sv.value;
+  amt.addEventListener('input', toSv);
+  sv.addEventListener('input', fromSv);
+  let prev = unit.value;
+  unit.addEventListener('change', () => {
+    if (unit.value === 'setslice') { // ask once how many slices make a serving, then remember it
+      const n = +prompt(`How many slices are in one serving of ${shortName(f)}?\nCheck the label — it often says something like "about 3 slices" next to the serving size (${f.serving}).`, '');
+      if (!(n > 0)) { unit.value = prev; return; }
+      S.foods[f.id] = { ...getFood(f.id), countPer: n, countUnit: 'slice' }; S.lastUnit = S.lastUnit || {}; S.lastUnit[f.id] = 'count'; save();
+      return openFood(f.id, { ...openFood.last, sv: +sv.value });
+    }
+    prev = unit.value; S.lastUnit = S.lastUnit || {}; S.lastUnit[f.id] = unit.value; save(); fromSv();
+  });
+}
 function openFood(id, opts = {}) {
   const f = getFood(id); if (!f) return;
   openFood.last = opts;
@@ -1590,8 +1643,9 @@ function openFood(id, opts = {}) {
     <div class="small muted">Saturated fat ${f.sf == null ? 'not listed' : fmt(f.sf) + ' g'} · Sugar ${fmt(f.s)} g · Fiber ${fmt(f.fb)} g${S.rules.net ? ` · Net carbs ${fmt(carbsOf(f))} g` : ''}</div>
     ${isHighProtein(f) ? `<div class="small" style="margin-top:6px;color:var(--p)"><b>💪 Protein-forward:</b> ${Math.round(proteinRatio(f) * 100)}% of its calories come from protein.</div>` : ''}
     <div class="small" style="margin:8px 0 12px;color:${fits ? 'var(--ok)' : 'var(--warn)'}">${fits ? '✓ One serving fits in what you have left today.' : '⚠ One serving goes past what you have left today.'}</div>
-    <div class="row wrap" style="margin-bottom:10px"><span class="small muted">Servings</span>
-      <div class="stepper"><button data-act="sv" data-d="-0.5">−</button><input type="number" id="sv" value="${sv}" step="0.25" min="0.25" inputmode="decimal"><button data-act="sv" data-d="0.5">+</button></div>
+    <div class="row wrap" style="margin-bottom:10px;gap:6px"><span class="small muted">How much</span>
+      <div class="stepper"><button data-act="sv" data-d="-1">−</button><input type="number" id="amt" value="${sv}" step="any" min="0" inputmode="decimal"><button data-act="sv" data-d="1">+</button></div>
+      <select id="svu" style="width:auto">${amountUnits(f).map(u => `<option value="${u.k}">${esc(u.label)}</option>`).join('')}</select><input type="hidden" id="sv" value="${sv}">
       <select id="meal" style="width:auto;flex:1">${MEALS.map(m => `<option ${m === (opts.meal || defaultMeal()) ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
     <button class="btn block" data-act="log">Log it</button>
     <div ${f.src === 'restaurant' ? 'hidden' : ''}><div class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--bg)">
@@ -1609,6 +1663,7 @@ function openFood(id, opts = {}) {
       <button class="btn ${S.excluded[f.id] ? 'danger' : 'alt'} sm" data-act="exclude">${S.excluded[f.id] ? '🚫 Never use' : '🚫'}</button>
       ${f.src !== 'costco' ? `<button class="btn danger sm" data-act="delfood">Delete</button>` : ''}</div>`);
   const pp = $('#pprice'); if (pp) { pp.type = 'text'; pp.addEventListener('change', () => { setPrice(f.id, pp.value); toast('Price saved'); }); }
+  wireAmount(f);
   if (opts.focusPrice && priceOf(f.id) == null) setTimeout(() => { const i = $('#pprice'); if (i) i.focus(); }, 150);
 }
 // Save the price typed on a food page (blank keeps the listed price).
@@ -3664,8 +3719,10 @@ document.addEventListener('click', e => {
     case 'open': openFood(id); break;
     case 'online': searchOnline(el.dataset.q); break;
     case 'pickonline': { const f = onlineResults[id]; if (f) { if (!S.foods[f.id]) S.foods[f.id] = { ...f, src: 'search' }; save(); openFood(f.id); } break; }
-    case 'sv': { const i = $('#sv'); i.value = Math.max(0.25, r1((+i.value || 1) + +el.dataset.d)); break; }
-    case 'log': { const sv = +$('#sv').value || 1; logFood(sheetFood, sv, $('#meal').value); toast(`Logged ${r1(sv)} × ${sheetFood.name}`); closeSheet(); if (tab === 'scan') go('today'); break; }
+    case 'sv': { const a = $('#amt'), u = amountUnits(sheetFood).find(x => x.k === $('#svu').value) || { step: 0.5, per: 1 };
+      a.value = Math.max(0, Math.round(((+a.value || 0) + +el.dataset.d * u.step) * 100) / 100); a.dispatchEvent(new Event('input')); break; }
+    case 'log': { const sv = +$('#sv').value; if (!(sv > 0)) { toast('Enter how much you had'); break; } const u = $('#svu'), ut = u ? u.options[u.selectedIndex].text : 'servings', amtTxt = u && u.value !== 'sv' ? `${$('#amt').value} ${ut}` : '';
+      logFood(sheetFood, sv, $('#meal').value, viewDay, { amt: amtTxt }); toast(`Logged ${$('#amt').value} ${u ? u.options[u.selectedIndex].text : 'servings'} of ${shortName(sheetFood)}`); closeSheet(); if (tab === 'scan') go('today'); break; }
     case 'togglelist': {
       const f = sheetFood, L = S.list[f.id];
       if (L && L.on) { delete S.list[f.id]; if (S.rneed) delete S.rneed[f.id]; }
