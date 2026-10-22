@@ -872,7 +872,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.8 (slices & grams, planned vs. ate)';
+const APP_VERSION = '8.8.1 (counter = what you ate)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -897,7 +897,7 @@ function load() {
   // A brand-new phone: start clean. The one-time fixes made for the first user's saved data (their calorie goal,
   // their leftovers, their avoid list, recipe edits) are marked done so they never touch someone else's setup.
   return { ...defaults(), fresh: true, noCornEdamame: true, catFix2: true, noLettuceBowls: true, scrambleGrams: true, scramble220: true,
-    cooked1019: true, onlyMade1020: true, beans1021: true, cal1700: true, chiliOccasion: true };
+    cooked1019: true, onlyMade1020: true, beans1021: true, cal1700: true, chiliOccasion: true, pend1022: true };
 }
 let S = load();
 if (!S.unitsChosen && S.units === 'g') S.units = 'mixed'; // ounces for meat, grams for the rest unless picked otherwise
@@ -1170,6 +1170,18 @@ function planVsAte(t) {
       ${row('Calories', 'cal', '')}${row('Protein', 'p', ' g')}${row('Carbs', 'c', ' g')}${row('Fat', 'f', ' g')}${row('Fiber', 'fb', ' g')}</table>
     <div class="small muted" style="margin-top:6px">Planned is the whole day's plan. Under each meal below you can see what you had instead.</div></details>`;
 }
+const TORTILLA_OPTS = [['tf1', 2, 'Tortilla Fresca'], ['br19', 2, 'Carb Balance'], ['br17', 1, 'Corn']];
+let pendTort = 0;
+function pendingLogCard() {
+  const pl = (S.pendingLogs || [])[0]; if (!pl) return '';
+  const [tid, tsv] = TORTILLA_OPTS[pendTort], items = [...pl.items, [tid, tsv]].filter(([id]) => getFood(id));
+  const tt = totals(items.map(([id, sv]) => ({ ...getFood(id), sv })));
+  return `<div class="card" style="background:var(--soft)"><b>🌮 Add what you told me you ate</b>
+    <div class="small" style="margin:2px 0 6px">${esc(pl.text)}</div>
+    <div class="row" style="gap:6px"><span class="small muted">Tortillas:</span><div class="chips" style="margin:0">${TORTILLA_OPTS.map(([id, , label], i) => `<button class="chip ${i === pendTort ? 'on' : ''}" data-act="pendtort" data-i="${i}">${label}</button>`).join('')}</div></div>
+    <div class="small" style="margin:6px 0"><b>${Math.round(tt.cal)} cal</b> · <span style="color:var(--p);font-weight:700">${Math.round(tt.p)} g protein</span> · C${Math.round(tt.c)} F${Math.round(tt.f)} · sat fat ${r1(tt.sf)} g</div>
+    <div class="row" style="gap:6px"><button class="btn sm grow" data-act="pendadd" data-v="Lunch">Add to lunch</button><button class="btn sm grow" data-act="pendadd" data-v="Dinner">Add to dinner</button><button class="btn ghost sm" data-act="pendskip" aria-label="Not needed">✕</button></div></div>`;
+}
 function todaysMealsCard() {
   const di = planTodayIndex(), list = entries(todayKey()), day = di >= 0 ? S.plan.days[di] : null;
   const tagged = new Set(list.map(e => e.tag).filter(Boolean));
@@ -1194,7 +1206,7 @@ function todaysMealsCard() {
       const et = totals(ex), skipped = mis.filter(([m, mi]) => m.items.length && !tagged.has(mealTag(di, mi)));
       const pt = totals(skipped.flatMap(([m]) => m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))));
       rows.push(`<div class="small" style="margin:2px 0 2px 12px;font-weight:700">${skipped.length ? 'What you had instead' : 'Also had'}</div>` + ex.map(xrow).join('')
-        + `<div class="small" style="margin:4px 0 6px 12px">= <b>${Math.round(et.cal)} cal · <span style="color:var(--p)">${Math.round(et.p)} g protein</span></b>${skipped.length ? ` <span class="muted">vs. planned ${Math.round(pt.cal)} cal · ${Math.round(pt.p)} g protein</span>` : ''}</div>`);
+        + `<div class="small" style="margin:4px 0 6px 12px">= <b>${Math.round(et.cal)} cal · <span style="color:var(--p)">${Math.round(et.p)} g protein</span></b></div>`);
     }
   }
   return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🍽 Today's meals</h2>${day ? `<button class="btn ghost sm" data-act="tab" data-t="plan">Full plan</button>` : ''}</div>
@@ -1260,8 +1272,7 @@ function renderToday() {
   h += `<div class="card">${macroSummary(t, T)}
     <div class="row small" style="margin-top:8px;gap:12px"><span style="color:${t.sf > sfTarget() ? 'var(--bad)' : 'var(--muted)'}">Saturated fat ${r1(t.sf)} / ${sfTarget()} g</span>
       <span style="color:${t.fb >= fiberTarget() ? 'var(--ok)' : 'var(--muted)'}">Fiber ${Math.round(t.fb || 0)} / ${fiberTarget()} g${t.fb >= fiberTarget() ? ' ✓' : ''}</span></div></div>
-    ${isToday ? planVsAte(t) : ''}
-    ${isToday ? todaysMealsCard() : ''}
+    ${isToday ? pendingLogCard() + todaysMealsCard() : ''}
     ${(() => { const low = lowItems(); return low.length && isToday ? `<div class="card tap" data-act="kitchen" style="background:var(--soft);padding:10px 12px"><b>🏠 Running low:</b> ${low.slice(0, 3).map(i => esc(shortName(getFood(i)))).join(', ')}${low.length > 3 ? ` +${low.length - 3} more` : ''} <span class="small muted">— tap to see your kitchen</span></div>` : ''; })()}
     ${isToday ? snackIdeasCard() : `<div class="row" style="margin-bottom:12px;gap:6px"><button class="btn alt grow" data-act="find">🔎 Ate something else?</button><button class="btn alt grow" data-act="eatout">🍔 Eating out</button></div>`}
     ${list.length && !isToday ? `<h3 style="margin:4px 4px 8px;font-size:15px">What you logged</h3>` : ''}`;
@@ -2214,6 +2225,10 @@ if (!S.beans1021) { S.beans1021 = true;
   for (const fresh of [scrambleBowl(false), ...MORE_RECIPES.filter(r => ['teriyaki-chicken', 'steak-fajita', 'beef-broccoli', 'greek-chicken'].includes(r.id))]) {
     const r = (S.recipes || []).find(x => x.id === fresh.id); if (!r) continue;
     r.ingredients = JSON.parse(JSON.stringify(fresh.ingredients)); r.notes = fresh.notes; r.steps = fresh.steps.slice(); recipeFood(r); } }
+if (!S.pend1022) { S.pend1022 = true;
+  if (!S.fresh && todayKey() <= '2026-10-23') (S.pendingLogs = S.pendingLogs || []).push({ day: '2026-10-22',
+    text: '6 oz cooked chipotle steak (≈ 8 oz raw top sirloin) · 2 tortillas · 2 tbsp Tatemada salsa',
+    items: [['m34', 2, '6 oz cooked (8 oz raw)'], ['sc7', 1, '2 tbsp']] }); }
 if (!S.cal1700) { S.cal1700 = true; if (S.targets.cal !== 1700) setCalories(1700); }
 if (!S.chiliOccasion) { const c = S.recipes.find(r => r.id === 'chili'); if (c) c.occasion = true; for (const w of S.week || []) if (w.rid === 'chili') w.inPlan = false; S.chiliOccasion = true; }
 for (const r of SEED_RECIPES().reverse()) if (!S.seeded.includes(r.id)) { if (!S.recipes.some(x => x.id === r.id)) S.recipes.unshift(JSON.parse(JSON.stringify(r))); S.seeded.push(r.id); }
@@ -3887,6 +3902,11 @@ document.addEventListener('click', e => {
     case 'swap': swapSheet(+el.dataset.m, +el.dataset.i); break;
     case 'doswap': doSwap(+el.dataset.m, +el.dataset.i, el.dataset.id); break;
     case 'logmeal': { const m = S.plan.days[planDay].meals[+el.dataset.m]; logPlannedMeal(planDay, +el.dataset.m); toast(`${m.meal} logged for today`); break; }
+    case 'pendtort': pendTort = +el.dataset.i; renderToday(); break;
+    case 'pendadd': { const pl = S.pendingLogs.shift(), [tid, tsv] = TORTILLA_OPTS[pendTort], day = pl.day || todayKey();
+      for (const [fid, sv, amt] of [...pl.items, [tid, tsv, `${tsv === 1 ? 2 : tsv} tortillas`]]) if (getFood(fid)) logFood(getFood(fid), sv, el.dataset.v, day, { amt });
+      save(); renderToday(); toast(`Added to ${el.dataset.v.toLowerCase()} ✓`); break; }
+    case 'pendskip': S.pendingLogs.shift(); save(); renderToday(); break;
     case 'mealchange': changeMealSheet(+el.dataset.d, +el.dataset.m); break;
     case 'mealpick': { const di = +el.dataset.d, mi = +el.dataset.m, nm = changeOpts[+el.dataset.i]; setPlannedMeal(di, mi, nm); closeSheet(); toast(`${nm.meal || S.plan.days[di].meals[mi].meal}: ${nm.title}`); break; }
     case 'mealnone': { const di = +el.dataset.d, mi = +el.dataset.m, m = S.plan.days[di].meals[mi]; setPlannedMeal(di, mi, { meal: m.meal, key: 'none', title: 'Nothing planned', label: '', items: [] }); closeSheet(); toast(`${m.meal} removed`); break; }
