@@ -873,7 +873,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.9 (add what I ate + usual meals)';
+const APP_VERSION = '8.10 (eat from kitchen + undo)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -970,11 +970,30 @@ function allFoods() {
 }
 function mealsFor(f) { return f.meals || (CATS[f.cat] || CATS.other).meals; }
 let toastTimer;
-function toast(msg) {
+function toast(msg, undo) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  if (undo) { const b = document.createElement('button'); b.textContent = 'Undo'; b.style.cssText = 'margin-left:12px;background:none;border:0;color:#9fe0b7;font:inherit;font-weight:700;padding:0;cursor:pointer';
+    b.onclick = ev => { ev.stopPropagation(); t.hidden = true; undo(); }; t.appendChild(b); }
   // With a food page open, show the message at the top so it doesn't cover the buttons.
   const sheetOpen = !$('#sheet').hidden; t.style.top = sheetOpen ? 'calc(12px + env(safe-area-inset-top))' : ''; t.style.bottom = sheetOpen ? 'auto' : '';
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, undo ? 6000 : 2600);
+}
+/* ---------- Recently removed: anything deleted can be put back ---------- */
+function toTrash(kind, label, data) { S.trash = [{ id: uid(), at: Date.now(), kind, label, data }, ...(S.trash || [])].slice(0, 40); }
+function restoreTrash(tid) {
+  const i = (S.trash || []).findIndex(x => x.id === tid); if (i < 0) return; const [x] = S.trash.splice(i, 1), d = x.data;
+  if (x.kind === 'log') { (S.log[d.day] = S.log[d.day] || []).push(d.entry); if (d.entry.stock) changeStock(d.entry.foodId, -d.entry.sv); }
+  if (x.kind === 'stock') { S.stock = S.stock || {}; if (d.stock != null) S.stock[d.id] = d.stock; if (d.have) { S.have = S.have || {}; S.have[d.id] = true; } }
+  if (x.kind === 'food') { S.foods[d.food.id] = d.food; if (d.list) S.list[d.food.id] = d.list; }
+  if (x.kind === 'list') { S.list[d.id] = d.L; if (d.rneed != null) { S.rneed = S.rneed || {}; S.rneed[d.id] = d.rneed; } }
+  save(); render(); toast(`↩️ Put back: ${x.label}`);
+}
+function trashCard(kinds) {
+  const xs = (S.trash || []).filter(x => kinds.includes(x.kind) && Date.now() - x.at < 7 * 864e5); if (!xs.length) return '';
+  const when = t => { const d = new Date(t), k = dayKey(d); return k === todayKey() ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { weekday: 'short' }); };
+  return `<details class="card fold"><summary><h2 style="font-size:16px">↩️ Recently removed (${xs.length})</h2></summary>
+    ${xs.map(x => `<div class="item"><div class="grow"><div class="name">${esc(x.label)}</div><div class="meta">${({ log: 'Removed from your log', stock: 'Removed from your kitchen', food: 'Deleted food', list: 'Removed from your list' })[x.kind]} · ${when(x.at)}</div></div>
+      <button class="btn alt sm" data-act="untrash" data-id="${x.id}">Put back</button></div>`).join('')}</details>`;
 }
 function carbsOf(f) { return S.rules.net ? Math.max(0, (f.c || 0) - (f.fb || 0)) : f.c; }
 
@@ -1208,12 +1227,14 @@ function renderAddMeal() {
   // what you actually use comes first: foods in your recipes and logs, things you scanned, then your Costco receipts
   const used = new Set([...(S.recipes || []).flatMap(r => r.ingredients.map(i => i.id)), ...Object.values(S.log || {}).flat().map(e => e.foodId)]);
   const rank = f => (used.has(f.id) ? 4 : 0) + (f.src === 'scan' ? 2 : 0) + (BOUGHT.has(f.id) ? 1 : 0);
-  const run = () => { const words = q.value.toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) { res.innerHTML = ''; return; }
+  const kit = [...new Set([...Object.keys(S.stock || {}), ...Object.keys(S.have || {})])].filter(id => getFood(id) && (inKitchen(id) || /^rcp-/.test(id) && (stockOf(id) || 0) >= 1)).slice(0, 12);
+  const kitList = () => kit.length ? `<div class="small muted" style="margin:6px 0 2px">🏠 In your kitchen:</div><div class="chips" style="margin:0">${kit.map(id => `<button class="chip" data-act="bmpick" data-id="${esc(id)}">${esc(shortName(getFood(id)))}</button>`).join('')}</div>` : '';
+  const run = () => { const words = q.value.toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) { res.innerHTML = kitList(); return; }
     const hits = allFoods().filter(f => !f.kids && f.src !== 'restaurant' && words.every(w => ((f.name || '') + ' ' + (f.brand || '')).toLowerCase().includes(w)))
       .sort((a, b) => rank(b) - rank(a) || a.name.length - b.name.length).slice(0, 10);
     res.innerHTML = hits.length ? hits.map(f => `<div class="item tap" data-act="bmpick" data-id="${esc(f.id)}"><div class="grow"><div class="name">${esc(f.name)}</div><div class="meta">${esc(f.serving)} · ${fmt(f.cal)} cal${f.src === 'scan' ? ' · scanned' : ''}</div></div><span class="muted">+</span></div>`).join('')
       : `<div class="small muted" style="padding:6px 0">No match. Try one word, or scan it on the Scan tab first.</div>`; };
-  q.addEventListener('input', run);
+  q.addEventListener('input', run); run();
 }
 // Amount picker for one food inside the builder.
 function bmPickPanel(id) {
@@ -1349,6 +1370,7 @@ function renderToday() {
         <button class="icon-btn" data-act="unlog" data-id="${e.id}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
   }
   if (!list.length && !isToday) h += `<div class="empty">Nothing logged this day.</div>`;
+  h += trashCard(['log']);
   $('#view').innerHTML = h;
 }
 
@@ -2097,10 +2119,14 @@ function renderKitchen() {
   const low = lowItems();
   let h = `<div class="card"><div class="small muted">Weigh what you have (raw, as you bought it) or tap <b>+ 1 package</b>. It goes down when you log meals, and checking items off your shopping list adds them. “Days left” is based on your meal plan.</div>
     ${low.length ? `<button class="btn block" style="margin-top:8px" data-act="low2list">Add ${low.length} low item${low.length === 1 ? '' : 's'} to my shopping list</button>` : ''}</div>`;
-  if (!ids.length) h += `<div class="empty">Nothing here yet. Make a meal plan, or open any food and set how much you have.</div>`;
-  for (const id of ids) { const f = getFood(id);
-    h += `<div class="card" style="padding:10px 12px"><div class="name tap" data-act="open" data-id="${esc(id)}">${esc(f.name)}</div>${stockRow(f)}</div>`; }
-  return h;
+  const haveIds = ids.filter(id => inKitchen(id) || (stockOf(id) != null)), restIds = ids.filter(id => !haveIds.includes(id));
+  if (!haveIds.length) h += `<div class="empty">Nothing here yet. Tap ✓ Yes on things you scan at the store, or open any food and set how much you have.</div>`;
+  const card = id => { const f = getFood(id), has = inKitchen(id);
+    return `<div class="card" style="padding:10px 12px"><div class="row" style="align-items:flex-start;gap:8px"><div class="name tap grow" data-act="open" data-id="${esc(id)}">${esc(f.name)}</div>
+      ${has ? `<button class="btn sm" data-act="kitate" data-id="${esc(id)}">🍽 I ate some</button>` : ''}</div>${stockRow(f)}</div>`; };
+  h += haveIds.map(card).join('');
+  if (restIds.length) h += `<details class="card fold" ${renderKitchen.open ? 'open' : ''} ontoggle="renderKitchen.open=this.open"><summary><h2 style="font-size:16px">From your meal plan — not in your kitchen (${restIds.length})</h2></summary>${restIds.map(id => `<div style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px"><div class="name tap" data-act="open" data-id="${esc(id)}">${esc(getFood(id).name)}</div>${stockRow(getFood(id))}</div>`).join('')}</details>`;
+  return h + trashCard(['stock', 'food', 'list', 'log']);
 }
 function setStockFrom(id) {
   const f = getFood(id), i = document.querySelector(`[data-stockin="${CSS.escape(id)}"]`), v = i ? i.value.trim() : '';
@@ -3790,7 +3816,8 @@ document.addEventListener('click', e => {
   switch (a) {
     case 'tab': go(el.dataset.t); break;
     case 'day': { const d = new Date(viewDay + 'T12:00:00'); d.setDate(d.getDate() + +el.dataset.d); if (dayKey(d) <= todayKey()) { viewDay = dayKey(d); renderToday(); } break; }
-    case 'unlog': { const e = entries(viewDay).find(x => x.id === id); if (e && e.stock) changeStock(e.foodId, e.sv); S.log[viewDay] = entries(viewDay).filter(x => x.id !== id); save(); renderToday(); break; }
+    case 'unlog': { const e = entries(viewDay).find(x => x.id === id); if (e && e.stock) changeStock(e.foodId, e.sv);
+      if (e) { const day = viewDay; toTrash('log', `${e.name}${e.amt ? ' · ' + e.amt : ''}`, { day, entry: e }); setTimeout(() => toast(`Removed ${shortName(e)}`, () => restoreTrash(S.trash[0].id)), 0); } S.log[viewDay] = entries(viewDay).filter(x => x.id !== id); save(); renderToday(); break; }
     case 'find': findSheet(); break;
     case 'startscan': startScan(); break;
     case 'stopscan': stopScan(); S.camOk = false; save(); break;
@@ -3892,7 +3919,7 @@ document.addEventListener('click', e => {
       }
       if (setStockFrom(id)) { if (sheetFood) openFood(id, { fromScan: !!(openFood.last && openFood.last.fromScan) }); else renderList(); } break;
     case 'stockpkg': { const f = getFood(id), pi = packageInfo(f); changeStock(id, pi.servings, true); save(); toast(`Added 1 package: now ${stockText(f, stockOf(id))}`); if (sheetFood) openFood(id); else renderList(); break; }
-    case 'stockrm': delete S.stock[id]; if (S.have) delete S.have[id]; save(); toast('Stopped tracking ' + shortName(getFood(id))); if (sheetFood) openFood(id); else renderList(); break;
+    case 'stockrm': toTrash('stock', shortName(getFood(id)), { id, stock: S.stock[id], have: S.have && S.have[id] }); setTimeout(() => toast('Removed ' + shortName(getFood(id)) + ' from your kitchen', () => restoreTrash(S.trash[0].id)), 0); delete S.stock[id]; if (S.have) delete S.have[id]; save(); if (sheetFood) openFood(id); else renderList(); break;
     case 'low2list': {
       const ids = lowItems(), days = S.plan ? S.plan.days.length : 7;
       for (const fid of ids) { const f = getFood(fid), pi = packageInfo(f), short = Math.max(0, dailyUse(fid) * Math.max(days, 7) - (stockOf(fid) || 0));
@@ -3925,7 +3952,7 @@ document.addEventListener('click', e => {
       save(); openFood(f.id, { sv: +$('#sv').value, meal: $('#meal').value }); break;
     }
     case 'resetfood': { const fid = sheetFood.id; delete S.foods[fid]; save(); openFood(fid); break; }
-    case 'delfood': if (confirm('Delete this saved food?')) { photoDB.del(sheetFood.id + ':front'); photoDB.del(sheetFood.id + ':label'); delete S.foods[sheetFood.id]; delete S.list[sheetFood.id]; save(); closeSheet(); } break;
+    case 'delfood': if (confirm('Delete this saved food?')) { toTrash('food', sheetFood.name, { food: S.foods[sheetFood.id], list: S.list[sheetFood.id] }); delete S.foods[sheetFood.id]; delete S.list[sheetFood.id]; save(); closeSheet(); } break;
     case 'cview': costcoView = el.dataset.v; renderCostco(); break;
     case 'pricesheet': priceSheet(id); break;
     case 'cookkitchen': cookFromKitchen(); break;
@@ -3947,7 +3974,8 @@ document.addEventListener('click', e => {
     case 'pssave': { const L = S.list[id]; setPrice(id, $('#ps-price').value); if (L) L.qty = +$('#ps-qty').textContent || 1; save(); $('#sheet').hidden = true; sheetFood = null; renderList();
       const pr = priceOf(id); toast(pr == null ? 'Saved' : `${shortName(getFood(id))}: ${money(pr * ((L && L.qty) || 1))}`); break; }
     case 'listmode': S.listMode = el.dataset.v; save(); renderList(); break;
-    case 'listrm': { const n = shortName(getFood(id)); delete S.list[id]; if (S.rneed) delete S.rneed[id]; save(); renderList(); toast(`Removed ${n}`); break; }
+    case 'listrm': { const n = shortName(getFood(id)); toTrash('list', n, { id, L: S.list[id], rneed: S.rneed && S.rneed[id] }); delete S.list[id]; if (S.rneed) delete S.rneed[id]; save(); renderList(); toast(`Removed ${n}`, () => restoreTrash(S.trash[0].id)); break; }
+    case 'untrash': restoreTrash(id); break;
     case 'qty': { const L = S.list[id]; if (L) { L.qty = Math.max(1, (L.qty || 1) + +el.dataset.d); save(); renderList(); } break; }
     case 'cfilter': costcoFilter = el.dataset.v; renderCostco(); break;
     case 'cleargot': for (const k in S.list) if (S.list[k].got) { delete S.list[k]; if (S.rneed) delete S.rneed[k]; } S.extra = (S.extra || []).filter(x => !x.got); save(); renderList(); break;
@@ -3969,6 +3997,7 @@ document.addEventListener('click', e => {
     case 'doswap': doSwap(+el.dataset.m, +el.dataset.i, el.dataset.id); break;
     case 'logmeal': { const m = S.plan.days[planDay].meals[+el.dataset.m]; logPlannedMeal(planDay, +el.dataset.m); toast(`${m.meal} logged for today`); break; }
     case 'addmeal': addMealSheet(el.dataset.v, el.dataset.id); break;
+    case 'kitate': addMealSheet(); bmPickPanel(id); break;
     case 'bmmeal': bm.meal = el.dataset.v; renderAddMeal(); break;
     case 'bmusual': { const meal = bm.meal; addMealSheet(meal, id); break; }
     case 'bmrm': bm.items.splice(+el.dataset.i, 1); renderAddMeal(); break;
