@@ -873,7 +873,7 @@ const PRICES = {"k9":[16.99,"Kirkland Albacore Solid White Tuna in Water, 7 oz, 
 
 /* ================= state (stored only on this phone) ================= */
 const KEY = 'macro-check-v1';
-const APP_VERSION = '8.10 (eat from kitchen + undo)';
+const APP_VERSION = '8.10.1 (what you ate is checked off)';
 const PLANNER_VERSION = 8; // bump when the planner changes so old saved plans get rebuilt
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function defaults() {
@@ -1270,28 +1270,34 @@ function todaysMealsCard() {
   const di = planTodayIndex(), list = entries(todayKey()), day = di >= 0 ? S.plan.days[di] : null;
   const tagged = new Set(list.map(e => e.tag).filter(Boolean));
   const extra = meal => list.filter(e => e.meal === meal && !(e.tag && /^plan:/.test(e.tag)));
-  const xrow = e => `<div class="row" style="gap:6px;padding:4px 0 4px 12px;border-left:3px solid var(--soft)"><div class="grow small"><b>${esc(e.name)}</b> <span class="muted">· ${e.amt ? esc(e.amt) : `${r1(e.sv)} × ${esc(e.serving)}`} · ${Math.round(e.cal * e.sv)} cal</span></div>
+  // Everything you ate gets the same ✓ crossed-off look as a planned meal you tapped "Ate it" on.
+  const xrow = e => `<div class="row" style="gap:6px;padding:3px 0 3px 2px"><span style="color:var(--ok);font-weight:700">✓</span><div class="grow"><span class="name" style="text-decoration:line-through;opacity:.6">${esc(shortName(e))}</span>
+      <div class="meta">${e.amt ? esc(e.amt) : `${r1(e.sv)} × ${esc(e.serving)}`} · ${Math.round(e.cal * e.sv)} cal · ${r1(e.p * e.sv)} g protein</div></div>
       <button class="icon-btn" data-act="unlog" data-id="${e.id}" aria-label="Remove" style="width:32px;height:32px">✕</button></div>`;
+  const label = (meal, extra = '') => `<div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:700">${meal}${extra}</div>`;
   const rows = [];
   for (const meal of MEALS) {
-    const mis = day ? day.meals.map((m, mi) => [m, mi]).filter(([m]) => m.meal === meal) : [];
+    const mis = day ? day.meals.map((m, mi) => [m, mi]).filter(([m]) => m.meal === meal) : [], ex = extra(meal), et = totals(ex);
+    const planned = mis.filter(([m]) => m.items.length), eaten = planned.filter(([, mi]) => tagged.has(mealTag(di, mi))), replaced = ex.length && planned.length && !eaten.length;
+    if (replaced) { // you ate something else for this meal: it's done; the plan is just a note
+      rows.push(`<div class="item" style="display:block">${label(meal, ' · <span style="color:var(--ok)">✓ Eaten</span>')}${ex.map(xrow).join('')}
+        <div class="small" style="margin:2px 0 0 18px"><b>${Math.round(et.cal)} cal · <span style="color:var(--p)">${Math.round(et.p)} g protein</span></b></div>
+        ${planned.map(([m, mi]) => `<div class="row small muted" style="gap:6px;margin:4px 0 0 18px"><span class="grow">Instead of the planned <span style="text-decoration:line-through">${esc(m.title)}</span></span>
+          <button class="btn ghost sm" style="padding:2px 8px;font-size:12px" data-act="todaylog" data-d="${di}" data-m="${mi}">Ate it too</button><button class="btn ghost sm" style="padding:2px 8px;font-size:12px" data-act="mealchange" data-d="${di}" data-m="${mi}">✎ Change</button></div>`).join('')}</div>`);
+      continue;
+    }
     for (const [m, mi] of mis) {
       const t = totals(m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))), done = tagged.has(mealTag(di, mi)), none = !m.items.length;
+      if (none && ex.length) continue; // nothing planned but you ate: shown below
       rows.push(`<div class="item" style="align-items:flex-start"><div class="grow ${none ? '' : 'tap'}" ${none ? '' : `data-act="todayrecipe" data-d="${di}" data-m="${mi}"`}>
-          <div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:700">${meal}</div>
+          ${label(meal)}
           <div class="name" style="${done ? 'text-decoration:line-through;opacity:.6' : ''}">${none ? '<span class="muted">Nothing planned</span>' : esc(m.title || m.meal)}</div>
           ${none ? '' : `<div class="meta">${Math.round(t.cal)} cal · <span style="color:var(--p)">${Math.round(t.p)} g protein</span></div>`}</div>
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">${none ? '' : done ? `<button class="btn ghost sm" data-act="todayunlog" data-d="${di}" data-m="${mi}">✓ Eaten</button>` : `<button class="btn sm" data-act="todaylog" data-d="${di}" data-m="${mi}">Ate it</button>`}
           <button class="btn ghost sm" style="padding:4px 10px;font-size:13px" data-act="mealchange" data-d="${di}" data-m="${mi}">${none ? '+ Add' : '✎ Change'}</button></div></div>`);
     }
-    const ex = extra(meal);
-    if (ex.length && !mis.length) rows.push(`<div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin-top:8px">${meal}</div>`);
-    if (ex.length) {
-      const et = totals(ex), skipped = mis.filter(([m, mi]) => m.items.length && !tagged.has(mealTag(di, mi)));
-      const pt = totals(skipped.flatMap(([m]) => m.items.map(x => ({ ...getFood(x.id), sv: x.sv }))));
-      rows.push(`<div class="small" style="margin:2px 0 2px 12px;font-weight:700">${skipped.length ? 'What you had instead' : mis.some(([m]) => m.items.length) ? 'Also had' : 'You had'}</div>` + ex.map(xrow).join('')
-        + `<div class="small" style="margin:4px 0 6px 12px">= <b>${Math.round(et.cal)} cal · <span style="color:var(--p)">${Math.round(et.p)} g protein</span></b></div>`);
-    }
+    if (ex.length) rows.push(`<div class="item" style="display:block">${planned.length ? `<div class="small" style="font-weight:700">Also had</div>` : label(meal, ' · <span style="color:var(--ok)">✓ Eaten</span>')}${ex.map(xrow).join('')}
+      <div class="small" style="margin:2px 0 0 18px"><b>${Math.round(et.cal)} cal · <span style="color:var(--p)">${Math.round(et.p)} g protein</span></b></div></div>`);
   }
   return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">🍽 Today's meals</h2>${day ? `<button class="btn ghost sm" data-act="tab" data-t="plan">Full plan</button>` : ''}</div>
     ${day ? '' : `<div class="small muted tap" data-act="tab" data-t="plan" style="padding:6px 0">No meal plan for today — tap to make one in Meals.</div>`}
